@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   pr_agent:
-    runs-on: ubuntu-latest
+    runs-on: impulso-pi-runners
     timeout-minutes: 30
     steps:
       - name: PR Agent

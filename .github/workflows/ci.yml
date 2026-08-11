@@ -7,7 +7,7 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: impulso-pi-runners
     timeout-minutes: 10
     permissions:
       contents: read
