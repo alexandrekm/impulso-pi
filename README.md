@@ -5,13 +5,32 @@ Personal [pi](https://pi.dev) customizations: extensions, skills, and setup scri
 ## Install
 
 ```bash
-./install.sh
+./install.sh          # repo -> ~/.pi/agent (install pi-footer, sync files)
+./install.sh status    # show per-file sync state, no changes made
+./install.sh pull      # ~/.pi/agent -> repo (promote local edits upstream)
 ```
 
-Copies everything into `~/.pi/agent/` (override with `PI_AGENT_DIR=/path ./install.sh`)
-and installs required third-party pi packages. Safe to re-run after `git pull`.
+Override the target with `PI_AGENT_DIR=/path ./install.sh ...`.
 
 Then reload pi (`/reload`) or start a new session.
+
+### Local edits are never clobbered
+
+You will often tweak things live in `~/.pi/agent/` (e.g. `/footer`'s config UI
+rewrites `pi-footer.json` directly). `install.sh` tracks a hash of every file
+as of its last sync in `~/.pi/agent/.impulso-pi-manifest.tsv` and only
+fast-forwards a file from the repo if the local copy is **unchanged** since
+that sync:
+
+| State | `install` behavior |
+| --- | --- |
+| in sync | no-op |
+| repo changed, local untouched | copies repo → local |
+| local changed, repo untouched | **skipped** — run `./install.sh pull` to promote the local edit into the repo instead |
+| both changed independently | **conflict**, flagged, nothing touched — resolve manually |
+
+Run `./install.sh status` any time to see the state of every tracked file
+before installing or pulling.
 
 ## Contents
 
@@ -38,6 +57,7 @@ config UI (writes back to `~/.pi/agent/extensions/pi-footer.json`).
 
 ## Updating
 
-After changing an extension in `~/.pi/agent/extensions/` during a pi session,
-copy it back into this repo (`extensions/<feature>/`) and commit, or re-run
-`install.sh` to push repo changes back out to `~/.pi/agent/`.
+- Made an intentional upstream change in this repo? Commit it, then run
+  `./install.sh` on each machine to fast-forward.
+- Tweaked something live in `~/.pi/agent/` (e.g. via `/footer`) and want to
+  keep it? Run `./install.sh pull`, review the diff, and commit.
