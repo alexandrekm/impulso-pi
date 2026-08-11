@@ -55,6 +55,26 @@ footer from `~/.pi/agent/extensions/pi-footer.json`.
 To tweak colors/layout further, run `/footer` inside pi for the interactive
 config UI (writes back to `~/.pi/agent/extensions/pi-footer.json`).
 
+## Development
+
+```bash
+npm install
+npm run lint          # eslint on extensions/
+npm run typecheck     # tsc --noEmit on extensions/
+npm run format        # prettier --write
+npm run format:check  # prettier --check
+npm run check:json    # validate every extensions/**/*.json parses
+```
+
+CI (`.github/workflows/ci.yml`) runs all of the above plus `gitleaks`,
+`shellcheck` on `install.sh`, and an `install.sh` smoke test (idempotency +
+file-landing check against a stubbed `pi` CLI) on every push/PR.
+
+A PR review bot (`.github/workflows/pr-agent.yml`, config in
+`.pr_agent.toml`) automatically reviews PRs for functional issues specific to
+this repo (extension shape, pi-footer config correctness, install.sh sync
+safety). It needs an `OPENROUTER_API_KEY` secret set on the repo to run.
+
 ## Updating
 
 - Made an intentional upstream change in this repo? Commit it, then run

@@ -25,7 +25,7 @@ hash_dir() {
   # Deterministic hash of a directory's contents (order-independent).
   find "$1" -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'
 }
-hash_of() { [ -d "$1" ] && hash_dir "$1" || hash_file "$1"; }
+hash_of() { if [ -d "$1" ]; then hash_dir "$1"; else hash_file "$1"; fi; }
 
 manifest_get() {
   # $1 = repoPath

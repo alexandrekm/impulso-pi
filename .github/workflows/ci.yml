@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run format:check
+      - run: npm run check:json
+
+      - name: shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck install.sh
+
+      - name: install.sh smoke test
+        run: |
+          set -e
+          TEST_AGENT_DIR="$(mktemp -d)"
+          # Stub out the `pi` CLI so the smoke test doesn't need network
+          # access or a real pi installation to exercise the file-sync logic.
+          STUB_BIN="$(mktemp -d)"
+          cat > "$STUB_BIN/pi" <<'EOF'
+          #!/usr/bin/env bash
+          echo "stub pi: $*"
+          exit 0
+          EOF
+          chmod +x "$STUB_BIN/pi"
+          PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh install
+          # Second run must be a no-op fast-forward (nothing changed).
+          PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh install | tee /tmp/second-run.log
+          if grep -q '\[updated\]\|\[new\]' /tmp/second-run.log; then
+            echo "install.sh is not idempotent: second run made changes" >&2
+            exit 1
+          fi
+          PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh status
+          # Every tracked extensions/*/*.{ts,json} file in the repo must have
+          # landed flat in the agent dir (independent of which files exist).
+          find extensions -mindepth 1 -maxdepth 2 \( -name '*.ts' -o -name '*.json' \) | while read -r src; do
+            test -f "$TEST_AGENT_DIR/extensions/$(basename "$src")"
+          done

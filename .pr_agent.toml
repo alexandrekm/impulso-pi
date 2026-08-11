@@ -1,0 +1,50 @@
+[config]
+model = "openai/deepseek/deepseek-v4-pro"
+fallback_models = []
+custom_model_max_tokens = 131072
+enable_custom_labels = true
+ai_timeout = 600
+
+[github_action_config]
+handle_push_trigger = true
+push_commands = ["/review"]
+auto_review = true
+
+[pr_reviewer]
+extra_instructions = """\
+Focus on impulso-pi-specific concerns:
+
+## pi extensions (extensions/**/*.ts)
+- Extension default export signature matches pi's ExtensionAPI shape: `export default function (pi) { ... }`
+- Timers created with `setInterval`/`setTimeout` are `unref()`'d and cleared on `session_shutdown`
+- No hardcoded absolute paths outside `ctx.cwd` / `process.cwd()`
+- `pi.events.emit("pi-footer:update-widget", ...)` payloads always include both `widgetId` and `value`
+- Widgets that can legitimately have no data (e.g. no PR, no git repo) publish an empty string, not a placeholder like "N/A", so pi-footer's `hideWhenEmpty` works
+- No secrets or tokens read from anywhere other than the environment already provided by `gh`/pi itself
+- `execFile`/`exec` calls: fixed argument arrays (no shell string interpolation of untrusted input), reasonable `timeout` set
+
+## pi-footer.json
+- Must remain valid JSON (also enforced by `check:json` in CI)
+- Every `event` widget's `widgetId` referenced in the config has a matching publisher in `extensions/footer-widgets.ts` (or documented as coming from elsewhere)
+- Powerline `separator` widgets between two segments have `fg` matching the previous segment's `bg` and `bg` matching the next segment's `bg`
+
+## install.sh
+- Remains POSIX-friendly bash, `set -euo pipefail` present
+- Idempotent: safe to re-run without side effects when nothing changed
+- Manifest-based sync logic preserved: `install` must never overwrite a locally-modified file without going through the conflict/skip path; `pull` must never silently discard local edits
+- New tracked file types (beyond `extensions/*/*.{ts,json}` and `skills/*/`) are added to both the discovery loop and documented in README
+
+## Structural
+- New extensions/skills follow the existing `extensions/<feature>/` or `skills/<name>/` layout
+- README accurately documents any new subcommand, script, or directory added
+
+Skip formatting nits (trailing whitespace, blank line count, quote style) — Prettier/ESLint already enforce those. Only flag issues with functional, security, or maintainability impact."""
+num_max_findings = 10
+enable_review_labels_effort = true
+require_security_review = true
+require_tests_review = false
+require_estimate_effort_to_review = true
+require_can_be_split_review = false
+require_score_review = true
+persistent_comment = true
+review_idempotent = true

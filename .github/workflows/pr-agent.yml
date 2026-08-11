@@ -1,0 +1,28 @@
+name: PR Agent
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  pr_agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: PR Agent
+        uses: the-pr-agent/pr-agent@main
+        env:
+          OPENAI_API_BASE: https://openrouter.ai/api/v1
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI__API_BASE: https://openrouter.ai/api/v1
+          OPENAI__KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_AGENT__CONFIG__MODEL: openai/deepseek/deepseek-v4-pro
+          PR_AGENT__CONFIG__FALLBACK_MODELS: "[]"
+          PR_AGENT__CONFIG__CUSTOM_MODEL_MAX_TOKENS: "131072"
