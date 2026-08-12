@@ -8,14 +8,13 @@
 //
 // Usage:
 //   ./install.sh [install]            interactive: prompt for a target
-//   ./install.sh [install] <profile>  sync one profile (e.g. work-dev)
-//   ./install.sh [install] <group>    sync every profile in a group (e.g. work)
+//   ./install.sh [install] <profile>  sync one profile (e.g. work)
 //   ./install.sh [install] --all       sync every profile in profiles.jsonc
 //   ./install.sh [install] --base      sync raw ~/.pi/agent with ALL resources
 //   ./install.sh status [target]      show per-file sync state, no changes
 //   ./install.sh pull   [target]      promote local edits back into the repo
 //
-// Target is a profile name, a group name, --all, or --base. status/pull take
+// Target is a profile name, --all, or --base. status/pull take
 // the same targets. Before file sync, `install` reviews dependencies (the
 // `ppi` CLI if a profile target needs it, and the `npm:` packages from
 // profiles.jsonc) and asks which to install. -y/--yes is non-interactive:
@@ -236,13 +235,6 @@ function resolveNames(spec, profiles) {
       .sort()
       .map((name) => ({ name, base: false, dir: join(PROFILES_DIR, name) }));
   }
-  if (spec.group) {
-    return (profiles.groups?.[spec.group] || []).map((name) => ({
-      name,
-      base: false,
-      dir: join(PROFILES_DIR, name),
-    }));
-  }
   if (spec.profile) {
     return [{ name: spec.profile, base: false, dir: join(PROFILES_DIR, spec.profile) }];
   }
@@ -258,10 +250,8 @@ function keysForTarget(t, profiles) {
 
 async function chooseSpec(profiles) {
   const profs = Object.keys(profiles.profiles || {}).sort();
-  const groups = Object.keys(profiles.groups || {}).sort();
   const opts = [];
   for (const p of profs) opts.push({ label: `profile: ${p}`, spec: { profile: p } });
-  for (const g of groups) opts.push({ label: `group:  ${g}`, spec: { group: g } });
   opts.push({ label: "all profiles", spec: { all: true } });
   opts.push({ label: "base (~/.pi/agent)", spec: { base: true } });
 
@@ -280,7 +270,6 @@ async function chooseSpec(profiles) {
 
 function printAvailable(profiles) {
   console.error("Profiles: " + Object.keys(profiles.profiles || {}).join(", "));
-  console.error("Groups:   " + Object.keys(profiles.groups || {}).join(", "));
   console.error("Or use --all / --base.");
 }
 
@@ -296,7 +285,7 @@ function buildDepList(names, profiles) {
 
   // `pi` CLI is a hard prerequisite, not a choosable dep — checked elsewhere.
 
-  // ppi: required when any target is a profile/group/all.
+  // ppi: required when any target is a profile.
   if (needsPpi && !hasCmd("ppi")) {
     items.push({ key: "ppi", kind: "ppi", label: "ppi (pi-profiles)", state: "missing" });
   }
@@ -592,9 +581,8 @@ async function main() {
   else if (allFlag) spec = { all: true };
   else if (target) {
     if (profiles.profiles?.[target]) spec = { profile: target };
-    else if (profiles.groups?.[target]) spec = { group: target };
     else {
-      console.error(`Unknown target '${target}'. Not a profile or group.`);
+      console.error(`Unknown target '${target}'. Not a profile.`);
       printAvailable(profiles);
       process.exit(1);
     }
@@ -605,7 +593,7 @@ async function main() {
       spec = await chooseSpec(profiles);
     } else {
       console.error(
-        "No target specified (and stdin is not interactive). Use a profile/group name, --all, or --base.",
+        "No target specified (and stdin is not interactive). Use a profile name, --all, or --base.",
       );
       process.exit(1);
     }

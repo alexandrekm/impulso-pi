@@ -15,8 +15,7 @@ design.
 ```bash
 npm install -g pi-profiles   # provides `ppi` (auto-installed by ./install.sh if missing)
 ./install.sh                  # interactive: prompt for a target
-./install.sh work             # sync every profile in the `work` group
-./install.sh work-dev         # sync one profile
+./install.sh work             # sync one profile
 ./install.sh --all            # sync every profile in profiles.jsonc
 ./install.sh --base           # escape hatch: sync raw ~/.pi/agent (all resources)
 ./install.sh -y --base        # non-interactive: install all missing deps (CI)
@@ -24,19 +23,14 @@ npm install -g pi-profiles   # provides `ppi` (auto-installed by ./install.sh if
 ./install.sh pull   [target]  # promote local edits upstream
 ```
 
-`<target>` is a profile name, a group name (`work` / `personal`), `--all`, or
+`<target>` is a profile name (`work` / `personal`), `--all`, or
 `--base`. For profile targets, `install` first reviews dependencies — `ppi` if
 missing, and the target's `npm:` packages — and asks which to install
 (default: all; hide up-to-date packages, flag newer versions as updates).
 `-y` / `--yes` is non-interactive: install all missing, no version checks.
 Missing profiles are created via `ppi create` on first sync.
 
-Default profiles and groups:
-
-| Group | Profiles |
-| --- | --- |
-| `work` | `work-dev`, `work-infra`, `work-docs`, `work-general` |
-| `personal` | `personal-dev`, `personal-infra`, `personal-general` |
+Profiles: `work` and `personal`.
 
 Override the pi root with `PPI_PI_ROOT=/path` (profiles dir) or the raw agent
 dir with `PI_AGENT_DIR=/path` (used by `--base`).

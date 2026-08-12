@@ -172,23 +172,8 @@ export function validateProfiles(profiles, repoDir) {
   const tagSet = new Set(tags);
   if (!tagSet.has("core")) errors.push('tags must include "core"');
 
-  const groups = profiles.groups || {};
   const profs = profiles.profiles || {};
   const resources = profiles.resources || {};
-
-  if (typeof groups !== "object" || Array.isArray(groups)) {
-    errors.push('"groups" must be an object');
-  } else {
-    for (const [g, members] of Object.entries(groups)) {
-      if (!Array.isArray(members)) {
-        errors.push(`group "${g}" must be an array`);
-        continue;
-      }
-      for (const m of members) {
-        if (!(m in profs)) errors.push(`group "${g}" references unknown profile "${m}"`);
-      }
-    }
-  }
 
   if (typeof profs !== "object" || Array.isArray(profs)) {
     errors.push('"profiles" must be an object');

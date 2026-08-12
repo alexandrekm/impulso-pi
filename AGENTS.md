@@ -15,8 +15,7 @@ Resources (extensions, skills, npm packages) are declared in
 
 ```bash
 ./install.sh                       # interactive: prompt for a target
-./install.sh <profile>             # sync one profile, e.g. work-dev
-./install.sh <group>               # sync every profile in a group, e.g. work
+./install.sh <profile>             # sync one profile, e.g. work
 ./install.sh --all                 # sync every profile in profiles.jsonc
 ./install.sh --base                # escape hatch: sync raw ~/.pi/agent (ALL resources)
 ./install.sh -y/--yes [target]    # non-interactive: install all missing deps (CI)
@@ -24,7 +23,7 @@ Resources (extensions, skills, npm packages) are declared in
 ./install.sh pull   [target]       # promote local edits back into the repo
 ```
 
-`<target>` is a profile name, a group name (`work` / `personal`), `--all`,
+`<target>` is a profile name (`work` / `personal`), `--all`,
 or `--base`. Profiles live at `~/.pi/profiles/<name>/`; the raw global agent
 dir is `~/.pi/agent/` (the `--base` target).
 
@@ -39,8 +38,8 @@ resource is on P  ⟺  "core" ∈ resource.tags  OR  resource.tags ∩ P.tags �
 - **`core`** is implicit on every profile (never list it in a profile's
   `tags`) and also lands on `--base`. Use `core` for baseline resources that
   every profile needs.
-- Any other tag (`work-dev`, `personal-infra`, …) lands the resource only on
-  profiles that declare that tag.
+- Any other tag (`work`, `personal`) lands the resource only on the profile
+  that declares that tag.
 
 ### Adding a resource
 
@@ -64,7 +63,7 @@ remaining ties go to the alphabetically-first key and losers are flagged as
 `shadowed` (this happens on `--base`, which selects everything). Example:
 the `pi-permission-system` configs in `profiles.jsonc`, where work and
 personal variants both map to `extensions/pi-permission-system/config.json`
-and never collide because every profile belongs to exactly one group.
+and never collide because no profile has both tags.
 
 ### Shared settings
 

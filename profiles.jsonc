@@ -2,23 +2,7 @@
   // Install rule: a resource lands on a profile if it has "core" OR any tag
   // in the profile's "tags". "core" is implicit on every profile — never
   // list it in a profile's "tags".
-  "tags": [
-    "work-dev",
-    "work-infra",
-    "work-docs",
-    "work-general",
-    "personal-dev",
-    "personal-infra",
-    "personal-general",
-    "core",
-  ],
-
-  // Groups let `./install.sh work` sync every profile in the group at once.
-  // Declared explicitly (not derived from the name prefix) so it's lintable.
-  "groups": {
-    "work": ["work-dev", "work-infra", "work-docs", "work-general"],
-    "personal": ["personal-dev", "personal-infra", "personal-general"],
-  },
+  "tags": ["core", "work", "personal"],
 
   // Settings merged into every target's settings.json on install (all
   // profiles and --base). Only the declared keys are touched; everything
@@ -28,13 +12,8 @@
   },
 
   "profiles": {
-    "work-dev": { "tags": ["work-dev"] },
-    "work-infra": { "tags": ["work-infra"] },
-    "work-docs": { "tags": ["work-docs"] },
-    "work-general": { "tags": ["work-general"] },
-    "personal-dev": { "tags": ["personal-dev"] },
-    "personal-infra": { "tags": ["personal-infra"] },
-    "personal-general": { "tags": ["personal-general"] },
+    "work": { "tags": ["work"] },
+    "personal": { "tags": ["personal"] },
   },
 
   "resources": {
@@ -45,24 +24,24 @@
     "npm:pi-footer": { "tags": ["core"] },
     "npm:@juicesharp/rpiv-ask-user-question": { "tags": ["core"] },
 
-    // Permission system: the extension is core, but its config is per-group
-    // (work vs personal). Both variants map to the config path the extension
-    // reads; every profile belongs to exactly one group, so profile targets
-    // never collide. On --base both are selected and config.personal.json
-    // wins (alphabetical tie-break, flagged as shadowed).
+    // Permission system: the extension is core, but its config is
+    // per-profile (work vs personal). Both variants map to the config path
+    // the extension reads, and no profile has both tags, so they never
+    // collide. On --base both are selected and config.personal.json wins
+    // (alphabetical tie-break, flagged as shadowed).
     "npm:@gotgenes/pi-permission-system": { "tags": ["core"] },
     "extensions/pi-permission-system/config.work.json": {
-      "tags": ["work-dev", "work-infra", "work-docs", "work-general"],
+      "tags": ["work"],
       "dest": "extensions/pi-permission-system/config.json",
     },
     "extensions/pi-permission-system/config.personal.json": {
-      "tags": ["personal-dev", "personal-infra", "personal-general"],
+      "tags": ["personal"],
       "dest": "extensions/pi-permission-system/config.json",
     },
 
     // Future tagged resources, e.g.:
-    // "skills/jira/": { "tags": ["work-dev", "personal-dev"] },
-    // "skills/infra-ansible/": { "tags": ["work-infra", "personal-infra"] },
-    // "npm:@pi-stef/atlassian": { "tags": ["work-dev"] }
+    // "skills/jira/": { "tags": ["work"] },
+    // "skills/home-lab/": { "tags": ["personal"] },
+    // "npm:@pi-stef/atlassian": { "tags": ["work"] }
   },
 }
