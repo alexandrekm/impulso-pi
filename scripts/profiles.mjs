@@ -109,6 +109,48 @@ export function resourceExists(repoDir, key) {
 }
 
 /**
+ * Destination of a non-npm resource, relative to the profile dir. File
+ * resources may declare an explicit "dest" (e.g. a nested extension config
+ * path); otherwise files flatten to extensions/<basename> and skills to
+ * skills/<name>.
+ */
+export function relDestPath(key, entry) {
+  const kind = classify(key);
+  if (kind === "file") return entry?.dest || join("extensions", basename(key));
+  return join("skills", basename(key.replace(/\/$/, "")));
+}
+
+/**
+ * Resolve dest collisions among selected non-npm resource keys: when several
+ * keys share a dest, tag-specific (non-core) keys beat core ones; remaining
+ * ties go to the alphabetically-first key (this happens on --base, which
+ * selects every resource). onShadow(loser, winner, dest) is called for each
+ * dropped key. Returns the winning keys in their original order.
+ */
+export function resolveFileKeys(keys, resources, onShadow) {
+  const byDest = new Map();
+  for (const k of keys) {
+    const d = relDestPath(k, resources[k]);
+    if (!byDest.has(d)) byDest.set(d, []);
+    byDest.get(d).push(k);
+  }
+  const winnerSet = new Set();
+  for (const [d, group] of byDest) {
+    if (group.length === 1) {
+      winnerSet.add(group[0]);
+      continue;
+    }
+    const specific = group.filter((k) => !(resources[k].tags || []).includes("core"));
+    const pool = (specific.length ? specific : group).sort();
+    winnerSet.add(pool[0]);
+    for (const loser of group) {
+      if (loser !== pool[0]) onShadow?.(loser, pool[0], d);
+    }
+  }
+  return keys.filter((k) => winnerSet.has(k));
+}
+
+/**
  * Resource keys that belong on a profile with the given declared tags.
  * "core" is implicit on every profile.
  */
@@ -164,6 +206,15 @@ export function validateProfiles(profiles, repoDir) {
     }
   }
 
+  const settings = profiles.settings;
+  if (settings !== undefined) {
+    if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
+      errors.push('"settings" must be an object');
+    } else if ("packages" in settings) {
+      errors.push('"settings" must not contain "packages" (use npm: resources instead)');
+    }
+  }
+
   if (typeof resources !== "object" || Array.isArray(resources)) {
     errors.push('"resources" must be an object');
   } else {
@@ -185,6 +236,19 @@ export function validateProfiles(profiles, repoDir) {
       }
       for (const t of tags) {
         if (!tagSet.has(t)) errors.push(`resource "${key}" has unknown tag "${t}"`);
+      }
+      const dest = resources[key]?.dest;
+      if (dest !== undefined) {
+        if (kind !== "file") {
+          errors.push(`resource "${key}" .dest is only allowed on extensions/ file resources`);
+        } else if (
+          typeof dest !== "string" ||
+          !dest ||
+          dest.startsWith("/") ||
+          dest.split("/").includes("..")
+        ) {
+          errors.push(`resource "${key}" .dest must be a relative path inside the profile dir`);
+        }
       }
     }
   }

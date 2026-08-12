@@ -33,14 +33,21 @@ import {
   lstatSync,
   cpSync,
 } from "node:fs";
-import { join, dirname, basename, resolve } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as readline from "node:readline/promises";
 
-import { loadProfiles, validateProfiles, classify, resourcesForProfile } from "./profiles.mjs";
+import {
+  loadProfiles,
+  validateProfiles,
+  classify,
+  resourcesForProfile,
+  relDestPath,
+  resolveFileKeys,
+} from "./profiles.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_DIR = resolve(SCRIPT_DIR, "..");
@@ -191,11 +198,17 @@ function srcPath(key) {
   return join(REPO_DIR, rel);
 }
 
-function destPath(dir, key) {
-  const kind = classify(key);
-  if (kind === "npm") return null;
-  if (kind === "file") return join(dir, "extensions", basename(key));
-  return join(dir, "skills", basename(key.replace(/\/$/, "")));
+function destPath(dir, key, entry) {
+  if (classify(key) === "npm") return null;
+  return join(dir, relDestPath(key, entry));
+}
+
+// Collision resolution lives in profiles.mjs (shared with CI); here we just
+// wire up the shadow warning.
+function resolveTargetFileKeys(keys, profiles) {
+  return resolveFileKeys(keys, profiles.resources, (loser, winner, d) =>
+    console.log(`  [shadowed]     ${loser} (dest "${d}" also claimed by ${winner})`),
+  );
 }
 
 function copyEntry(src, dest) {
@@ -407,16 +420,49 @@ function executeNpmInstalls(selected, items, names) {
   }
 }
 
+// ---- settings sync ---------------------------------------------------------
+
+// Merge the top-level "settings" object from profiles.jsonc into a target's
+// settings.json. Only declared keys are written; everything else (including
+// the packages[] managed by pi install) is preserved. Keys removed from
+// profiles.jsonc are left as-is in settings.json (non-clobber).
+function doInstallSettings(t, profiles) {
+  const settings = profiles.settings;
+  if (!settings || Object.keys(settings).length === 0) return;
+  const p = join(t.dir, "settings.json");
+  let current = {};
+  if (existsSync(p)) {
+    try {
+      current = JSON.parse(readFileSync(p, "utf8"));
+    } catch {
+      console.log(`  [skipped]     settings.json (unparseable — fix manually)`);
+      return;
+    }
+  }
+  const merged = { ...current, ...settings };
+  const changed = Object.keys(settings).filter((k) => current[k] !== settings[k]);
+  if (changed.length === 0) {
+    console.log(`  [in sync]     settings.json`);
+    return;
+  }
+  mkdirSync(t.dir, { recursive: true });
+  writeFileSync(p, JSON.stringify(merged, null, 2) + "\n");
+  console.log(`  [updated]     settings.json (${changed.join(", ")})`);
+}
+
 // ---- per-target file sync ------------------------------------------------
 
 function doInstallFiles(t, profiles) {
-  const keys = keysForTarget(t, profiles).filter((k) => classify(k) !== "npm");
+  const keys = resolveTargetFileKeys(
+    keysForTarget(t, profiles).filter((k) => classify(k) !== "npm"),
+    profiles,
+  );
   const map = manifestRead(t.dir);
   mkdirSync(join(t.dir, "extensions"), { recursive: true });
   mkdirSync(join(t.dir, "skills"), { recursive: true });
   for (const key of keys) {
     const src = srcPath(key);
-    const dest = destPath(t.dir, key);
+    const dest = destPath(t.dir, key, profiles.resources[key]);
     const repoHash = hashOf(src);
     if (!existsSync(dest)) {
       copyEntry(src, dest);
@@ -443,16 +489,19 @@ function doInstallFiles(t, profiles) {
 }
 
 function doStatus(t, profiles) {
-  const keys = keysForTarget(t, profiles);
+  const allKeys = keysForTarget(t, profiles);
+  const keys = resolveTargetFileKeys(
+    allKeys.filter((k) => classify(k) !== "npm"),
+    profiles,
+  );
   const map = manifestRead(t.dir);
+  for (const key of allKeys.filter((k) => classify(k) === "npm")) {
+    const state = manifestGet(map, key) ? "in sync" : "not installed";
+    console.log(`  ${key.padEnd(43)} ${state}`);
+  }
   for (const key of keys) {
-    if (classify(key) === "npm") {
-      const state = manifestGet(map, key) ? "in sync" : "not installed";
-      console.log(`  ${key.padEnd(43)} ${state}`);
-      continue;
-    }
     const src = srcPath(key);
-    const dest = destPath(t.dir, key);
+    const dest = destPath(t.dir, key, profiles.resources[key]);
     const repoHash = hashOf(src);
     if (!existsSync(dest)) {
       console.log(`  ${key.padEnd(43)} new (not installed)`);
@@ -470,12 +519,15 @@ function doStatus(t, profiles) {
 }
 
 function doPull(t, profiles) {
-  const keys = keysForTarget(t, profiles).filter((k) => classify(k) !== "npm");
+  const keys = resolveTargetFileKeys(
+    keysForTarget(t, profiles).filter((k) => classify(k) !== "npm"),
+    profiles,
+  );
   const map = manifestRead(t.dir);
   let pulled = 0;
   for (const key of keys) {
     const src = srcPath(key);
-    const dest = destPath(t.dir, key);
+    const dest = destPath(t.dir, key, profiles.resources[key]);
     if (!existsSync(dest)) continue;
     const localHash = hashOf(dest);
     const repoHash = hashOf(src);
@@ -584,6 +636,7 @@ async function main() {
     for (const t of names) {
       console.log(`==> install -> ${t.base ? "base" : t.name} (${t.dir})`);
       doInstallFiles(t, profiles);
+      doInstallSettings(t, profiles);
     }
     console.log("\nDone. Reload pi (/reload) or start a new session to pick up changes.");
   } else if (cmd === "status") {
