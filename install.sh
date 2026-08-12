@@ -37,7 +37,9 @@ manifest_set() {
   # $1 = hash, $2 = repoPath, $3 = localPath
   local tmp
   tmp="$(mktemp)"
-  [ -f "$MANIFEST" ] && awk -F'\t' -v k="$2" '$2 != k' "$MANIFEST" > "$tmp" || true
+  if [ -f "$MANIFEST" ]; then
+    awk -F'\t' -v k="$2" '$2 != k' "$MANIFEST" > "$tmp"
+  fi
   printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$tmp"
   mkdir -p "$(dirname "$MANIFEST")"
   mv "$tmp" "$MANIFEST"
