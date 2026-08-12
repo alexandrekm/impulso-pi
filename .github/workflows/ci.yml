@@ -52,14 +52,16 @@ jobs:
           exit 0
           EOF
           chmod +x "$STUB_BIN/pi"
-          PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh install
+          # --base syncs ALL resources into the raw agent dir (no profile/ppi
+          # needed), exercising the same file-sync + npm-manifest logic.
+          PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh install --yes --base
           # Second run must be a no-op fast-forward (nothing changed).
-          PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh install | tee /tmp/second-run.log
-          if grep -q '\[updated\]\|\[new\]' /tmp/second-run.log; then
+          PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh install --yes --base | tee /tmp/second-run.log
+          if grep -Eq '\[(new|updated|pkg new)\]' /tmp/second-run.log; then
             echo "install.sh is not idempotent: second run made changes" >&2
             exit 1
           fi
-          PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh status
+          PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh status --base
           # Every tracked extensions/*/*.{ts,json} file in the repo must have
           # landed flat in the agent dir (independent of which files exist).
           find extensions -mindepth 1 -maxdepth 2 \( -name '*.ts' -o -name '*.json' \) | while read -r src; do

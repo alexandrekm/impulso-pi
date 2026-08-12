@@ -1,0 +1,45 @@
+{
+  // Install rule: a resource lands on a profile if it has "core" OR any tag
+  // in the profile's "tags". "core" is implicit on every profile — never
+  // list it in a profile's "tags".
+  "tags": [
+    "work-dev",
+    "work-infra",
+    "work-docs",
+    "work-general",
+    "personal-dev",
+    "personal-infra",
+    "personal-general",
+    "core",
+  ],
+
+  // Groups let `./install.sh work` sync every profile in the group at once.
+  // Declared explicitly (not derived from the name prefix) so it's lintable.
+  "groups": {
+    "work": ["work-dev", "work-infra", "work-docs", "work-general"],
+    "personal": ["personal-dev", "personal-infra", "personal-general"],
+  },
+
+  "profiles": {
+    "work-dev": { "tags": ["work-dev"] },
+    "work-infra": { "tags": ["work-infra"] },
+    "work-docs": { "tags": ["work-docs"] },
+    "work-general": { "tags": ["work-general"] },
+    "personal-dev": { "tags": ["personal-dev"] },
+    "personal-infra": { "tags": ["personal-infra"] },
+    "personal-general": { "tags": ["personal-general"] },
+  },
+
+  "resources": {
+    // "core" baseline = everything currently in this repo. Always installed
+    // (every profile, and --base).
+    "extensions/footer/footer-widgets.ts": { "tags": ["core"] },
+    "extensions/footer/pi-footer.json": { "tags": ["core"] },
+    "npm:pi-footer": { "tags": ["core"] },
+
+    // Future tagged resources, e.g.:
+    // "skills/jira/": { "tags": ["work-dev", "personal-dev"] },
+    // "skills/infra-ansible/": { "tags": ["work-infra", "personal-infra"] },
+    // "npm:@pi-stef/atlassian": { "tags": ["work-dev"] }
+  },
+}
