@@ -84,3 +84,5 @@ repo to run.
   `./install.sh` on each machine to fast-forward.
 - Tweaked something live in `~/.pi/agent/` (e.g. via `/footer`) and want to
   keep it? Run `./install.sh pull`, review the diff, and commit.
+
+<!-- test: verifying pr-agent config loads from main -->
