@@ -36,6 +36,7 @@
     "extensions/footer/footer-widgets.ts": { "tags": ["core"] },
     "extensions/footer/pi-footer.json": { "tags": ["core"] },
     "npm:pi-footer": { "tags": ["core"] },
+    "npm:@juicesharp/rpiv-ask-user-question": { "tags": ["core"] },
 
     // Future tagged resources, e.g.:
     // "skills/jira/": { "tags": ["work-dev", "personal-dev"] },
