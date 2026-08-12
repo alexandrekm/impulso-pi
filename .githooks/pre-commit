@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# Runs the same checks as CI (.github/workflows/ci.yml) before allowing a commit.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "==> pre-commit: lint"
+npm run lint
+
+echo "==> pre-commit: typecheck"
+npm run typecheck
+
+echo "==> pre-commit: format:check"
+npm run format:check
+
+echo "==> pre-commit: check:json"
+npm run check:json
+
+if command -v shellcheck >/dev/null 2>&1; then
+  echo "==> pre-commit: shellcheck"
+  shellcheck install.sh
+else
+  echo "==> pre-commit: shellcheck not installed, skipping"
+fi
