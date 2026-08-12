@@ -33,14 +33,21 @@ import {
   lstatSync,
   cpSync,
 } from "node:fs";
-import { join, dirname, basename, resolve } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as readline from "node:readline/promises";
 
-import { loadProfiles, validateProfiles, classify, resourcesForProfile } from "./profiles.mjs";
+import {
+  loadProfiles,
+  validateProfiles,
+  classify,
+  resourcesForProfile,
+  relDestPath,
+  resolveFileKeys,
+} from "./profiles.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_DIR = resolve(SCRIPT_DIR, "..");
@@ -191,47 +198,17 @@ function srcPath(key) {
   return join(REPO_DIR, rel);
 }
 
-// Destination relative to the profile dir. File resources may declare an
-// explicit "dest" in profiles.jsonc (e.g. a nested extension config path);
-// otherwise files flatten to extensions/<basename> and skills to
-// skills/<name>.
-function relDestPath(key, entry) {
-  const kind = classify(key);
-  if (kind === "file") return entry?.dest || join("extensions", basename(key));
-  return join("skills", basename(key.replace(/\/$/, "")));
-}
-
 function destPath(dir, key, entry) {
   if (classify(key) === "npm") return null;
   return join(dir, relDestPath(key, entry));
 }
 
-// When several selected file keys share a dest, tag-specific (non-core) keys
-// beat core ones; remaining ties go to the alphabetically-first key with a
-// warning (this happens on --base, which selects every resource).
-function resolveFileKeys(keys, profiles) {
-  const byDest = new Map();
-  for (const k of keys) {
-    const d = relDestPath(k, profiles.resources[k]);
-    if (!byDest.has(d)) byDest.set(d, []);
-    byDest.get(d).push(k);
-  }
-  const winnerSet = new Set();
-  for (const [d, group] of byDest) {
-    if (group.length === 1) {
-      winnerSet.add(group[0]);
-      continue;
-    }
-    const specific = group.filter((k) => !(profiles.resources[k].tags || []).includes("core"));
-    const pool = (specific.length ? specific : group).sort();
-    winnerSet.add(pool[0]);
-    for (const loser of group) {
-      if (loser !== pool[0]) {
-        console.log(`  [shadowed]     ${loser} (dest "${d}" also claimed by ${pool[0]})`);
-      }
-    }
-  }
-  return keys.filter((k) => winnerSet.has(k));
+// Collision resolution lives in profiles.mjs (shared with CI); here we just
+// wire up the shadow warning.
+function resolveTargetFileKeys(keys, profiles) {
+  return resolveFileKeys(keys, profiles.resources, (loser, winner, d) =>
+    console.log(`  [shadowed]     ${loser} (dest "${d}" also claimed by ${winner})`),
+  );
 }
 
 function copyEntry(src, dest) {
@@ -476,7 +453,7 @@ function doInstallSettings(t, profiles) {
 // ---- per-target file sync ------------------------------------------------
 
 function doInstallFiles(t, profiles) {
-  const keys = resolveFileKeys(
+  const keys = resolveTargetFileKeys(
     keysForTarget(t, profiles).filter((k) => classify(k) !== "npm"),
     profiles,
   );
@@ -513,7 +490,7 @@ function doInstallFiles(t, profiles) {
 
 function doStatus(t, profiles) {
   const allKeys = keysForTarget(t, profiles);
-  const keys = resolveFileKeys(
+  const keys = resolveTargetFileKeys(
     allKeys.filter((k) => classify(k) !== "npm"),
     profiles,
   );
@@ -542,7 +519,7 @@ function doStatus(t, profiles) {
 }
 
 function doPull(t, profiles) {
-  const keys = resolveFileKeys(
+  const keys = resolveTargetFileKeys(
     keysForTarget(t, profiles).filter((k) => classify(k) !== "npm"),
     profiles,
   );

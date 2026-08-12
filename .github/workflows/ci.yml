@@ -62,8 +62,13 @@ jobs:
             exit 1
           fi
           PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh status --base
-          # Every tracked extensions/*/*.{ts,json} file in the repo must have
-          # landed flat in the agent dir (independent of which files exist).
-          find extensions -mindepth 1 -maxdepth 2 \( -name '*.ts' -o -name '*.json' \) | while read -r src; do
-            test -f "$TEST_AGENT_DIR/extensions/$(basename "$src")"
+          # Every non-npm resource must have landed at its resolved dest
+          # (collision-aware: on --base, shadowed variants don't land).
+          node --input-type=module -e '
+            import { loadProfiles, classify, relDestPath, resolveFileKeys } from "./scripts/profiles.mjs";
+            const p = loadProfiles("profiles.jsonc");
+            const keys = resolveFileKeys(Object.keys(p.resources).filter((k) => classify(k) !== "npm"), p.resources);
+            for (const k of keys) console.log(relDestPath(k, p.resources[k]));
+          ' | while read -r dest; do
+            test -f "$TEST_AGENT_DIR/$dest" || { echo "missing: $dest" >&2; exit 1; }
           done
