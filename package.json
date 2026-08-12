@@ -1,0 +1,21 @@
+{
+  "name": "impulso-pi",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Personal pi customizations: extensions, skills, and setup scripts",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint extensions/",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:json": "node scripts/check-json.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.0",
+    "typescript-eslint": "^8.67.0"
+  }
+}

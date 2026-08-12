@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "enabled": true,
+  "preset": "powerline",
+  "lines": [
+    [
+      {
+        "id": "git-branch-msp5tsiz-uzdzch",
+        "type": "git-branch",
+        "enabled": true,
+        "options": {
+          "raw": false,
+          "hideWhenEmpty": true,
+          "icon": "",
+          "text": "",
+          "fg": "ansi256:71",
+          "bg": "default",
+          "bold": true,
+          "gitBranchDisplayStyle": "default",
+          "surroundLeft": "",
+          "surroundRight": ""
+        }
+      },
+      {
+        "id": "model-msp5tsiz-2hpwve",
+        "type": "model",
+        "enabled": true,
+        "options": {
+          "raw": false,
+          "icon": "",
+          "fg": "brightWhite",
+          "bg": "ansi256:97",
+          "bold": false,
+          "showProvider": false
+        }
+      },
+      {
+        "id": "separator-msp5tsj0-oqiste",
+        "type": "separator",
+        "enabled": true,
+        "options": {
+          "fg": "ansi256:97",
+          "bg": "ansi256:97",
+          "bold": false,
+          "hideWhenEmpty": true,
+          "separator": "powerline-right-spaced",
+          "text": "|"
+        }
+      },
+      {
+        "id": "thinking-level-msp5tsiz-y19q2o",
+        "type": "thinking-level",
+        "enabled": true,
+        "options": {
+          "raw": false,
+          "hideWhenEmpty": false,
+          "icon": "·",
+          "text": "off",
+          "fg": "brightWhite",
+          "bg": "ansi256:97",
+          "bold": false
+        }
+      },
+      {
+        "id": "separator-msp5tsj0-b66bdh",
+        "type": "separator",
+        "enabled": true,
+        "options": {
+          "fg": "ansi256:97",
+          "bg": "ansi256:178",
+          "bold": false,
+          "hideWhenEmpty": true,
+          "separator": "powerline-right-spaced",
+          "text": "|"
+        }
+      },
+      {
+        "id": "context-bar-msp5tsiz-dhh0q9",
+        "type": "context-bar",
+        "enabled": true,
+        "options": {
+          "raw": false,
+          "hideWhenEmpty": false,
+          "icon": "",
+          "text": "",
+          "fg": "ansi256:88",
+          "bg": "ansi256:178",
+          "bold": false,
+          "tokenFormatStyle": "default",
+          "contextBarMode": "short-only",
+          "contextConditionalColors": false,
+          "contextWarningPercent": 70,
+          "contextDangerPercent": 90,
+          "warningFg": "yellow",
+          "warningBg": "default",
+          "dangerFg": "red",
+          "dangerBg": "default"
+        }
+      },
+      {
+        "id": "event-msp647sx-bcbhdf",
+        "type": "event",
+        "enabled": true,
+        "options": {
+          "raw": true,
+          "hideWhenEmpty": false,
+          "icon": "",
+          "text": "?%",
+          "fg": "ansi256:234",
+          "bg": "ansi256:178",
+          "bold": false,
+          "widgetId": "ctxpct"
+        }
+      },
+      {
+        "id": "separator-msp5tsj0-sk3lxz",
+        "type": "separator",
+        "enabled": true,
+        "options": {
+          "fg": "ansi256:178",
+          "bg": "ansi256:73",
+          "bold": false,
+          "hideWhenEmpty": true,
+          "separator": "powerline-right-spaced",
+          "text": "|"
+        }
+      },
+      {
+        "id": "cache-hit-rate-msp5tsj0-ixcr00",
+        "type": "cache-hit-rate",
+        "enabled": true,
+        "options": {
+          "raw": false,
+          "hideWhenZero": false,
+          "icon": "",
+          "fg": "ansi256:234",
+          "bg": "ansi256:73",
+          "bold": false,
+          "cacheHitSource": "session",
+          "style": "compact"
+        }
+      },
+      {
+        "id": "separator-msp5tsj0-yzam13",
+        "type": "separator",
+        "enabled": true,
+        "options": {
+          "fg": "ansi256:73",
+          "bg": "ansi256:31",
+          "bold": false,
+          "hideWhenEmpty": true,
+          "separator": "powerline-right-spaced",
+          "text": "|"
+        }
+      },
+      {
+        "id": "tokens-msp5tsj0-a81le5",
+        "type": "tokens",
+        "enabled": true,
+        "options": {
+          "raw": false,
+          "icon": "",
+          "fg": "ansi256:234",
+          "bg": "ansi256:31",
+          "bold": false,
+          "tokenFormatStyle": "compact"
+        }
+      },
+      {
+        "id": "separator-msp5tsj0-kp0np4",
+        "type": "separator",
+        "enabled": true,
+        "options": {
+          "fg": "ansi256:31",
+          "bg": "ansi256:104",
+          "bold": false,
+          "hideWhenEmpty": true,
+          "separator": "powerline-right-spaced",
+          "text": "|"
+        }
+      },
+      {
+        "id": "event-msp5tsj0-ne36s6",
+        "type": "event",
+        "enabled": true,
+        "options": {
+          "raw": true,
+          "hideWhenEmpty": false,
+          "icon": "",
+          "text": "⚡-- tok/s",
+          "fg": "ansi256:234",
+          "bg": "ansi256:104",
+          "bold": false,
+          "widgetId": "toks"
+        }
+      },
+      {
+        "id": "separator-msp5tsj0-hku9m9",
+        "type": "separator",
+        "enabled": true,
+        "options": {
+          "fg": "ansi256:104",
+          "bg": "ansi256:180",
+          "bold": false,
+          "hideWhenEmpty": true,
+          "separator": "powerline-right-spaced",
+          "text": "|"
+        }
+      },
+      {
+        "id": "event-msp61og4-x2xmrd",
+        "type": "event",
+        "enabled": true,
+        "options": {
+          "raw": true,
+          "hideWhenEmpty": false,
+          "icon": "",
+          "text": "$0.0",
+          "fg": "ansi256:234",
+          "bg": "ansi256:180",
+          "bold": false,
+          "widgetId": "cost"
+        }
+      },
+      {
+        "id": "event-msp5tsiz-uyuuem",
+        "type": "event",
+        "enabled": true,
+        "options": {
+          "raw": true,
+          "hideWhenEmpty": true,
+          "icon": "",
+          "text": "-",
+          "fg": "ansi256:75",
+          "bg": "default",
+          "bold": false,
+          "widgetId": "pr"
+        }
+      }
+    ]
+  ],
+  "separator": "space",
+  "separatorFg": "default",
+  "separatorBg": "default",
+  "iconMode": "nerd",
+  "minimalist": false,
+  "terminal": {
+    "widthMode": "full",
+    "colorLevel": "ansi256"
+  },
+  "extensionStatusRow": {
+    "hiddenKeys": [],
+    "knownKeys": []
+  }
+}

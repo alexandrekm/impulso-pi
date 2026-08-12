@@ -1,3 +1,6 @@
+# gitleaks-action output (left in the working directory by the CI job)
+results.sarif
+
 # Logs
 logs
 *.log

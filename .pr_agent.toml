@@ -1,0 +1,87 @@
+[config]
+model = "openai/pr-agent"
+model_turbo = "openai/pr-agent"
+fallback_models = []
+custom_model_max_tokens = 131072
+ignore_pr_labels = ["renovate", "auto-generated"]
+ignore_pr_title = ["^\\[Auto\\]"]
+response_language = "en-US"
+enable_custom_labels = true
+
+[pr_reviewer]
+extra_instructions = """\
+Focus on impulso-pi-specific concerns:
+
+## pi extensions (extensions/**/*.ts)
+- Extension default export signature matches pi's ExtensionAPI shape: `export default function (pi) { ... }`
+- Timers created with `setInterval`/`setTimeout` are `unref()`'d and cleared on `session_shutdown`
+- No hardcoded absolute paths outside `ctx.cwd` / `process.cwd()`
+- `pi.events.emit("pi-footer:update-widget", ...)` payloads always include both `widgetId` and `value`
+- Widgets that can legitimately have no data (e.g. no PR, no git repo) publish an empty string, not a placeholder like "N/A", so pi-footer's `hideWhenEmpty` works
+- No secrets or tokens read from anywhere other than the environment already provided by `gh`/pi itself
+- `execFile`/`exec` calls: fixed argument arrays (no shell string interpolation of untrusted input), reasonable `timeout` set
+
+## pi-footer.json
+- Must remain valid JSON (also enforced by `check:json` in CI)
+- Every `event` widget's `widgetId` referenced in the config has a matching publisher in `extensions/footer-widgets.ts` (or documented as coming from elsewhere)
+- Powerline `separator` widgets between two segments have `fg` matching the previous segment's `bg` and `bg` matching the next segment's `bg`
+
+## install.sh
+- Remains POSIX-friendly bash, `set -euo pipefail` present
+- Idempotent: safe to re-run without side effects when nothing changed
+- Manifest-based sync logic preserved: `install` must never overwrite a locally-modified file without going through the conflict/skip path; `pull` must never silently discard local edits
+- New tracked file types (beyond `extensions/*/*.{ts,json}` and `skills/*/`) are added to both the discovery loop and documented in README
+
+## Structural
+- New extensions/skills follow the existing `extensions/<feature>/` or `skills/<name>/` layout
+- README accurately documents any new subcommand, script, or directory added
+
+Skip formatting nits (trailing whitespace, blank line count, quote style) — Prettier/ESLint already enforce those. Only flag issues with functional, security, or maintainability impact."""
+num_max_findings = 10
+enable_review_labels_effort = true
+require_security_review = true
+require_tests_review = false
+require_estimate_effort_to_review = false
+require_can_be_split_review = false
+persistent_comment = true
+
+[pr_description]
+generate_ai_title = false
+enable_pr_diagram = false
+use_bullet_points = true
+publish_labels = true
+publish_description_as_comment = true
+add_original_user_description = true
+
+[github_action_config]
+auto_review = true
+auto_describe = true
+auto_improve = true
+pr_actions = ["opened", "reopened", "ready_for_review"]
+handle_push_trigger = true
+push_commands = ["describe", "review", "improve"]
+
+[pr_code_suggestions]
+focus_only_on_problems = true
+suggestions_score_threshold = 5
+extra_instructions = """\
+  Only suggest changes that prevent functional or security issues:
+- Extension code that doesn't match pi's ExtensionAPI shape
+- Timer/resource leaks (missing unref/clear on shutdown)
+- pi-footer.json becoming invalid JSON or referencing an undefined event widget
+- install.sh changes that could silently overwrite local edits or break idempotency"""
+
+[custom_labels."Bug fix"]
+description = "The PR fixes a bug in an extension, the footer config, or install.sh"
+
+[custom_labels."Enhancement"]
+description = "The PR adds a new extension, skill, or footer widget"
+
+[custom_labels."Documentation"]
+description = "The PR primarily updates the README or investigation docs"
+
+[custom_labels."Dependencies"]
+description = "The PR updates package.json dependencies or the pi-footer package version"
+
+[custom_labels."CI/CD"]
+description = "The PR modifies GitHub Actions workflows, lint/format config, or install.sh sync logic"
