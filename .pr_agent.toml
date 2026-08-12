@@ -1,6 +1,7 @@
 [config]
 model = "openai/pr-agent"
 model_turbo = "openai/pr-agent"
+fallback_models = []
 custom_model_max_tokens = 131072
 ignore_pr_labels = ["renovate", "auto-generated"]
 ignore_pr_title = ["^\\[Auto\\]"]
