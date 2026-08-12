@@ -4,6 +4,20 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
+# Only check staged content, matching what will actually be committed (and
+# what CI will see) — stash any unstaged changes for the duration of the run.
+stash_ref=""
+if ! git diff --quiet; then
+  git stash push --keep-index --quiet -m "pre-commit: unstaged changes"
+  stash_ref="$(git rev-parse -q --verify refs/stash || true)"
+fi
+restore_stash() {
+  if [ -n "$stash_ref" ]; then
+    git stash pop --quiet
+  fi
+}
+trap restore_stash EXIT
+
 echo "==> pre-commit: lint"
 npm run lint
 
