@@ -73,7 +73,10 @@ file-landing check against a stubbed `pi` CLI) on every push/PR.
 A PR review bot (`.github/workflows/pr-agent.yml`, config in
 `.pr_agent.toml`) automatically reviews PRs for functional issues specific to
 this repo (extension shape, pi-footer config correctness, install.sh sync
-safety). It needs an `OPENROUTER_API_KEY` secret set on the repo to run.
+safety). It runs `pr-agent` via `pip` (not the Docker-based GitHub Action,
+since the `impulso-pi-runners` self-hosted runner has no Docker daemon)
+against a LiteLLM endpoint. It needs a `LITELLM_API_KEY` secret set on the
+repo to run.
 
 ## Updating
 

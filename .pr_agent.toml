@@ -1,14 +1,11 @@
 [config]
-model = "openai/deepseek/deepseek-v4-pro"
-fallback_models = []
+model = "openai/pr-agent"
+model_turbo = "openai/pr-agent"
 custom_model_max_tokens = 131072
+ignore_pr_labels = ["renovate", "auto-generated"]
+ignore_pr_title = ["^\\[Auto\\]"]
+response_language = "en-US"
 enable_custom_labels = true
-ai_timeout = 600
-
-[github_action_config]
-handle_push_trigger = true
-push_commands = ["/review"]
-auto_review = true
 
 [pr_reviewer]
 extra_instructions = """\
@@ -43,8 +40,47 @@ num_max_findings = 10
 enable_review_labels_effort = true
 require_security_review = true
 require_tests_review = false
-require_estimate_effort_to_review = true
+require_estimate_effort_to_review = false
 require_can_be_split_review = false
-require_score_review = true
 persistent_comment = true
-review_idempotent = true
+
+[pr_description]
+generate_ai_title = false
+enable_pr_diagram = false
+use_bullet_points = true
+publish_labels = true
+publish_description_as_comment = true
+add_original_user_description = true
+
+[github_action_config]
+auto_review = true
+auto_describe = true
+auto_improve = true
+pr_actions = ["opened", "reopened", "ready_for_review"]
+handle_push_trigger = true
+push_commands = ["describe", "review", "improve"]
+
+[pr_code_suggestions]
+focus_only_on_problems = true
+suggestions_score_threshold = 5
+extra_instructions = """\
+  Only suggest changes that prevent functional or security issues:
+- Extension code that doesn't match pi's ExtensionAPI shape
+- Timer/resource leaks (missing unref/clear on shutdown)
+- pi-footer.json becoming invalid JSON or referencing an undefined event widget
+- install.sh changes that could silently overwrite local edits or break idempotency"""
+
+[custom_labels."Bug fix"]
+description = "The PR fixes a bug in an extension, the footer config, or install.sh"
+
+[custom_labels."Enhancement"]
+description = "The PR adds a new extension, skill, or footer widget"
+
+[custom_labels."Documentation"]
+description = "The PR primarily updates the README or investigation docs"
+
+[custom_labels."Dependencies"]
+description = "The PR updates package.json dependencies or the pi-footer package version"
+
+[custom_labels."CI/CD"]
+description = "The PR modifies GitHub Actions workflows, lint/format config, or install.sh sync logic"
