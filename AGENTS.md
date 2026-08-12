@@ -57,6 +57,23 @@ Resource key forms:
 | `skills/<name>/` (trailing slash) | `<profile>/skills/<name>/` |
 | `npm:<pkg>` | appended to `<profile>/settings.json` `packages[]` |
 
+File resources may set an optional `"dest"` (path relative to the profile
+dir) to land at a nested path — e.g. an extension's config file. If several
+selected keys share a `dest`, tag-specific (non-core) keys beat core ones;
+remaining ties go to the alphabetically-first key and losers are flagged as
+`shadowed` (this happens on `--base`, which selects everything). Example:
+the `pi-permission-system` configs in `profiles.jsonc`, where work and
+personal variants both map to `extensions/pi-permission-system/config.json`
+and never collide because every profile belongs to exactly one group.
+
+### Shared settings
+
+The optional top-level `"settings"` object in `profiles.jsonc` is merged
+into every target's `settings.json` on install (all profiles and `--base`).
+Only declared keys are written; `packages[]` and any other existing keys are
+preserved. `"packages"` is rejected there — use `npm:` resources instead.
+Currently used for `"hideThinkingBlock": true`.
+
 ### Global vs. per-profile
 
 - **Global (`--base`):** syncs **all** resources (no tag filter) into

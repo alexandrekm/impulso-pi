@@ -164,6 +164,15 @@ export function validateProfiles(profiles, repoDir) {
     }
   }
 
+  const settings = profiles.settings;
+  if (settings !== undefined) {
+    if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
+      errors.push('"settings" must be an object');
+    } else if ("packages" in settings) {
+      errors.push('"settings" must not contain "packages" (use npm: resources instead)');
+    }
+  }
+
   if (typeof resources !== "object" || Array.isArray(resources)) {
     errors.push('"resources" must be an object');
   } else {
@@ -185,6 +194,19 @@ export function validateProfiles(profiles, repoDir) {
       }
       for (const t of tags) {
         if (!tagSet.has(t)) errors.push(`resource "${key}" has unknown tag "${t}"`);
+      }
+      const dest = resources[key]?.dest;
+      if (dest !== undefined) {
+        if (kind !== "file") {
+          errors.push(`resource "${key}" .dest is only allowed on extensions/ file resources`);
+        } else if (
+          typeof dest !== "string" ||
+          !dest ||
+          dest.startsWith("/") ||
+          dest.split("/").includes("..")
+        ) {
+          errors.push(`resource "${key}" .dest must be a relative path inside the profile dir`);
+        }
       }
     }
   }

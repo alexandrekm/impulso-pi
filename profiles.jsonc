@@ -20,6 +20,13 @@
     "personal": ["personal-dev", "personal-infra", "personal-general"],
   },
 
+  // Settings merged into every target's settings.json on install (all
+  // profiles and --base). Only the declared keys are touched; everything
+  // else (including packages[]) is left alone.
+  "settings": {
+    "hideThinkingBlock": true,
+  },
+
   "profiles": {
     "work-dev": { "tags": ["work-dev"] },
     "work-infra": { "tags": ["work-infra"] },
@@ -37,6 +44,21 @@
     "extensions/footer/pi-footer.json": { "tags": ["core"] },
     "npm:pi-footer": { "tags": ["core"] },
     "npm:@juicesharp/rpiv-ask-user-question": { "tags": ["core"] },
+
+    // Permission system: the extension is core, but its config is per-group
+    // (work vs personal). Both variants map to the config path the extension
+    // reads; every profile belongs to exactly one group, so profile targets
+    // never collide. On --base both are selected and config.personal.json
+    // wins (alphabetical tie-break, flagged as shadowed).
+    "npm:@gotgenes/pi-permission-system": { "tags": ["core"] },
+    "extensions/pi-permission-system/config.work.json": {
+      "tags": ["work-dev", "work-infra", "work-docs", "work-general"],
+      "dest": "extensions/pi-permission-system/config.json",
+    },
+    "extensions/pi-permission-system/config.personal.json": {
+      "tags": ["personal-dev", "personal-infra", "personal-general"],
+      "dest": "extensions/pi-permission-system/config.json",
+    },
 
     // Future tagged resources, e.g.:
     // "skills/jira/": { "tags": ["work-dev", "personal-dev"] },
