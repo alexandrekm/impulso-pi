@@ -23,6 +23,7 @@
     "extensions/footer/pi-footer.json": { "tags": ["core"] },
     "npm:pi-footer": { "tags": ["core"] },
     "npm:@juicesharp/rpiv-ask-user-question": { "tags": ["core"] },
+    "npm:@alfonzjanfrithz/pi-websearch": { "tags": ["core"] },
 
     // Notify the active pi config dir at startup (which profile loaded).
     "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
