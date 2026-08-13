@@ -7,6 +7,29 @@ scripts. Layered on top of [pi-profiles](https://github.com/chaychoong/pi-profil
 **Full design doc:** [`investigation/PROFILES.md`](investigation/PROFILES.md).
 This file is the short version for agents working in this repo.
 
+## Reference sources (parent folder)
+
+The source code of **pi** and **omp** (oh-my-pi) is checked out in the
+parent directory (`../`), alongside this repo:
+
+- **`../pi/`** — clone of the [pi](https://pi.dev) agent harness source code
+  (`@earendil-works/pi-coding-agent` and friends, under `pi/packages/`).
+  Read-only reference: consult it to understand pi's extension API, tool
+  system, TUI, etc. when developing extensions or skills. Don't expect to
+  commit changes there as part of normal work here.
+- **`../oh-my-pi/`** (a.k.a. **omp**) — a fork of pi
+  (`@oh-my-pi/pi-coding-agent`, see https://omp.sh) by can1357. Read-only
+  reference, like `../pi/`. It is a substantially extended/different codebase
+  (Rust core in `oh-my-pi/crates/`, TypeScript packages in
+  `oh-my-pi/packages/`, docs in `oh-my-pi/docs/`).
+
+When you need to look at how **omp** implements a feature, extension, skill,
+tool, TUI component, provider, or anything else — search and read the
+relevant files under `../oh-my-pi/` (e.g. `../oh-my-pi/packages/`,
+`../oh-my-pi/crates/`, `../oh-my-pi/docs/`). Use `rg`, `grep`, `ls`, etc. to
+locate the implementation, then summarize or adapt it. Don't expect to commit
+changes there; treat it purely as a reference.
+
 ## How to install / sync resources
 
 Resources (extensions, skills, npm packages) are declared in
