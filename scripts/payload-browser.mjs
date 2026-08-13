@@ -114,6 +114,56 @@ function listPayloadFiles(dir) {
     .sort((a, b) => a.file.localeCompare(b.file));
 }
 
+// Date subdirs under a payloads root: directories named YYYY-MM-DD.
+function listDateDirs(root) {
+  let entries = [];
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((d) => d.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(d.name))
+    .map((d) => ({ name: d.name, path: join(root, d.name) }))
+    .sort((a, b) => b.name.localeCompare(a.name)); // newest first
+}
+
+// Session subdirs under a date dir. Each name is `<sessionId8>[-<slug>]`.
+// Returns { name, path, count, hasErrors, mtime } sorted newest-first by mtime.
+function listSessionDirs(dateDir) {
+  let entries = [];
+  try {
+    entries = readdirSync(dateDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((d) => d.isDirectory())
+    .map((d) => {
+      const path = join(dateDir, d.name);
+      let count = 0;
+      let hasErrors = false;
+      let mtime = 0;
+      try {
+        for (const f of readdirSync(path)) {
+          if (f.startsWith("payload--") && f.endsWith(".json")) count++;
+          if (f === "errors.jsonl") hasErrors = true;
+        }
+      } catch {}
+      try {
+        mtime = statSync(path).mtimeMs;
+      } catch {}
+      return { name: d.name, path, count, hasErrors, mtime };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+}
+
+// Detect whether a payloads root uses the new date/session layout, the flat
+// layout, or both (legacy flat files alongside new date dirs).
+function hasDateLayout(root) {
+  return listDateDirs(root).length > 0;
+}
+
 function readPayload(path) {
   try {
     return JSON.parse(readFileSync(path, "utf8"));
@@ -394,15 +444,19 @@ function buildDetail(payload) {
 
 // ────────────────────────────── TUI ──────────────────────────────
 class TUI {
-  constructor(dir) {
-    this.dir = dir;
-    this.mode = "list"; // list | detail | errors
-    this.files = listPayloadFiles(dir);
-    this.errors = readErrors(dir);
+  constructor(root) {
+    this.root = root; // payloads root dir
+    this.mode = "dates"; // dates | sessions | list | detail | outline | errors
+    this.dates = listDateDirs(root);
+    this.flatFiles = listPayloadFiles(root); // legacy flat files at root
+    this.sessions = [];
+    this.sessionDir = null; // currently selected session dir
+    this.files = [];
+    this.errors = [];
     this.cursor = 0;
     this.scroll = 0;
     this.detailLines = [];
-    this.marks = []; // outline bookmarks for the open payload
+    this.marks = [];
     this.sectionStarts = [];
     this.payloadCache = new Map();
     this.currentPath = null;
@@ -410,17 +464,36 @@ class TUI {
   }
 
   reload() {
-    this.files = listPayloadFiles(this.dir);
-    this.errors = readErrors(this.dir);
+    if (this.mode === "dates") {
+      this.dates = listDateDirs(this.root);
+      this.flatFiles = listPayloadFiles(this.root);
+    } else if (this.mode === "sessions") {
+      this.sessions = listSessionDirs(this.currentDatePath);
+    } else {
+      this.files = listPayloadFiles(this.sessionDir || this.root);
+      this.errors = readErrors(this.sessionDir || this.root);
+    }
     this.cursor = 0;
     this.scroll = 0;
     this.render();
   }
 
   async start() {
-    if (this.files.length === 0 && this.errors.length === 0) {
-      console.error(`No payload files or errors.jsonl found in ${this.dir}`);
+    if (this.dates.length === 0 && this.flatFiles.length === 0) {
+      console.error(`No payload files found under ${this.root}`);
       process.exit(1);
+    }
+    // If there's no date/session layout, go straight to the flat file list.
+    if (this.dates.length === 0) {
+      this.sessionDir = this.root;
+      this.files = this.flatFiles;
+      this.errors = readErrors(this.root);
+      this.mode = "list";
+    }
+    if (!stdin.setRawMode) {
+      // Not a TTY (piped stdin / CI). Fall back to a plain file listing.
+      this.printPlainText();
+      process.exit(0);
     }
     stdin.setRawMode(true);
     stdin.resume();
@@ -484,6 +557,26 @@ class TUI {
     }
   }
 
+  // Non-TTY fallback: print the payloads tree as plain text and exit.
+  printPlainText() {
+    const out = [];
+    if (this.dates.length === 0) {
+      out.push(`${this.root} (flat layout)`);
+      for (const f of this.flatFiles) {
+        out.push(`  ${f.file}`);
+      }
+    } else {
+      out.push(this.root);
+      for (const d of this.dates) {
+        out.push(`  ${d.name}/`);
+        for (const s of listSessionDirs(d.path)) {
+          out.push(`    ${s.name}/  (${s.count} payloads${s.hasErrors ? ", has errors" : ""})`);
+        }
+      }
+    }
+    console.log(out.join("\n"));
+  }
+
   quit() {
     if (this.escTimer) {
       clearTimeout(this.escTimer);
@@ -544,10 +637,107 @@ class TUI {
   onKey(d) {
     if (d === "q" || d === "\x03") return this.quit();
 
+    if (this.mode === "dates") return this.onDatesKey(d);
+    if (this.mode === "sessions") return this.onSessionsKey(d);
     if (this.mode === "list") return this.onListKey(d);
     if (this.mode === "detail") return this.onDetailKey(d);
     if (this.mode === "outline") return this.onOutlineKey(d);
     if (this.mode === "errors") return this.onErrorsKey(d);
+  }
+
+  onDatesKey(d) {
+    const items = this.dates;
+    const n = items.length;
+    if (n === 0) {
+      // No date dirs — only legacy flat files. Jump to flat list.
+      if (d === "\r" || d === "\n" || d === "l") this.enterFlatList();
+      return;
+    }
+    if (d === "\u001b[A" || d === "k") this.cursor = Math.max(0, this.cursor - 1);
+    else if (d === "\u001b[B" || d === "j") this.cursor = Math.min(n - 1, this.cursor + 1);
+    else if (d === "\u001b[5~") this.cursor = Math.max(0, this.cursor - 10);
+    else if (d === "\u001b[6~") this.cursor = Math.min(n - 1, this.cursor + 10);
+    else if (d === "g") this.cursor = 0;
+    else if (d === "G") this.cursor = n - 1;
+    else if (d === "\r" || d === "\n" || d === "l" || d === "\u001b[C") {
+      this.enterSessions(items[this.cursor].path);
+      return;
+    } else if (d === "r") {
+      this.reload();
+      return;
+    } else {
+      return;
+    }
+    this.clampListScroll(items);
+    this.render();
+  }
+
+  onSessionsKey(d) {
+    const items = this.sessions;
+    const n = items.length;
+    if (n === 0) {
+      if (d === "\u001b" || d === "\u007f" || d === "h" || d === "\u001b[D") {
+        this.mode = "dates";
+        this.cursor = 0;
+        this.scroll = 0;
+        this.render();
+      }
+      return;
+    }
+    if (d === "\u001b[A" || d === "k") this.cursor = Math.max(0, this.cursor - 1);
+    else if (d === "\u001b[B" || d === "j") this.cursor = Math.min(n - 1, this.cursor + 1);
+    else if (d === "\u001b[5~") this.cursor = Math.max(0, this.cursor - 10);
+    else if (d === "\u001b[6~") this.cursor = Math.min(n - 1, this.cursor + 10);
+    else if (d === "g") this.cursor = 0;
+    else if (d === "G") this.cursor = n - 1;
+    else if (d === "\u001b" || d === "\u007f" || d === "h" || d === "\u001b[D") {
+      // back to dates
+      this.mode = "dates";
+      this.cursor = 0;
+      this.scroll = 0;
+      this.clampListScroll(this.dates);
+      this.render();
+      return;
+    } else if (d === "\r" || d === "\n" || d === "l" || d === "\u001b[C") {
+      this.enterList(items[this.cursor].path);
+      return;
+    } else if (d === "r") {
+      this.reload();
+      return;
+    } else {
+      return;
+    }
+    this.clampListScroll(items);
+    this.render();
+  }
+
+  enterSessions(datePath) {
+    this.currentDatePath = datePath;
+    this.sessions = listSessionDirs(datePath);
+    this.cursor = 0;
+    this.scroll = 0;
+    this.mode = "sessions";
+    this.render();
+  }
+
+  enterList(sessionDir) {
+    this.sessionDir = sessionDir;
+    this.files = listPayloadFiles(sessionDir);
+    this.errors = readErrors(sessionDir);
+    this.cursor = 0;
+    this.scroll = 0;
+    this.mode = "list";
+    this.render();
+  }
+
+  enterFlatList() {
+    this.sessionDir = this.root;
+    this.files = this.flatFiles;
+    this.errors = readErrors(this.root);
+    this.cursor = 0;
+    this.scroll = 0;
+    this.mode = "list";
+    this.render();
   }
 
   onListKey(d) {
@@ -571,6 +761,22 @@ class TUI {
     else if (d === "G") this.cursor = n - 1;
     else if (d === "\r" || d === "\n" || d === "l" || d === "\u001b[C") {
       this.openDetail(this.files[this.cursor].path);
+      return;
+    } else if (d === "\u001b" || d === "\u007f" || d === "h" || d === "\u001b[D") {
+      // back: to sessions if we entered via a session, else to dates
+      if (this.dates.length > 0 && this.sessionDir !== this.root) {
+        this.mode = "sessions";
+        this.cursor = 0;
+        this.scroll = 0;
+        this.clampListScroll(this.sessions);
+        this.render();
+      } else if (this.dates.length > 0) {
+        this.mode = "dates";
+        this.cursor = 0;
+        this.scroll = 0;
+        this.clampListScroll(this.dates);
+        this.render();
+      }
       return;
     } else if (d === "e") {
       if (!this.errors.length) return;
@@ -699,7 +905,7 @@ class TUI {
     } else if (d === "\r" || d === "\n" || d === "l" || d === "\u001b[C") {
       const e = this.errors[this.cursor];
       if (e?.file) {
-        const path = join(this.dir, e.file);
+        const path = join(this.sessionDir || this.root, e.file);
         if (existsSync(path)) {
           this.openDetail(path);
           return;
@@ -715,7 +921,9 @@ class TUI {
 
   // ── rendering ──
   render() {
-    if (this.mode === "list") this.renderList();
+    if (this.mode === "dates") this.renderDates();
+    else if (this.mode === "sessions") this.renderSessions();
+    else if (this.mode === "list") this.renderList();
     else if (this.mode === "detail") this.renderDetail();
     else if (this.mode === "outline") this.renderOutline();
     else if (this.mode === "errors") this.renderErrors();
@@ -739,15 +947,6 @@ class TUI {
 
   renderList() {
     const w = width();
-    const title = ` payload-browser — ${this.dir} `;
-    const header =
-      c("cyan", C.bold + "┌" + "─".repeat(Math.max(0, w - title.length - 2)) + "┐" + C.reset) +
-      "\n" +
-      c("cyan", "│") +
-      c("bold", title) +
-      c("cyan", "│") +
-      C.reset;
-    void header;
     const modelW = Math.max(10, w - 60);
     const headLine =
       ` ${c("gray", "seq  turn  time          ")} ` +
@@ -761,7 +960,6 @@ class TUI {
     for (let i = start; i < end; i++) {
       const f = this.files[i];
       const sel = i === this.cursor;
-      const modelW = Math.max(10, w - 60);
       const seq = String(f.seq ?? "?").padStart(4);
       const time = (f.time ?? f.date ?? "").padEnd(13);
       const model = truncate(f.model ?? "?", modelW).padEnd(modelW);
@@ -777,9 +975,71 @@ class TUI {
       ? c("yellow", `${this.errors.length} errors`)
       : c("gray", "no errors");
     const footer =
-      ` ${c("gray", "↑/↓ move · Enter open · e errors · r reload · q quit")}`.padEnd(w - 30) +
+      ` ${c("gray", "↑/↓ move · Enter open · e errors · Esc/h back · q quit")}`.padEnd(w - 30) +
       ` ${errHint}`;
-    this.writeScreen(` ${c("bold", "payload-browser")}  ${c("gray", this.dir)}\n`, body, footer);
+    const label =
+      this.sessionDir && this.sessionDir !== this.root
+        ? this.sessionDir.split(/[/\\]/).pop() || ""
+        : "flat";
+    this.writeScreen(
+      ` ${c("bold", "payload-browser")}  ${c("green", label)}  ${c("gray", `${this.files.length} files`)}\n`,
+      body,
+      footer,
+    );
+  }
+
+  renderDates() {
+    const w = width();
+    const items = this.dates;
+    const body = [`${c("gray", " date         sessions")}`, c("gray", "─".repeat(w))];
+    this.clampListScroll(items);
+    const h = this.bodyHeight();
+    const start = this.scroll;
+    const end = Math.min(items.length, start + h - 2);
+    for (let i = start; i < end; i++) {
+      const d = items[i];
+      const sel = i === this.cursor;
+      // count sessions under this date
+      let nSessions = 0;
+      try {
+        nSessions = readdirSync(d.path, { withFileTypes: true }).filter((x) =>
+          x.isDirectory(),
+        ).length;
+      } catch {}
+      const row = ` ${c("blue", d.name)}        ${c("gray", String(nSessions).padStart(3))} sessions`;
+      body.push(sel ? c("bg", row) : row);
+    }
+    if (items.length === 0 && this.flatFiles.length > 0) {
+      body.push(`  ${c("yellow", "(legacy flat files — press Enter to browse)")}`);
+    }
+    const footer = ` ${c("gray", "↑/↓ move · Enter open date · r reload · q quit")}`;
+    this.writeScreen(` ${c("bold", "payload-browser")}  ${c("gray", this.root)}\n`, body, footer);
+  }
+
+  renderSessions() {
+    const w = width();
+    const items = this.sessions;
+    const dateLabel = this.currentDatePath ? this.currentDatePath.split(/[/\\]/).pop() : "";
+    const body = [`${c("gray", " session")}`, c("gray", "─".repeat(w))];
+    this.clampListScroll(items);
+    const h = this.bodyHeight();
+    const start = this.scroll;
+    const end = Math.min(items.length, start + h - 2);
+    for (let i = start; i < end; i++) {
+      const s = items[i];
+      const sel = i === this.cursor;
+      const err = s.hasErrors ? c("yellow", " !") : "  ";
+      const row =
+        ` ${c("green", truncate(s.name, 40).padEnd(40))} ` +
+        `${c("gray", String(s.count).padStart(3))} payloads${err}`;
+      body.push(sel ? c("bg", row) : row);
+    }
+    const footer = ` ${c("gray", "↑/↓ move · Enter open session · Esc/h back · q quit")}`;
+    this.writeScreen(
+      ` ${c("bold", "payload-browser")}  ${c("blue", dateLabel)}  ${c("gray", "sessions")}\n`,
+      body,
+      footer,
+    );
   }
 
   renderDetail() {
@@ -842,7 +1102,7 @@ class TUI {
       body.push(i === this.cursor ? c("bg", row) : row);
     }
     const footer = ` ${c("gray", "↑/↓ move · Enter open source payload · Esc/h back · q quit")}`;
-    const header = ` ${c("bold", "payload-browser")}  ${c("yellow", "errors.jsonl")}  ${c("gray", this.dir)}\n`;
+    const header = ` ${c("bold", "payload-browser")}  ${c("yellow", "errors.jsonl")}  ${c("gray", this.sessionDir || this.root)}\n`;
     this.writeScreen(header, body, footer);
   }
 }
