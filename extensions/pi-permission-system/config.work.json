@@ -12,6 +12,6 @@
       "rm -rf *": "ask",
       "sudo *": "ask"
     },
-    "external_directory": "ask"
+    "external_directory": "allow"
   }
 }
