@@ -7,8 +7,11 @@
 // for `--base`. Each profile thus gets its own payload dump.
 //
 // Each request is written immediately (crash-safe) as
-//   payload--YYYY-MM-DD--HHmmss--turn-{n}--{model}.json
-// and, once the assistant response arrives, the SAME file is rewritten with a
+//   payload--YYYY-MM-DD--HHmmss.mmm--seq-NNNN--turn-{n}--{model}.json
+// The millisecond + sequence-counter suffix guarantees uniqueness when
+// multiple requests fire in the same second (parallel/multi-agent bursts);
+// without it, same-second same-model requests would overwrite each other.
+// Once the assistant response arrives, the SAME file is rewritten with a
 // `response` section: token usage (input/output/cache/reasoning/total + cost),
 // stop reason, response model/id, and a short text preview. Requests that get
 // no response (error/abort) remain request-only — nothing is lost.
@@ -207,6 +210,11 @@ function responseSummary(message: any): AnyRecord {
 export default function (pi: any): void {
   let turnIndex = 0;
   let enabled = readEnabled();
+  // Monotonic per-session counter, included in every filename to guarantee
+  // uniqueness even when multiple requests fire in the same second (or even
+  // the same millisecond under parallel/multi-agent bursts). Without it,
+  // same-second same-model requests collide and overwrite each other.
+  let seq = 0;
 
   // Filepaths written for each turn, in send order. Response info is attached
   // to the oldest not-yet-paired file when an assistant message arrives
@@ -228,13 +236,15 @@ export default function (pi: any): void {
     const iso = now.toISOString();
     const datePart = iso.slice(0, 10);
     const timePart = iso.slice(11, 19).replace(/:/g, "");
+    const msPart = iso.slice(20, 23);
     const modelId = ctx.model?.id ?? "unknown";
     const safeModel = sanitizeModel(modelId);
 
     const dir = payloadDir();
     mkdirSync(dir, { recursive: true });
 
-    const filename = `payload--${datePart}--${timePart}--turn-${turnIndex}--${safeModel}.json`;
+    const seqStr = String(seq++).padStart(4, "0");
+    const filename = `payload--${datePart}--${timePart}.${msPart}--seq-${seqStr}--turn-${turnIndex}--${safeModel}.json`;
     const filepath = join(dir, filename);
 
     const payloadJson = JSON.stringify(event.payload, null, 2);
