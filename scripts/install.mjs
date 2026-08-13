@@ -541,6 +541,48 @@ function doPull(t, profiles) {
   );
 }
 
+// ---- ppi-auto wrapper deployment -----------------------------------------
+
+function deployPpiAuto() {
+  const src = join(REPO_DIR, "scripts", "ppi-auto");
+  const destDir = join(homedir(), ".local", "bin");
+  const dest = join(destDir, "ppi-auto");
+
+  // Copy wrapper script.
+  mkdirSync(destDir, { recursive: true });
+  copyFileSync(src, dest);
+  spawnSync("chmod", ["+x", dest]);
+  console.log(`  ppi-auto -> ${dest}`);
+
+  // Ensure global gitignore includes ppi-auto.
+  const excludesFile = (() => {
+    const r = spawnSync("git", ["config", "--global", "core.excludesfile"], {
+      encoding: "utf8",
+    });
+    if (r.status === 0 && r.stdout.trim()) return r.stdout.trim();
+    // Default global gitignore location.
+    return join(homedir(), ".config", "git", "ignore");
+  })();
+
+  const entry = "ppi-auto";
+  mkdirSync(dirname(excludesFile), { recursive: true });
+  const current = existsSync(excludesFile) ? readFileSync(excludesFile, "utf8") : "";
+  if (!current.split("\n").some((l) => l.trim() === entry)) {
+    const nl = current.endsWith("\n") || current === "" ? "" : "\n";
+    writeFileSync(excludesFile, current + nl + entry + "\n");
+    console.log(`  Added '${entry}' to ${excludesFile}`);
+  }
+
+  // Ensure git knows about the excludesfile.
+  const cfgResult = spawnSync("git", ["config", "--global", "core.excludesfile"], {
+    encoding: "utf8",
+  });
+  if (cfgResult.status !== 0 || !cfgResult.stdout.trim()) {
+    spawnSync("git", ["config", "--global", "core.excludesfile", excludesFile]);
+    console.log(`  Set git global core.excludesfile = ${excludesFile}`);
+  }
+}
+
 // ---- main ----------------------------------------------------------------
 
 async function main() {
@@ -626,6 +668,9 @@ async function main() {
       doInstallFiles(t, profiles);
       doInstallSettings(t, profiles);
     }
+    // 6. Deploy ppi-auto wrapper (only if work profile is being installed,
+    //    meaning this machine has both profiles and needs routing).
+    if (names.some((t) => t.name === "work" || t.base)) deployPpiAuto();
     console.log("\nDone. Reload pi (/reload) or start a new session to pick up changes.");
   } else if (cmd === "status") {
     for (const t of names) {
