@@ -8,7 +8,8 @@
 //   node scripts/payload-browser.mjs <profile>    # shortcut: ~/.pi/profiles/<profile>/payloads
 //
 // Keys (LIST):   ↑/↓ move · Enter open · e errors.jsonl · r reload · q quit
-//      (DETAIL): ↑/↓ scroll · 1-5 jump to section · Esc/⌫/h back · q quit
+//      (DETAIL): ↑/↓ scroll · o/Tab outline · 1-9 jump section · Esc/⌫/h back · q quit
+//      (OUTLINE): ↑/↓ move · Enter jump · Esc/⌫/h back · q quit
 //      (ERRORS): ↑/↓ move · Enter open source payload · Esc/⌫/h back · q quit
 //
 // The script only reads files; it never writes or deletes anything.
@@ -196,15 +197,40 @@ function section(title) {
   return `${C.cyan}${C.bold}═══ ${title} ═══${C.reset}`;
 }
 
+function msgPreview(msg) {
+  const content = msg.content;
+  let text = "";
+  if (typeof content === "string") text = content;
+  else if (Array.isArray(content)) {
+    for (const b of content) {
+      if (b?.type === "text" && typeof b.text === "string") {
+        text = b.text;
+        break;
+      }
+      if (b?.type === "tool_use" || b?.type === "functionCall") {
+        text = `tool_use ${b.name ?? b.function?.name ?? ""}`;
+        break;
+      }
+      if (b?.type === "tool_result" || b?.type === "output") {
+        text = "tool_result";
+        break;
+      }
+    }
+  }
+  return truncate(text.replace(/\s+/g, " ").trim(), 60);
+}
+
 function buildDetail(payload) {
   const max = width() - 4;
   const lines = [];
+  const marks = []; // { label, line, depth } — line index into `lines`
   if (payload.__error) {
     lines.push(c("red", `error reading file: ${payload.__error}`));
-    return lines;
+    return { lines, marks };
   }
 
   // METADATA
+  marks.push({ label: "METADATA", line: lines.length, depth: 0 });
   lines.push(section("METADATA"));
   lines.push(...kv("savedAt", payload.savedAt));
   lines.push(...kv("turnIndex", payload.turnIndex));
@@ -215,6 +241,7 @@ function buildDetail(payload) {
 
   // MESSAGES
   const messages = payload.payload?.messages ?? [];
+  marks.push({ label: `MESSAGES (${messages.length})`, line: lines.length, depth: 0 });
   lines.push(section(`MESSAGES (${messages.length})`));
   messages.forEach((msg, i) => {
     const role = msg.role ?? "?";
@@ -226,6 +253,13 @@ function buildDetail(payload) {
           : role === "assistant"
             ? "cyan"
             : "yellow";
+    const pv = msgPreview(msg);
+    marks.push({
+      label: `[${i}] ${role}${pv ? " — " + pv : ""}`,
+      line: lines.length,
+      depth: 1,
+      role,
+    });
     lines.push(`  ${c("bold", `[${i}]`)} ${c(roleColor, role)}`);
     const content = msg.content;
     if (typeof content === "string") {
@@ -291,11 +325,13 @@ function buildDetail(payload) {
 
   // TOOLS
   const tools = payload.payload?.tools ?? [];
+  marks.push({ label: `TOOLS (${tools.length})`, line: lines.length, depth: 0 });
   lines.push(section(`TOOLS (${tools.length})`));
   tools.forEach((tool, i) => {
     const fn = tool.function ?? tool;
     const name = fn.name ?? tool.name ?? "?";
     const desc = fn.description ?? tool.description ?? "";
+    marks.push({ label: `[${i}] ${name}`, line: lines.length, depth: 1 });
     lines.push(
       `  ${c("bold", `[${i}]`)} ${c("green", name)} ${c("gray", truncate(desc, max - 8 - name.length))}`,
     );
@@ -306,6 +342,7 @@ function buildDetail(payload) {
   const known = new Set(["model", "messages", "tools"]);
   const misc = Object.entries(payload.payload ?? {}).filter(([k]) => !known.has(k));
   if (misc.length) {
+    marks.push({ label: "OTHER PAYLOAD FIELDS", line: lines.length, depth: 0 });
     lines.push(section("OTHER PAYLOAD FIELDS"));
     for (const [k, v] of misc) {
       if (typeof v === "object" && v !== null) {
@@ -320,6 +357,7 @@ function buildDetail(payload) {
 
   // RESPONSE
   const r = payload.response;
+  marks.push({ label: "RESPONSE", line: lines.length, depth: 0 });
   lines.push(section("RESPONSE"));
   if (!r) {
     lines.push(`  ${c("gray", "(no response recorded — request-only dump)")}`);
@@ -351,7 +389,7 @@ function buildDetail(payload) {
       lines.push(...wrap(r.textPreview, max - 4, 4));
     }
   }
-  return lines;
+  return { lines, marks };
 }
 
 // ────────────────────────────── TUI ──────────────────────────────
@@ -364,9 +402,11 @@ class TUI {
     this.cursor = 0;
     this.scroll = 0;
     this.detailLines = [];
+    this.marks = []; // outline bookmarks for the open payload
     this.sectionStarts = [];
     this.payloadCache = new Map();
     this.currentPath = null;
+    this.indexCursor = 0;
   }
 
   reload() {
@@ -387,11 +427,68 @@ class TUI {
     stdin.setEncoding("utf8");
     stdout.write(C.reset);
     stdout.on("resize", () => this.render());
-    stdin.on("data", (d) => this.onKey(d));
+    this.buf = "";
+    this.escTimer = null;
+    stdin.on("data", (d) => this.handleData(d));
     this.render();
   }
 
+  // Buffer raw bytes and emit complete keypresses, merging split ANSI escape
+  // sequences (e.g. \u001b[B arriving as \u001b then [B). A lone \u001b with
+  // no following bytes within ~40ms is treated as Esc.
+  handleData(d) {
+    if (this.escTimer) {
+      clearTimeout(this.escTimer);
+      this.escTimer = null;
+    }
+    this.buf += d;
+    this.flushKeys();
+    if (this.buf === "\u001b") {
+      this.escTimer = setTimeout(() => {
+        this.escTimer = null;
+        if (this.buf === "\u001b") {
+          this.onKey("\u001b");
+          this.buf = "";
+        }
+      }, 40);
+    }
+  }
+
+  flushKeys() {
+    while (this.buf.length > 0) {
+      const ch = this.buf[0];
+      if (ch !== "\u001b") {
+        this.onKey(ch);
+        this.buf = this.buf.slice(1);
+        continue;
+      }
+      // ESC ...
+      if (this.buf.length < 2) return; // wait for more / timer
+      const second = this.buf[1];
+      if (second === "[") {
+        const m = this.buf.match(/^\u001b\[[0-9;]*[A-Za-z~/]/);
+        if (!m) return; // incomplete CSI — wait
+        this.onKey(m[0]);
+        this.buf = this.buf.slice(m[0].length);
+        continue;
+      }
+      if (second === "O") {
+        if (this.buf.length < 3) return;
+        this.onKey(this.buf.slice(0, 3));
+        this.buf = this.buf.slice(3);
+        continue;
+      }
+      // ESC + plain char → treat as Esc, then process the char next.
+      this.onKey("\u001b");
+      this.buf = this.buf.slice(1);
+    }
+  }
+
   quit() {
+    if (this.escTimer) {
+      clearTimeout(this.escTimer);
+      this.escTimer = null;
+    }
     stdout.write(C.reset);
     stdout.cursorTo(0, height() - 1);
     stdout.clearLine(0);
@@ -401,10 +498,8 @@ class TUI {
   }
 
   indexSections() {
-    this.sectionStarts = [];
-    this.detailLines.forEach((line, i) => {
-      if (SECTION_RE.test(line)) this.sectionStarts.push(i);
-    });
+    // Section jump targets (1-9) come from depth-0 outline marks.
+    this.sectionStarts = this.marks.filter((m) => m.depth === 0).map((m) => m.line);
   }
 
   getPayload(path) {
@@ -417,7 +512,9 @@ class TUI {
   openDetail(path) {
     const payload = this.getPayload(path);
     this.currentPath = path;
-    this.detailLines = buildDetail(payload);
+    const built = buildDetail(payload);
+    this.detailLines = built.lines;
+    this.marks = built.marks;
     this.indexSections();
     this.scroll = 0;
     this.mode = "detail";
@@ -449,6 +546,7 @@ class TUI {
 
     if (this.mode === "list") return this.onListKey(d);
     if (this.mode === "detail") return this.onDetailKey(d);
+    if (this.mode === "outline") return this.onOutlineKey(d);
     if (this.mode === "errors") return this.onErrorsKey(d);
   }
 
@@ -509,6 +607,13 @@ class TUI {
       this.clampListScroll(this.files);
       this.render();
       return;
+    } else if (d === "o" || d === "\t" || d === "O") {
+      // open outline / jump picker
+      this.mode = "outline";
+      this.indexCursor = 0;
+      this.scroll = 0;
+      this.render();
+      return;
     } else if (d >= "1" && d <= "9") {
       const idx = Number(d) - 1;
       if (idx < this.sectionStarts.length) {
@@ -519,6 +624,51 @@ class TUI {
       return;
     }
     this.clampDetailScroll();
+    this.render();
+  }
+
+  onOutlineKey(d) {
+    const n = this.marks.length;
+    if (n === 0) {
+      if (d === "\u001b" || d === "\u007f" || d === "h" || d === "\t" || d === "o") {
+        this.mode = "detail";
+        this.render();
+      }
+      return;
+    }
+    if (d === "\u001b[A" || d === "k") this.indexCursor = Math.max(0, this.indexCursor - 1);
+    else if (d === "\u001b[B" || d === "j")
+      this.indexCursor = Math.min(n - 1, this.indexCursor + 1);
+    else if (d === "\u001b[5~") this.indexCursor = Math.max(0, this.indexCursor - 10);
+    else if (d === "\u001b[6~") this.indexCursor = Math.min(n - 1, this.indexCursor + 10);
+    else if (d === "g") this.indexCursor = 0;
+    else if (d === "G") this.indexCursor = n - 1;
+    else if (d === "\u001b" || d === "\u007f" || d === "h" || d === "\u001b[D") {
+      // back to detail, keep scroll
+      this.mode = "detail";
+      this.render();
+      return;
+    } else if (
+      d === "\r" ||
+      d === "\n" ||
+      d === "l" ||
+      d === "\u001b[C" ||
+      d === "\t" ||
+      d === "o"
+    ) {
+      // jump to selected mark
+      const m = this.marks[this.indexCursor];
+      if (m) {
+        this.scroll = m.line;
+        this.clampDetailScroll();
+      }
+      this.mode = "detail";
+      this.render();
+      return;
+    } else {
+      return;
+    }
+    this.clampListScroll(this.marks);
     this.render();
   }
 
@@ -567,6 +717,7 @@ class TUI {
   render() {
     if (this.mode === "list") this.renderList();
     else if (this.mode === "detail") this.renderDetail();
+    else if (this.mode === "outline") this.renderOutline();
     else if (this.mode === "errors") this.renderErrors();
   }
 
@@ -637,8 +788,33 @@ class TUI {
     const visible = this.detailLines.slice(this.scroll, this.scroll + h);
     const name = this.currentPath ? this.currentPath.split(/[/\\]/).pop() : "";
     const header = ` ${c("bold", "payload-browser")}  ${c("green", name)}  ${c("gray", `(scroll ${this.scroll + 1}/${this.detailLines.length})`)}\n`;
-    const footer = ` ${c("gray", "↑/↓ scroll · 1-5 jump section · Esc/h back · q quit")}`;
+    const footer = ` ${c("gray", "↑/↓ scroll · o/Tab outline · 1-9 jump section · Esc/h back · q quit")}`;
     this.writeScreen(header, visible, footer);
+  }
+
+  renderOutline() {
+    const w = width();
+    const body = [`${c("gray", " outline — jump to section")}`, c("gray", "─".repeat(w))];
+    this.clampListScroll(this.marks);
+    const h = this.bodyHeight();
+    const start = this.scroll;
+    const end = Math.min(this.marks.length, start + h - 2);
+    for (let i = start; i < end; i++) {
+      const m = this.marks[i];
+      const sel = i === this.indexCursor;
+      const indent = "  ".repeat(m.depth);
+      let label = m.label;
+      if (m.depth === 0) label = c("cyan", label);
+      else if (m.role === "system") label = c("magenta", label);
+      else if (m.role === "user") label = c("green", label);
+      else if (m.role === "assistant") label = c("cyan", label);
+      const row = ` ${indent}${label}`;
+      body.push(sel ? c("bg", row) : row);
+    }
+    const name = this.currentPath ? this.currentPath.split(/[/\\]/).pop() : "";
+    const footer = ` ${c("gray", "↑/↓ move · Enter jump · Esc/h back · q quit")}`;
+    const header = ` ${c("bold", "payload-browser")}  ${c("green", name)}  ${c("gray", "outline")}\n`;
+    this.writeScreen(header, body, footer);
   }
 
   renderErrors() {
