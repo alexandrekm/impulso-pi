@@ -24,6 +24,16 @@
     "npm:pi-footer": { "tags": ["core"] },
     "npm:@juicesharp/rpiv-ask-user-question": { "tags": ["core"] },
 
+    // Notify the active pi config dir at startup (which profile loaded).
+    "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
+
+    // Vision handoff for text-only models (https://pi.dev/packages/pi-vision-handoff).
+    // Transparent swap: describes images via a chosen vision model and swaps
+    // the image block for text before the request leaves — no tool, no extra
+    // turn. Pick a describer once with `/vision-handoff`; auto-applies to all
+    // non-vision models. Chosen over @getpipher/vision for less context + bloat.
+    "npm:pi-vision-handoff": { "tags": ["core"] },
+
     // Permission system: the extension is core, but its config is
     // per-profile (work vs personal). Both variants map to the config path
     // the extension reads, and no profile has both tags, so they never
