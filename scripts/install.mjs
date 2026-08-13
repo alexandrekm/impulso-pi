@@ -350,19 +350,31 @@ async function reviewDepsSelect(names, profiles, yes) {
       }
     });
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const ans = await rl.question(`Install which? [all/<numbers>/none] (default: all): `);
-    rl.close();
-    const a = ans.trim().toLowerCase();
-    if (a === "" || a === "all") {
+    // Y/N to install everything; answer N to go through items one by one.
+    const allAns = await rl.question(`Install all of the above? [Y/n]: `);
+    const a = allAns.trim().toLowerCase();
+    if (a === "" || a === "y" || a === "yes") {
       selected = items.map((it) => it.key);
-    } else if (a === "none") {
-      selected = [];
+      rl.close();
     } else {
-      const idxs = a
-        .split(/[,\s]+/)
-        .map((s) => parseInt(s, 10) - 1)
-        .filter((n) => !Number.isNaN(n) && n >= 0 && n < items.length);
-      selected = idxs.map((i) => items[i].key);
+      selected = [];
+      console.log("==> Selecting one by one (Enter = yes, n = skip)");
+      for (const it of items) {
+        let detail;
+        if (it.state === "missing") {
+          const tag = it.kind === "ppi" ? "  [required]" : "";
+          detail = `not installed${tag}`;
+        } else {
+          detail = `update (${it.installed} -> ${it.latest})`;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const one = await rl.question(`Install ${it.label} (${detail})? [Y/n]: `);
+        const oa = one.trim().toLowerCase();
+        if (oa === "" || oa === "y" || oa === "yes") {
+          selected.push(it.key);
+        }
+      }
+      rl.close();
     }
   }
 
