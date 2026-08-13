@@ -1,10 +1,18 @@
 // Payload Exporter Extension
 //
-// Saves every LLM provider request payload to `<configDir>/payloads/` so you
-// can inspect how pi constructs system prompts, messages, tool definitions,
-// etc. `<configDir>` is the active pi config directory — with pi-profiles
-// (ppi) that's the per-profile dir (~/.pi/profiles/<name>/), or ~/.pi/agent
-// for `--base`. Each profile thus gets its own payload dump.
+// Saves every LLM provider request payload under `<configDir>/payloads/` so
+// you can inspect how pi constructs system prompts, messages, tool
+// definitions, etc. `<configDir>` is the active pi config directory — with
+// pi-profiles (ppi) that's the per-profile dir (~/.pi/profiles/<name>/), or
+// ~/.pi/agent for `--base`. Each profile thus gets its own payload dump.
+//
+// Files are grouped per session:
+//   <configDir>/payloads/<YYYY-MM-DD>/<sessionId8>[-<slug>]/payload--....json
+// where <slug> is a short label derived from the session name (or cwd
+// basename) so the folder is recognizable at a glance. errors.jsonl is
+// written per session into the same folder. The session id is read from
+// ctx.sessionManager.getSessionId(); when unavailable (older pi builds) the
+// flat payloads/ dir is used as a fallback.
 //
 // Each request is written immediately (crash-safe) as
 //   payload--YYYY-MM-DD--HHmmss.mmm--seq-NNNN--turn-{n}--{model}.json
@@ -20,10 +28,10 @@
 // of regexes for error signals — tool results with isError:true, assistant
 // stopReason "error", error messages, Python/JS error prefixes, tracebacks,
 // bash failures — and any hits are appended as one JSON line per request to
-//   <configDir>/payloads/errors.jsonl
-// so you can later investigate which tool calls failed. Each line records the
-// matching pattern, a context snippet, and (for tool results) the enclosing
-// toolName + toolCallId.
+//   <configDir>/payloads/<YYYY-MM-DD>/<sessionId8>[-<slug>]/errors.jsonl
+// (per session) so you can later investigate which tool calls failed. Each
+// line records the matching pattern, a context snippet, and (for tool
+// results) the enclosing toolName + toolCallId.
 //
 // Use `/payload-exporter on|off|toggle|status` to control exporting.
 //
@@ -56,8 +64,30 @@ function statePath(): string {
   return join(payloadDir(), STATE_FILENAME);
 }
 
-function errorsPath(): string {
-  return join(payloadDir(), ERRORS_FILENAME);
+// Session-scoped dir: payloads/<YYYY-MM-DD>/<sessionId>[-<slug>]/
+// `slug` is a short filesystem-safe label derived from the session name (if
+// set) or the cwd basename, to make the folder recognizable at a glance.
+// Returns undefined when no session id is available (caller falls back to the
+// flat payloadDir()).
+function slugify(s: string): string {
+  return (
+    s
+      .replace(/[^A-Za-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 24)
+      .toLowerCase() || "session"
+  );
+}
+
+function sessionSubdir(
+  sessionId: string | undefined,
+  label: string | undefined,
+): string | undefined {
+  if (!sessionId) return undefined;
+  const date = new Date().toISOString().slice(0, 10);
+  const slug = label ? slugify(label) : "";
+  const name = slug ? `${sessionId.slice(0, 8)}--${slug}` : sessionId.slice(0, 12);
+  return join(date, name);
 }
 
 /** Read persisted enabled flag. Missing/unreadable file => false (default off). */
@@ -151,11 +181,11 @@ function scanErrors(s: string): ErrorMatch[] {
   return matches;
 }
 
-/** Append one JSON line per request with error hits to errors.jsonl. */
-function appendErrorLog(entry: AnyRecord): void {
+/** Append one JSON line per request with error hits to that session's errors.jsonl. */
+function appendErrorLog(dir: string, entry: AnyRecord): void {
   try {
-    mkdirSync(payloadDir(), { recursive: true });
-    appendFileSync(errorsPath(), JSON.stringify(entry) + "\n", "utf8");
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(join(dir, ERRORS_FILENAME), JSON.stringify(entry) + "\n", "utf8");
   } catch {
     // Non-fatal: payload files are the primary record.
   }
@@ -220,9 +250,23 @@ export default function (pi: any): void {
   // to the oldest not-yet-paired file when an assistant message arrives
   // (FIFO matches the actual request/response order).
   const pending: Map<number, string[]> = new Map();
+  // Per-session output dir (payloads/<date>/<sessionId>[-slug]/). Resolved on
+  // session_start and reused for every request in the session. Falls back to
+  // the flat payloads/ dir when no session id is available.
+  let sessionDir: string = payloadDir();
+  let sessionId: string | undefined;
 
   pi.on("session_start", (_event: any, ctx: any) => {
     updateStatus(ctx.ui, enabled);
+    try {
+      sessionId = ctx.sessionManager?.getSessionId?.();
+      const name = ctx.sessionManager?.getSessionName?.();
+      const label = name || (ctx.cwd ? String(ctx.cwd).split(/[/\\]/).pop() : undefined);
+      const sub = sessionSubdir(sessionId, label);
+      sessionDir = sub ? join(payloadDir(), sub) : payloadDir();
+    } catch {
+      sessionDir = payloadDir();
+    }
   });
 
   pi.on("turn_start", (event: any) => {
@@ -240,7 +284,7 @@ export default function (pi: any): void {
     const modelId = ctx.model?.id ?? "unknown";
     const safeModel = sanitizeModel(modelId);
 
-    const dir = payloadDir();
+    const dir = sessionDir;
     mkdirSync(dir, { recursive: true });
 
     const seqStr = String(seq++).padStart(4, "0");
@@ -267,7 +311,7 @@ export default function (pi: any): void {
     // with isError:true carried in the message history).
     const reqMatches = scanErrors(payloadJson);
     if (reqMatches.length > 0) {
-      appendErrorLog({
+      appendErrorLog(dir, {
         at: iso,
         source: "request",
         turnIndex,
@@ -307,7 +351,7 @@ export default function (pi: any): void {
     // errorMessage, error text in the preview, etc.).
     const resMatches = scanErrors(JSON.stringify(summary, null, 2));
     if (resMatches.length > 0) {
-      appendErrorLog({
+      appendErrorLog(sessionDir, {
         at: new Date().toISOString(),
         source: "response",
         turnIndex,
@@ -341,7 +385,7 @@ export default function (pi: any): void {
       updateStatus(ctx.ui, enabled);
       ctx.ui.notify(
         action === "status"
-          ? `Payload exporting is ${enabled ? "on" : "off"} (${payloadDir()}).`
+          ? `Payload exporting is ${enabled ? "on" : "off"} (${sessionDir}).`
           : `Payload exporting is ${enabled ? "on" : "off"}.`,
         "info",
       );

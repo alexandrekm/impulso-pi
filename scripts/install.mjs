@@ -57,6 +57,8 @@ const PROFILES_DIR = join(PI_ROOT, "profiles");
 const AGENT_DIR = process.env.PI_AGENT_DIR || join(PI_ROOT, "agent");
 
 const MANIFEST_NAME = ".impulso-pi-manifest.tsv";
+const STATE_FILE = ".exporter-state.json";
+const ERRORS_FILE = "errors.jsonl";
 const COMMANDS = new Set(["install", "status", "pull"]);
 
 // ---- hashing -------------------------------------------------------------
@@ -423,6 +425,35 @@ function executeNpmInstalls(selected, items, names) {
 
 // ---- settings sync ---------------------------------------------------------
 
+// ---- legacy payload migration -------------------------------------------
+
+// The payload-exporter now groups files under payloads/<date>/<session>/.
+// Remove legacy flat payload--*.json files and the root errors.jsonl that
+// were written directly under payloads/ by older versions, so the top level
+// is clean. Only deletes files matching the exact legacy patterns; leaves
+// date dirs, the state file, and everything else untouched.
+function migrateLegacyPayloads(t) {
+  const dir = join(t.dir, "payloads");
+  if (!existsSync(dir)) return;
+  let removed = 0;
+  let entries = [];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    if (e.isDirectory()) continue; // keep date/session subdirs
+    if (e.name === STATE_FILE || e.name === MANIFEST_NAME) continue;
+    if (e.name === ERRORS_FILE || /^payload--.*\.json$/.test(e.name)) {
+      rmSync(join(dir, e.name), { force: true });
+      removed++;
+    }
+  }
+  if (removed > 0)
+    console.log(`  [migrated]    removed ${removed} legacy flat payload file(s) under payloads/`);
+}
+
 // Merge the top-level "settings" object from profiles.jsonc into a target's
 // settings.json. Only declared keys are written; everything else (including
 // the packages[] managed by pi install) is preserved. Keys removed from
@@ -553,7 +584,21 @@ function doPull(t, profiles) {
   );
 }
 
-// ---- ppi-auto wrapper deployment -----------------------------------------
+// ---- wrapper deployment (ppi-auto + payload-browser) --------------------
+
+function deployPayloadBrowser() {
+  const src = join(REPO_DIR, "scripts", "impulso-payload-browser");
+  const destDir = join(homedir(), ".local", "bin");
+  const dest = join(destDir, "impulso-payload-browser");
+  if (!existsSync(src)) return; // not in this checkout — skip silently
+  mkdirSync(destDir, { recursive: true });
+  // Bake the repo dir into the wrapper so it can find payload-browser.mjs.
+  const tmpl = readFileSync(src, "utf8");
+  const rendered = tmpl.replace("__IMPULSO_PI_REPO_DIR__", REPO_DIR);
+  writeFileSync(dest, rendered);
+  spawnSync("chmod", ["+x", dest]);
+  console.log(`  impulso-payload-browser -> ${dest}`);
+}
 
 function deployPpiAuto() {
   const src = join(REPO_DIR, "scripts", "ppi-auto");
@@ -679,10 +724,14 @@ async function main() {
       console.log(`==> install -> ${t.base ? "base" : t.name} (${t.dir})`);
       doInstallFiles(t, profiles);
       doInstallSettings(t, profiles);
+      migrateLegacyPayloads(t);
     }
     // 6. Deploy ppi-auto wrapper (only if work profile is being installed,
     //    meaning this machine has both profiles and needs routing).
     if (names.some((t) => t.name === "work" || t.base)) deployPpiAuto();
+    // The payload-browser wrapper is a core convenience tool — deploy it
+    // on every install run (any target), as long as the source exists.
+    deployPayloadBrowser();
     console.log("\nDone. Reload pi (/reload) or start a new session to pick up changes.");
   } else if (cmd === "status") {
     for (const t of names) {
