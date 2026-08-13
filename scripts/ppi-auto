@@ -1,0 +1,13 @@
+#!/bin/sh
+# ppi-auto — wrapper for Orca that picks work/personal profile based on cwd.
+# Installed by impulso-pi install.sh to ~/.local/bin/ppi-auto.
+# Default: work. Exception paths route to personal.
+
+case "$PWD" in
+  "$HOME"/code/agents/*|"$HOME"/code/personal/*)
+    exec ppi use personal -- "$@"
+    ;;
+  *)
+    exec ppi use work -- "$@"
+    ;;
+esac
