@@ -7,6 +7,41 @@ scripts. Layered on top of [pi-profiles](https://github.com/chaychoong/pi-profil
 **Full design doc:** [`investigation/PROFILES.md`](investigation/PROFILES.md).
 This file is the short version for agents working in this repo.
 
+## Reference sources (`reference-impl/`)
+
+The source code of **pi** and **omp** (oh-my-pi) is checked out locally under
+[`reference-impl/`](reference-impl/) (gitignored), inside this repo so
+everything stays in one place:
+
+- **`reference-impl/pi/`** — clone of the [pi](https://pi.dev) agent harness
+  source (`@earendil-works/pi-coding-agent` and friends, under
+  `pi/packages/`). Read-only reference: consult it to understand pi's extension
+  API, tool system, TUI, etc. when developing extensions or skills.
+- **`reference-impl/oh-my-pi/`** (a.k.a. **omp**) — a fork of pi
+  (`@oh-my-pi/pi-coding-agent`, see https://omp.sh) by can1357. Substantially
+  extended/different codebase: Rust core in `oh-my-pi/crates/`, TypeScript
+  packages in `oh-my-pi/packages/`, docs in `oh-my-pi/docs/`.
+
+Both are **read-only references** — don't commit changes there as part of
+normal work here; treat them purely as a source to search, read, and adapt
+from.
+
+### If `reference-impl/` is missing
+
+The `reference-impl/` directory is gitignored, so it won't be present on a
+fresh clone. If it (or one of its subdirs) is missing when you need to consult
+the source, **ask the user whether they want you to clone it** before doing
+so, then:
+
+```bash
+mkdir -p reference-impl
+git clone https://github.com/earendil-works/pi-coding-agent.git reference-impl/pi
+git clone https://github.com/can1357/oh-my-pi.git reference-impl/oh-my-pi
+```
+
+(Confirm the correct upstream URLs with the user before cloning — these are
+the canonical repos but may have moved.)
+
 ## How to install / sync resources
 
 Resources (extensions, skills, npm packages) are declared in
