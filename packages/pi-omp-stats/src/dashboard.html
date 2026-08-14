@@ -592,6 +592,183 @@
           width: auto;
         }
       }
+
+      /* ---------------- Payloads visualizer ---------------- */
+      .pl-crumbs {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        padding: 2px 0 12px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .pl-crumbs a {
+        color: var(--accent);
+        cursor: pointer;
+      }
+      .pl-crumbs .sep {
+        color: var(--dim);
+      }
+      .pl-crumbs .cur {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .pl-list {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--mantle);
+      }
+      .pl-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+      }
+      .pl-row:last-child {
+        border-bottom: none;
+      }
+      .pl-row:hover {
+        background: var(--accent-soft);
+      }
+      .pl-row .primary {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .pl-row .secondary {
+        color: var(--muted);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        flex: 0 0 auto;
+      }
+      .pl-row .badge {
+        font-size: 11px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        background: var(--surface0);
+        color: var(--subtext0);
+      }
+      .pl-row .badge.err {
+        background: rgba(243, 139, 168, 0.18);
+        color: var(--red);
+      }
+      .pl-row .badge.ok {
+        background: rgba(166, 227, 161, 0.16);
+        color: var(--green);
+      }
+      .pl-empty {
+        padding: 28px;
+        text-align: center;
+        color: var(--muted);
+      }
+      /* detail */
+      .pl-detail {
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .pl-section {
+        margin: 0 0 18px;
+      }
+      .pl-section > h3 {
+        margin: 0 0 8px;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--accent);
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 4px;
+      }
+      .pl-kv {
+        display: grid;
+        grid-template-columns: 130px 1fr;
+        gap: 2px 12px;
+        color: var(--subtext0);
+      }
+      .pl-kv .k {
+        color: var(--dim);
+      }
+      .pl-kv .v.str {
+        color: var(--yellow);
+      }
+      .pl-kv .v.num {
+        color: var(--blue);
+      }
+      .pl-kv .v.bool {
+        color: var(--mauve);
+      }
+      .pl-msg {
+        border-left: 3px solid var(--surface1);
+        padding: 4px 0 4px 12px;
+        margin: 0 0 10px;
+      }
+      .pl-msg.system {
+        border-color: var(--mauve);
+      }
+      .pl-msg.user {
+        border-color: var(--green);
+      }
+      .pl-msg.assistant {
+        border-color: var(--accent);
+      }
+      .pl-msg .role {
+        font-weight: 600;
+        text-transform: capitalize;
+      }
+      .pl-msg.system .role {
+        color: var(--mauve);
+      }
+      .pl-msg.user .role {
+        color: var(--green);
+      }
+      .pl-msg.assistant .role {
+        color: var(--accent);
+      }
+      .pl-block {
+        margin: 6px 0 6px 14px;
+      }
+      .pl-block .btype {
+        color: var(--blue);
+        font-size: 12px;
+      }
+      .pl-block .bid {
+        color: var(--dim);
+        font-size: 11px;
+        margin-left: 6px;
+      }
+      .pl-pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        background: var(--crust);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin: 4px 0;
+        color: var(--subtext0);
+        max-height: 420px;
+        overflow: auto;
+      }
+      .pl-pre.inline {
+        margin-left: 14px;
+      }
+      .pl-tool {
+        margin: 6px 0 6px 14px;
+      }
+      .pl-tool .tname {
+        color: var(--green);
+        font-weight: 600;
+      }
+      .pl-tool .tdesc {
+        color: var(--muted);
+        font-size: 12px;
+      }
     </style>
   </head>
   <body>
@@ -734,6 +911,20 @@
               /></svg
             >Behavior
           </button>
+          <button data-tab="payloads">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 4h16v4H4z" />
+              <path d="M4 10h16v10H4z" />
+              <path d="M8 14h8" /></svg
+            >Payloads
+          </button>
         </nav>
         <div class="sidebar-footer">
           local-only · no telemetry<br />source: <code>~/.pi/agent/sessions</code>
@@ -837,6 +1028,7 @@
         providers: "Providers",
         requests: "Recent Requests",
         errors: "Errors",
+        payloads: "Payloads",
       };
 
       function fmtNum(n) {
@@ -1453,6 +1645,8 @@
           } else if (tab === "errors") {
             errorsList = await api("/api/stats/errors?range=" + range() + "&limit=100");
             renderRecent(errorsList, true);
+          } else if (tab === "payloads") {
+            await loadPayloads();
           }
         } catch (e) {
           main.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
@@ -1603,6 +1797,437 @@
         );
       }
 
+      /* ---------------- Payloads visualizer ---------------- */
+      // Mirrors the old payload-browser TUI: dates -> sessions -> file list ->
+      // formatted detail, with an errors.jsonl browser and jump-to-source.
+      const pl = {
+        view: "dates", // dates | sessions | list | detail | errors
+        dates: [],
+        flat: 0,
+        sessions: [],
+        files: [],
+        errors: [],
+        curDate: "",
+        curSession: { name: "", rel: "" },
+        curFile: { file: "", rel: "" },
+        detail: null,
+        payloadsRoot: "",
+      };
+
+      function esc(s) {
+        return String(s ?? "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+      function fmtBytes(n) {
+        n = n || 0;
+        if (n < 1024) return n + "B";
+        if (n < 1024 * 1024) return (n / 1024).toFixed(1) + "KB";
+        return (n / 1024 / 1024).toFixed(1) + "MB";
+      }
+      function prettyJson(v) {
+        try {
+          return JSON.stringify(v, null, 2);
+        } catch {
+          return String(v);
+        }
+      }
+      function shorten(s, n) {
+        s = String(s ?? "")
+          .replace(/\s+/g, " ")
+          .trim();
+        return s.length > n ? s.slice(0, n - 1) + "…" : s;
+      }
+
+      function plCrumb(parts) {
+        // parts: [{label, go?}] — last is current (no go).
+        return parts
+          .map((p, i) => {
+            const last = i === parts.length - 1;
+            const sep = i > 0 ? `<span class="sep">›</span>` : "";
+            if (last || !p.go) return `${sep}<span class="cur">${esc(p.label)}</span>`;
+            return `${sep}<a class="pl-go" data-go="${p.go}">${esc(p.label)}</a>`;
+          })
+          .join(" ");
+      }
+
+      async function loadPayloads() {
+        const probe = await api("/api/payloads");
+        pl.payloadsRoot = probe.root || "";
+        if (!probe.exists) {
+          main.innerHTML =
+            `<div class="pl-empty">No payloads directory found.` +
+            (pl.payloadsRoot ? `<br><code>${esc(pl.payloadsRoot)}</code>` : "") +
+            `<br><span class="empty">Enable the payload-exporter extension in pi with <code>/payload-exporter on</code>.</span></div>`;
+          return;
+        }
+        await plLoadDates();
+      }
+
+      async function plLoadDates() {
+        pl.view = "dates";
+        const d = await api("/api/payloads/dates");
+        pl.dates = d.dates || [];
+        pl.flat = d.flat || 0;
+        const crumbs = plCrumb([{ label: "Payloads", go: "dates" }, { label: "Dates" }]);
+        if (pl.dates.length === 0 && pl.flat === 0) {
+          main.innerHTML =
+            crumbs +
+            `<div class="pl-empty">No payload dumps yet. Toggle the exporter on with <code>/payload-exporter on</code> in pi, then Sync.</div>`;
+          return;
+        }
+        const rows = pl.dates
+          .map((dt) => {
+            return `<div class="pl-row" data-go="date" data-date="${esc(dt.name)}">
+              <span class="primary"><span style="color:var(--accent">${esc(dt.name)}</span></span>
+              <span class="secondary">${dt.sessions} session${dt.sessions === 1 ? "" : "s"}</span>
+            </div>`;
+          })
+          .join("");
+        const flatRow = pl.flat
+          ? `<div class="pl-row" data-go="flat">
+              <span class="primary"><span style="color:var(--yellow)">legacy flat files</span></span>
+              <span class="secondary">${pl.flat} file${pl.flat === 1 ? "" : "s"}</span>
+            </div>`
+          : "";
+        main.innerHTML =
+          crumbs +
+          `<div class="pl-list">${rows}${flatRow}</div>` +
+          `<div class="pl-empty" style="border:none;padding:14px 2px;color:var(--dim);font-size:12px">source: <code>${esc(d.root)}</code></div>`;
+        plWireRows();
+      }
+
+      async function plLoadSessions(date) {
+        pl.view = "sessions";
+        pl.curDate = date;
+        const d = await api("/api/payloads/sessions?date=" + encodeURIComponent(date));
+        pl.sessions = d.sessions || [];
+        const crumbs = plCrumb([
+          { label: "Payloads", go: "dates" },
+          { label: date, go: "date:" + date },
+          { label: "Sessions" },
+        ]);
+        if (pl.sessions.length === 0) {
+          main.innerHTML = crumbs + `<div class="pl-empty">No sessions under ${esc(date)}.</div>`;
+          return;
+        }
+        const rows = pl.sessions
+          .map((s) => {
+            const err = s.hasErrors ? `<span class="badge err">errors</span>` : "";
+            return `<div class="pl-row" data-go="session" data-rel="${esc(s.rel)}">
+              <span class="primary"><span style="color:var(--green)">${esc(s.name)}</span></span>
+              <span class="secondary">${s.count} payload${s.count === 1 ? "" : "s"}</span>
+              ${err}
+            </div>`;
+          })
+          .join("");
+        main.innerHTML = crumbs + `<div class="pl-list">${rows}</div>`;
+        plWireRows();
+      }
+
+      async function plLoadList(dir, label) {
+        pl.view = "list";
+        pl.curSession = { name: label, rel: dir };
+        const d = await api("/api/payloads/files?dir=" + encodeURIComponent(dir));
+        pl.files = d.files || [];
+        pl.errors = d.errors || [];
+        const crumbs = plCrumb([
+          { label: "Payloads", go: "dates" },
+          ...(dir && dir.includes("/")
+            ? [{ label: dir.split("/")[0], go: "date:" + dir.split("/")[0] }]
+            : []),
+          { label: label || "flat" },
+        ]);
+        const errBtn = pl.errors.length
+          ? `<button class="btn" id="pl-errs-btn" style="margin-left:auto">${pl.errors.length} errors</button>`
+          : "";
+        let body = `<div class="pl-crumbs">${crumbs}${errBtn}</div>`;
+        if (pl.files.length === 0) {
+          body += `<div class="pl-empty">No payload files in this session.</div>`;
+        } else {
+          body += `<div class="pl-list">${pl.files
+            .map((f) => {
+              const resp = f.hasResp
+                ? `<span class="badge ok">resp</span>`
+                : `<span class="badge">no resp</span>`;
+              const time = f.time || f.date || "";
+              return `<div class="pl-row" data-go="file" data-rel="${esc(f.rel)}">
+                <span class="secondary" style="width:84px">t${f.turn ?? "?"} · ${esc(f.seq ?? "?")}</span>
+                <span class="secondary" style="width:120px;color:var(--blue)">${esc(time)}</span>
+                <span class="primary"><span style="color:var(--green)">${esc(f.model || "?")}</span></span>
+                <span class="secondary">${fmtBytes(f.size)}</span>
+                ${resp}
+              </div>`;
+            })
+            .join("")}</div>`;
+        }
+        main.innerHTML = body;
+        plWireRows();
+        const eb = document.getElementById("pl-errs-btn");
+        if (eb)
+          eb.addEventListener("click", () => plLoadErrors(pl.curSession.rel, pl.curSession.name));
+      }
+
+      async function plLoadErrors(dir, label) {
+        pl.view = "errors";
+        const d = await api("/api/payloads/errors?dir=" + encodeURIComponent(dir));
+        pl.errors = d.errors || [];
+        const crumbs = plCrumb([
+          { label: "Payloads", go: "dates" },
+          ...(dir && dir.includes("/")
+            ? [{ label: dir.split("/")[0], go: "date:" + dir.split("/")[0] }]
+            : []),
+          { label: label || "flat", go: "session:" + dir + ":" + (label || "flat") },
+          { label: "errors.jsonl" },
+        ]);
+        if (pl.errors.length === 0) {
+          main.innerHTML = crumbs + `<div class="pl-empty">No error entries.</div>`;
+          return;
+        }
+        const rows = pl.errors
+          .map((e) => {
+            const first = e.matches && e.matches[0];
+            const labelTxt = first
+              ? `${esc(first.pattern)}${first.toolName ? " · " + esc(first.toolName) : ""}`
+              : e.raw
+                ? "(unparseable)"
+                : "?";
+            const file = e.file || "";
+            return (
+              `<div class="pl-row" data-go="errfile" data-file="${esc(file)}">
+              <span class="secondary" style="width:40px;color:var(--dim)">${esc(e.i)}</span>
+              <span class="secondary" style="width:80px;color:var(--mauve)">${esc(e.source || "?")}</span>
+              <span class="primary"><span style="color:var(--yellow)">${labelTxt}</span>` +
+              (first
+                ? `<br><span style="color:var(--dim);font-size:11px">${esc(shorten(first.snippet, 140))}</span>`
+                : "") +
+              `</span>
+              <span class="secondary">${esc(file)}</span>
+            </div>`
+            );
+          })
+          .join("");
+        main.innerHTML = crumbs + `<div class="pl-list">${rows}</div>`;
+        plWireRows();
+      }
+
+      async function plLoadDetail(rel) {
+        pl.view = "detail";
+        pl.curFile = { file: rel.split("/").pop(), rel };
+        const r = await api("/api/payloads/file?path=" + encodeURIComponent(rel));
+        pl.detail = r.data;
+        const sessionRel = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+        const sessionLabel = sessionRel ? sessionRel.split("/").pop() : "flat";
+        const crumbs = plCrumb([
+          { label: "Payloads", go: "dates" },
+          ...(sessionRel && sessionRel.includes("/")
+            ? [{ label: sessionRel.split("/")[0], go: "date:" + sessionRel.split("/")[0] }]
+            : []),
+          { label: sessionLabel, go: "session:" + sessionRel + ":" + sessionLabel },
+          { label: pl.curFile.file },
+        ]);
+        main.innerHTML = `<div class="pl-crumbs">${crumbs}</div><div class="pl-detail">${plRenderDetail(pl.detail)}</div>`;
+      }
+
+      function plRenderDetail(payload) {
+        if (!payload || payload.__error) {
+          return `<div class="pl-empty">error reading file: ${esc(payload && payload.__error)}</div>`;
+        }
+        const p = payload.payload || {};
+        const messages = p.messages || [];
+        const tools = p.tools || [];
+        let html = "";
+
+        // METADATA
+        html += `<div class="pl-section"><h3>Metadata</h3><div class="pl-kv">`;
+        html += plKv("savedAt", payload.savedAt);
+        html += plKv("turnIndex", payload.turnIndex);
+        html += plKv("model", payload.model && payload.model.id);
+        html += plKv("provider", payload.model && payload.model.provider);
+        html += plKv("has response", payload.response ? "yes" : "no");
+        html += `</div></div>`;
+
+        // MESSAGES
+        html += `<div class="pl-section"><h3>Messages (${messages.length})</h3>`;
+        if (messages.length === 0) html += `<div class="empty">none</div>`;
+        messages.forEach((msg, i) => {
+          html += plRenderMsg(i, msg);
+        });
+        html += `</div>`;
+
+        // TOOLS
+        html += `<div class="pl-section"><h3>Tools (${tools.length})</h3>`;
+        if (tools.length === 0) html += `<div class="empty">none</div>`;
+        tools.forEach((t, i) => {
+          const fn = t.function || t;
+          const name = fn.name || t.name || "?";
+          const desc = fn.description || t.description || "";
+          html +=
+            `<div class="pl-tool"><span class="tname">[${i}] ${esc(name)}</span>` +
+            (desc ? ` <span class="tdesc">${esc(shorten(desc, 140))}</span>` : "") +
+            `</div>`;
+        });
+        html += `</div>`;
+
+        // OTHER PAYLOAD FIELDS
+        const known = new Set(["model", "messages", "tools"]);
+        const misc = Object.entries(p).filter(([k]) => !known.has(k));
+        if (misc.length) {
+          html += `<div class="pl-section"><h3>Other payload fields</h3>`;
+          for (const [k, v] of misc) {
+            html += `<div class="pl-kv"><span class="k">${esc(k)}</span><span class="v"><div class="pl-pre">${esc(prettyJson(v))}</div></span></div>`;
+          }
+          html += `</div>`;
+        }
+
+        // RESPONSE
+        const r = payload.response;
+        html += `<div class="pl-section"><h3>Response</h3>`;
+        if (!r) {
+          html += `<div class="empty">(no response recorded — request-only dump)</div>`;
+        } else {
+          html += `<div class="pl-kv">`;
+          html += plKv("stopReason", r.stopReason);
+          html += plKv("model", r.model);
+          html += plKv("responseId", r.responseId);
+          html += plKv("provider", r.provider);
+          if (r.timestamp) html += plKv("timestamp", r.timestamp);
+          if (r.usage) {
+            html += `</div><div class="pl-kv"><span class="k">usage</span><span class="v"><div class="pl-pre">${esc(prettyJson(r.usage))}</div></span></div><div class="pl-kv">`;
+          }
+          if (r.cost) html += plKv("cost", r.cost, true);
+          if (r.errorMessage) html += plKv("errorMessage", r.errorMessage);
+          html += `</div>`;
+          if (r.textPreview) {
+            html += `<div class="pl-pre" style="margin-top:6px">${esc(r.textPreview)}</div>`;
+          }
+        }
+        html += `</div>`;
+        return html;
+      }
+
+      function plKv(k, v, raw) {
+        if (v === undefined || v === null)
+          return `<span class="k">${esc(k)}</span><span class="v" style="color:var(--dim)">—</span>`;
+        let cls = "";
+        let val = v;
+        if (!raw) {
+          if (typeof v === "string") {
+            cls = "str";
+            val = esc(v);
+          } else if (typeof v === "number") {
+            cls = "num";
+            val = esc(String(v));
+          } else if (typeof v === "boolean") {
+            cls = "bool";
+            val = esc(String(v));
+          } else {
+            val = `<div class="pl-pre">${esc(prettyJson(v))}</div>`;
+          }
+        } else {
+          val = `<div class="pl-pre">${esc(prettyJson(v))}</div>`;
+        }
+        return `<span class="k">${esc(k)}</span><span class="v ${cls}">${val}</span>`;
+      }
+
+      function plRenderMsg(i, msg) {
+        const role = msg.role || "?";
+        const content = msg.content;
+        let body = "";
+        if (typeof content === "string") {
+          body += `<div class="pl-pre">${esc(content)}</div>`;
+        } else if (Array.isArray(content)) {
+          content.forEach((block) => {
+            body += plRenderBlock(block);
+          });
+        } else if (content !== undefined) {
+          body += `<div class="pl-pre">${esc(prettyJson(content))}</div>`;
+        }
+        if (msg.tool_calls || msg.toolCalls) {
+          const calls = msg.tool_calls || msg.toolCalls;
+          body += `<div class="pl-block"><span class="btype">tool_calls</span></div>`;
+          calls.forEach((tc, ci) => {
+            const name = (tc.function && tc.function.name) || tc.name || "?";
+            const args = (tc.function && tc.function.arguments) || tc.arguments;
+            body += `<div class="pl-block"><span class="btype">[${ci}] ${esc(name)}</span></div>`;
+            body += `<div class="pl-pre inline">${esc(typeof args === "string" ? args : prettyJson(args))}</div>`;
+          });
+        }
+        return `<div class="pl-msg ${esc(role)}"><div><span class="role">[${i}] ${esc(role)}</span></div>${body}</div>`;
+      }
+
+      function plRenderBlock(block) {
+        const type = (block && block.type) || "?";
+        let body = `<div class="pl-block"><span class="btype">${esc(type)}</span>`;
+        if (block && block.id) body += `<span class="bid">${esc(block.id)}</span>`;
+        body += `</div>`;
+        if (type === "text" && typeof block.text === "string") {
+          body += `<div class="pl-pre inline">${esc(block.text)}</div>`;
+        } else if (type === "tool_use" || type === "functionCall") {
+          const name = block.name || (block.function && block.function.name);
+          const input =
+            block.input || (block.function && block.function.arguments) || block.arguments;
+          body += `<div class="pl-block"><span class="btype">name: ${esc(name)}</span></div>`;
+          if (input !== undefined)
+            body += `<div class="pl-pre inline">${esc(typeof input === "string" ? input : prettyJson(input))}</div>`;
+        } else if (type === "tool_result" || type === "functionCallOutput" || type === "output") {
+          const out = block.content || block.output;
+          const tuid = block.tool_use_id || block.toolCallId || block.call_id;
+          if (tuid)
+            body += `<div class="pl-block"><span class="btype">toolUseId: ${esc(tuid)}</span></div>`;
+          if (typeof out === "string") body += `<div class="pl-pre inline">${esc(out)}</div>`;
+          else if (Array.isArray(out))
+            out.forEach((part) => {
+              body += `<div class="pl-pre inline">${esc(part && part.type === "text" ? part.text : prettyJson(part))}</div>`;
+            });
+          else if (out !== undefined)
+            body += `<div class="pl-pre inline">${esc(prettyJson(out))}</div>`;
+        } else if (type === "thinking" || type === "reasoning") {
+          const t = block.thinking || block.reasoning || block.text;
+          body += `<div class="pl-pre inline">${esc(String(t ?? ""))}</div>`;
+        } else {
+          body += `<div class="pl-pre inline">${esc(prettyJson(block))}</div>`;
+        }
+        return body;
+      }
+
+      // Wire .pl-row clicks + crumb `data-go` navigation.
+      function plWireRows() {
+        main.querySelectorAll(".pl-row[data-go]").forEach((row) => {
+          row.addEventListener("click", () => plDispatch(row.dataset));
+        });
+        main.querySelectorAll("a.pl-go[data-go]").forEach((a) => {
+          a.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            plDispatch({ go: a.dataset.go });
+          });
+        });
+      }
+
+      // Dispatch a navigation action encoded in a dataset.
+      function plDispatch(ds) {
+        const go = ds.go;
+        if (!go) return;
+        if (go === "dates") return plLoadDates();
+        if (go === "flat") return plLoadList("", "flat");
+        if (go === "date") return plLoadSessions(ds.date);
+        if (go === "session")
+          return plLoadList(ds.rel, (ds.rel && ds.rel.split("/").pop()) || "flat");
+        if (go === "file") return plLoadDetail(ds.rel);
+        if (go === "errfile") {
+          if (!ds.file) return;
+          const rel = (pl.curSession.rel ? pl.curSession.rel + "/" : "") + ds.file;
+          return plLoadDetail(rel);
+        }
+        if (go.startsWith("date:")) return plLoadSessions(go.slice(5));
+        if (go.startsWith("session:")) {
+          const [, dir, label] = go.split(":");
+          return plLoadList(dir || "", label || "flat");
+        }
+      }
+
       function wireCostSeg() {
         const seg = document.getElementById("cost-seg");
         if (!seg) return;
@@ -1674,6 +2299,8 @@
             .querySelectorAll("#range-seg button")
             .forEach((x) => x.classList.remove("active"));
           b.classList.add("active");
+          // Payloads are not range-scoped — don't disrupt an in-progress browse.
+          if (currentTab === "payloads") return;
           stats = null;
           behavior = null;
           tools = null;
