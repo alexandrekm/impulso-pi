@@ -643,21 +643,7 @@ function doPull(t, profiles) {
   );
 }
 
-// ---- wrapper deployment (ppi-auto + payload-browser) --------------------
-
-function deployPayloadBrowser() {
-  const src = join(REPO_DIR, "scripts", "impulso-payload-browser");
-  const destDir = join(homedir(), ".local", "bin");
-  const dest = join(destDir, "impulso-payload-browser");
-  if (!existsSync(src)) return; // not in this checkout — skip silently
-  mkdirSync(destDir, { recursive: true });
-  // Bake the repo dir into the wrapper so it can find payload-browser.mjs.
-  const tmpl = readFileSync(src, "utf8");
-  const rendered = tmpl.replace("__IMPULSO_PI_REPO_DIR__", REPO_DIR);
-  writeFileSync(dest, rendered);
-  spawnSync("chmod", ["+x", dest]);
-  console.log(`  impulso-payload-browser -> ${dest}`);
-}
+// ---- wrapper deployment (ppi-auto) --------------------------
 
 function deployPpiAuto() {
   const src = join(REPO_DIR, "scripts", "ppi-auto");
@@ -925,9 +911,6 @@ async function main() {
     // 6. Deploy ppi-auto wrapper (only if work profile is being installed,
     //    meaning this machine has both profiles and needs routing).
     if (names.some((t) => t.name === "work" || t.base)) deployPpiAuto();
-    // The payload-browser wrapper is a core convenience tool — deploy it
-    // on every install run (any target), as long as the source exists.
-    deployPayloadBrowser();
     // Standalone global CLI tools (profiles.tools) — regular npm packages
     // installed globally, separate from the profile sync above.
     const freshlyInstalledTools = installStandaloneTools(profiles);

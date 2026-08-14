@@ -32,6 +32,15 @@ import {
   getTotalMessageCount,
   syncAllSessions,
 } from "./aggregator.js";
+import {
+  listPayloadDates,
+  listPayloadFiles,
+  listPayloadSessions,
+  payloadsExist,
+  readPayloadFile,
+  readPayloadErrors,
+  resolvePayloadsDir,
+} from "./payloads.js";
 
 const DASHBOARD_HTML_PATH = fileURLToPath(new URL("./dashboard.html", import.meta.url));
 const CHART_LOCAL_PATH = fileURLToPath(new URL("./chart.min.js", import.meta.url));
@@ -120,6 +129,35 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
       200,
       await getTimeSeriesForRange(range, bucket ? parseInt(bucket, 10) : undefined),
     );
+  }
+
+  if (pathname === "/api/payloads") {
+    // Existence probe used by the dashboard to show/hide the Payloads tab.
+    return sendJson(res, 200, {
+      exists: await payloadsExist(),
+      root: resolvePayloadsDir(),
+    });
+  }
+  if (pathname === "/api/payloads/dates") {
+    return sendJson(res, 200, await listPayloadDates());
+  }
+  if (pathname === "/api/payloads/sessions") {
+    const date = url.searchParams.get("date") ?? "";
+    return sendJson(res, 200, await listPayloadSessions(date));
+  }
+  if (pathname === "/api/payloads/files") {
+    const dir = url.searchParams.get("dir") ?? "";
+    return sendJson(res, 200, await listPayloadFiles(dir));
+  }
+  if (pathname === "/api/payloads/errors") {
+    const dir = url.searchParams.get("dir") ?? "";
+    return sendJson(res, 200, { dir, errors: await readPayloadErrors(dir) });
+  }
+  if (pathname === "/api/payloads/file") {
+    const rel = url.searchParams.get("path") ?? "";
+    const result = await readPayloadFile(rel);
+    if (!result) return sendJson(res, 404, { error: "Not Found" });
+    return sendJson(res, 200, result);
   }
 
   if (pathname.startsWith("/api/request/")) {

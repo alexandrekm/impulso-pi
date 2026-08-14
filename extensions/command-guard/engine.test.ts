@@ -67,7 +67,7 @@ describe("normalize wrappers", () => {
     assert.equal(d('cd /repo && bash -c "kubectl delete pod foo"'), "deny");
   });
   test("timeout / env / nohup peel to the inner command", () => {
-    assert.equal(d("timeout 3 node scripts/payload-browser.mjs"), "allow");
+    assert.equal(d("timeout 3 node scripts/install.mjs"), "allow");
     assert.equal(d("timeout 3 git push origin main"), "ask");
     assert.equal(d("env FOO=1 git push"), "ask");
     assert.equal(d("nohup git status"), "allow");
