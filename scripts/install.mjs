@@ -43,6 +43,7 @@ import {
   loadProfiles,
   validateProfiles,
   classify,
+  isPackageKind,
   resourcesForProfile,
   relDestPath,
   resolveFileKeys,
@@ -203,13 +204,13 @@ function pkgNameFromSpec(spec) {
 
 function srcPath(key) {
   const kind = classify(key);
-  if (kind === "npm") return null;
+  if (isPackageKind(kind)) return null;
   const rel = kind === "skill" ? key.replace(/\/$/, "") : key;
   return join(REPO_DIR, rel);
 }
 
 function destPath(dir, key, entry) {
-  if (classify(key) === "npm") return null;
+  if (isPackageKind(classify(key))) return null;
   return join(dir, relDestPath(key, entry));
 }
 
@@ -301,29 +302,32 @@ function buildDepList(names, profiles) {
     items.push({ key: "ppi", kind: "ppi", label: "ppi (pi-profiles)", state: "missing" });
   }
 
-  // npm packages: union across targets.
-  const npmKeys = new Set();
+  // packages (npm: and git:): union across targets.
+  const pkgKeys = new Set();
   for (const t of names) {
     for (const k of keysForTarget(t, profiles)) {
-      if (classify(k) === "npm") npmKeys.add(k);
+      if (isPackageKind(classify(k))) pkgKeys.add(k);
     }
   }
 
-  for (const key of [...npmKeys].sort()) {
-    const pkgName = pkgNameFromSpec(key);
+  for (const key of [...pkgKeys].sort()) {
+    const kind = classify(key);
     // installed everywhere? (manifest marker present in every target)
     const installedEverywhere = names.every((t) => manifestGet(manifestRead(t.dir), key));
     if (!installedEverywhere) {
-      items.push({ key, kind: "npm", label: key, state: "missing" });
+      items.push({ key, kind, label: key, state: "missing" });
       continue;
     }
+    // update checks only apply to npm packages (git: has no registry version)
+    if (kind !== "npm") continue;
+    const pkgName = pkgNameFromSpec(key);
     // installed everywhere — check for an update (first target's version)
     const installed = installedPkgVersion(names[0].dir, pkgName);
     const latest = latestVersion(pkgName);
     if (installed && latest && installed !== latest) {
       items.push({
         key,
-        kind: "npm",
+        kind,
         label: key,
         state: "update",
         installed,
@@ -415,7 +419,7 @@ function executeNpmInstalls(selected, items, names) {
   for (const key of selected) {
     if (key === "ppi") continue;
     const it = byKey.get(key);
-    if (!it || it.kind !== "npm") continue;
+    if (!it || !isPackageKind(it.kind)) continue;
     for (const t of names) {
       const map = manifestRead(t.dir);
       const has = manifestGet(map, key);
@@ -535,7 +539,7 @@ function doInstallSettings(t, profiles) {
 
 function doInstallFiles(t, profiles) {
   const keys = resolveTargetFileKeys(
-    keysForTarget(t, profiles).filter((k) => classify(k) !== "npm"),
+    keysForTarget(t, profiles).filter((k) => !isPackageKind(classify(k))),
     profiles,
   );
   const map = manifestRead(t.dir);
@@ -572,11 +576,11 @@ function doInstallFiles(t, profiles) {
 function doStatus(t, profiles) {
   const allKeys = keysForTarget(t, profiles);
   const keys = resolveTargetFileKeys(
-    allKeys.filter((k) => classify(k) !== "npm"),
+    allKeys.filter((k) => !isPackageKind(classify(k))),
     profiles,
   );
   const map = manifestRead(t.dir);
-  for (const key of allKeys.filter((k) => classify(k) === "npm")) {
+  for (const key of allKeys.filter((k) => isPackageKind(classify(k)))) {
     const state = manifestGet(map, key) ? "in sync" : "not installed";
     console.log(`  ${key.padEnd(43)} ${state}`);
   }
@@ -601,7 +605,7 @@ function doStatus(t, profiles) {
 
 function doPull(t, profiles) {
   const keys = resolveTargetFileKeys(
-    keysForTarget(t, profiles).filter((k) => classify(k) !== "npm"),
+    keysForTarget(t, profiles).filter((k) => !isPackageKind(classify(k))),
     profiles,
   );
   const map = manifestRead(t.dir);

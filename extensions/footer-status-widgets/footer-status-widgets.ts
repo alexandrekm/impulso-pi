@@ -1,30 +1,33 @@
-// Bundled pi-footer "Pi Event Value" publishers.
+// footer-status-widgets — publish custom footer stats via pi's native
+// `ctx.ui.setStatus()` so pi-droid-styling surfaces them in its user-zone
+// footer (it reads pi's built-in extension statuses).
 //
-// pi-footer (npm:pi-footer) renders the footer; these fill gaps its built-in
-// widgets don't cover (custom formatting, tok/s, PR status). Each publishes
-// via `pi.events.emit("pi-footer:update-widget", { widgetId, value })`.
+// This is the pi-droid-styling counterpart to extensions/footer/footer-widgets.ts
+// (which emits to the pi-footer event bus). With droid-styling owning the
+// footer, pi's native setStatus() is the channel it reads. Widgets:
 //
-// Setup (`/footer`): add a "Pi Event Value" widget for each Widget ID below.
-//
-//   toks    - average output tok/s (output tokens / span of first->last
+//   toks    - average output tok/s (output tokens / span of first→last
 //             assistant message). "--" until 2+ assistant messages exist.
-//   cost    - session cost, 2 decimals (e.g. "$6.12"); built-in Cost widget
-//             only supports 3 or 2/4 decimals.
-//   ctxpct  - context usage as a whole-number percent (e.g. "25%"); built-in
-//             Context % widget always shows one decimal place.
+//   cost    - session cost, 2 decimals (e.g. "$6.12").
+//   cache   - prompt cache hit rate: cacheRead / (input + cacheRead) across
+//             assistant messages (e.g. "86%"). "--" until data exists.
 //   pr      - current branch's GitHub PR status via `gh pr view` (e.g.
-//             "#1234 open"), empty string when there's no PR (pair with
-//             hideWhenEmpty to auto-hide the segment). Requires `gh` CLI
-//             installed and authenticated. Refreshed every 20s (network
-//             call) instead of every second like the others.
+//             "#123 open"). Hidden when there's no PR. Requires `gh`.
+//
+// (ctxpct was removed: droid-styling already shows context % + tokens
+// together on the left, so a separate far-right % read as a conflict.)
 
 import { execFile } from "node:child_process";
 
 const FAST_REFRESH_MS = 1000;
 const PR_REFRESH_MS = 20_000;
 
-function emit(pi: any, widgetId: string, value: string): void {
-  pi.events.emit("pi-footer:update-widget", { widgetId, value });
+function setStatus(ctx: any, key: string, text: string | undefined): void {
+  try {
+    ctx?.ui?.setStatus?.(key, text);
+  } catch {
+    // stale ctx after session replacement — skip this tick
+  }
 }
 
 function computeTokSpeed(ctx: any): string {
@@ -63,9 +66,20 @@ function computeCost(ctx: any): number {
   return cost;
 }
 
-function computeContextPercent(ctx: any): string {
-  const pct = ctx.getContextUsage?.()?.percent;
-  return pct != null ? `${Math.round(pct)}%` : "?%";
+function computeCacheHitRate(ctx: any): string {
+  const branch = ctx?.sessionManager?.getBranch?.() ?? [];
+  let input = 0;
+  let cacheRead = 0;
+  for (const e of branch) {
+    if (e?.type !== "message" || e.message?.role !== "assistant") continue;
+    const u = e.message?.usage;
+    if (!u) continue;
+    input += u.input || 0;
+    cacheRead += u.cacheRead || 0;
+  }
+  const total = input + cacheRead;
+  if (total <= 0) return "--";
+  return `${Math.round((cacheRead / total) * 100)}%`;
 }
 
 function runGhPrView(cwd: string): Promise<string> {
@@ -76,7 +90,7 @@ function runGhPrView(cwd: string): Promise<string> {
       { cwd, timeout: 10_000 },
       (error, stdout) => {
         if (error) {
-          resolve(""); // no PR for this branch — widget hides itself when empty
+          resolve(""); // no PR for this branch — status is hidden
           return;
         }
         try {
@@ -108,12 +122,15 @@ export default function (pi: any): void {
     const cwd = ctx.cwd || process.cwd();
 
     const publishFast = () => {
-      emit(pi, "toks", `\u26a1${computeTokSpeed(ctx)} tok/s`);
-      emit(pi, "cost", `$${computeCost(ctx).toFixed(2)}`);
-      emit(pi, "ctxpct", computeContextPercent(ctx));
+      setStatus(ctx, "toks", `⚡${computeTokSpeed(ctx)} tok/s`);
+      setStatus(ctx, "cost", `$${computeCost(ctx).toFixed(2)}`);
+      setStatus(ctx, "cache", `cache ${computeCacheHitRate(ctx)}`);
+      // clear any ctxpct a previous version of this extension set
+      setStatus(ctx, "ctxpct", undefined);
     };
     const publishPr = async () => {
-      emit(pi, "pr", await runGhPrView(cwd));
+      const pr = await runGhPrView(cwd);
+      setStatus(ctx, "pr", pr === "" ? undefined : pr);
     };
 
     publishFast();
