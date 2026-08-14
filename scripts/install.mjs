@@ -711,7 +711,7 @@ export function installStandaloneTools(profiles) {
   if (entries.length === 0) return freshlyInstalled;
   if (!hasCmd("npm")) {
     console.error("  standalone tools: 'npm' not found on PATH, skipping");
-    return;
+    return freshlyInstalled;
   }
   const globalRootRes = spawnSync("npm", ["root", "-g"], { encoding: "utf8" });
   const globalRoot = globalRootRes.status === 0 ? globalRootRes.stdout.trim() : null;
