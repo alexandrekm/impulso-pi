@@ -1,8 +1,10 @@
 {
   // Install rule: a resource lands on a profile if it has "core" OR any tag
   // in the profile's "tags". "core" is implicit on every profile — never
-  // list it in a profile's "tags".
-  "tags": ["core", "work", "personal"],
+  // list it in a profile's "tags". "base" is a pseudo-tag no profile
+  // declares: resources tagged only "base" land ONLY on the --base target
+  // (the raw ~/.pi/agent dir), used for machine-global files.
+  "tags": ["core", "work", "personal", "base"],
 
   // Settings merged into every target's settings.json on install (all
   // profiles and --base). Only the declared keys are touched; everything
@@ -38,6 +40,17 @@
     // https://github.com/sting8k/pi-droid-styling
     "git:github.com/sting8k/pi-droid-styling": { "tags": ["core"] },
     "git:github.com/sting8k/pi-themes": { "tags": ["core"] },
+
+    // pi-droid-styling's config. The extension reads it from a HARDCODED
+    // ~/.pi/agent/pi-droid-styling.json (it ignores PI_CODING_AGENT_DIR), so
+    // it's global across profiles. Tagged "base" so it lands only on the
+    // --base target (~/.pi/agent) — never as a dead copy inside a profile.
+    // Sync with `./install.sh --base`; promote live edits back with
+    // `./install.sh pull --base`. It hot-reloads in pi.
+    "extensions/pi-droid-styling/config.json": {
+      "tags": ["base"],
+      "dest": "pi-droid-styling.json",
+    },
 
     // Save every LLM provider request payload to <configDir>/payloads/ for
     // inspecting system prompts, messages, tool definitions, etc. Defaults

@@ -1,0 +1,19 @@
+{
+  "alwaysExpanded": false,
+  "maxExpandedLines": 50,
+  "dimToolOutput": true,
+  "customWorkingMessage": {
+    "working": "Working",
+    "thinking": "Thinking",
+    "answering": "Answering",
+    "running": "Running"
+  },
+  "presentationStyle": "reasonix",
+  "userZoneStyle": "cli-dock",
+  "inputBox": {
+    "style": "auto"
+  },
+  "tasksWidgetStyle": "compact",
+  "forceOSC11": false,
+  "visibleChatTail": 30
+}

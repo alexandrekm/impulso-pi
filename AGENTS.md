@@ -75,6 +75,12 @@ resource is on P  ⟺  "core" ∈ resource.tags  OR  resource.tags ∩ P.tags �
   every profile needs.
 - Any other tag (`work`, `personal`) lands the resource only on the profile
   that declares that tag.
+- **`base`** is a pseudo-tag no profile declares: a resource tagged only
+  `base` lands **only** on the `--base` target (`~/.pi/agent`). Use it for
+  machine-global files that must not be copied into profiles (e.g. the
+  pi-droid-styling config, which the extension reads from a hardcoded global
+  path). Synced via `./install.sh --base` (note: `--all` syncs profiles only,
+  not `--base`).
 
 ### Adding a resource
 
@@ -144,10 +150,11 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
 
 Note: pi-droid-styling's own config file lives at a **hardcoded**
 `~/.pi/agent/pi-droid-styling.json` (it does not follow `PI_CODING_AGENT_DIR`),
-so it is global across profiles and is intentionally NOT synced via
-profiles.jsonc. Edit it directly; it hot-reloads. Recommended:
-`presentationStyle: "reasonix"`, `userZoneStyle: "cli-dock"`,
-`dimToolOutput: true`.
+so it is global across profiles. It is sourced in the repo at
+`extensions/pi-droid-styling/config.json` and tagged `"base"`, so it syncs
+**only** to the `--base` target (`~/.pi/agent`), never as a dead copy inside a
+profile. Sync with `./install.sh --base`; promote live edits (it hot-reloads)
+back with `./install.sh pull --base`.
 
 ## Prerequisites
 
