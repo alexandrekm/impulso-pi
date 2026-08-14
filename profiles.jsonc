@@ -151,6 +151,14 @@
     // Work-only: the KB holds internal/work documentation.
     "extensions/search_docs/search_docs.ts": { "tags": ["work"] },
 
+    // pi-cache-graph (championswimmer): observability for provider prompt/KV
+    // caches. Adds /cache, /cache graph, /cache stats, /cache export commands
+    // — a TUI overlay with per-turn / cumulative hit-rate views and CSV export.
+    // Pure measurement, no prompt mutation. Pair with any cache optimizer to
+    // verify it actually helps in your workload. Core so every profile gets it.
+    // https://pi.dev/packages/pi-cache-graph
+    "npm:pi-cache-graph": { "tags": ["core"] },
+
     // Future tagged resources, e.g.:
     // "skills/jira/": { "tags": ["work"] },
     // "skills/home-lab/": { "tags": ["personal"] },
