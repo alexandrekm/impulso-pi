@@ -12,6 +12,8 @@
     "check:json": "node scripts/check-json.mjs"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.1",
+    "@earendil-works/pi-tui": "^0.84.1",
     "@types/node": "^26.2.0",
     "eslint": "^10.8.1",
     "prettier": "^3.9.6",
