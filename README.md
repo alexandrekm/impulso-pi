@@ -84,6 +84,32 @@ footer from `~/.pi/agent/extensions/pi-footer.json`.
 To tweak colors/layout further, run `/footer` inside pi for the interactive
 config UI (writes back to `~/.pi/agent/extensions/pi-footer.json`).
 
+### `extensions/fff/` — FFF file finder (overrides find/grep)
+
+Installs [`@ff-labs/pi-fff`](https://github.com/dmtrKovalenko/fff) as a core
+package: a Rust-native, SIMD-accelerated file finder that runs in-process with a
+frecency-ranked, git-aware index. Configured to **replace** pi's built-in
+`find`/`grep` (which spawn `fd`/`rg` per call) instead of adding a second
+`fffind`/`ffgrep` pair alongside them.
+
+- **`fff-env.ts`** — pins the two wire options at import time, before
+  `@ff-labs/pi-fff`'s factory reads them:
+  - `PI_FFF_MODE=override` — replace `find`/`grep`; tool names stay
+    `find`/`grep`/`multi_grep`, so no prompt changes are needed.
+  - `FFF_ENABLE_HOME_SCAN=0` — never index `$HOME`; only the project cwd.
+    Avoids the long background scan FFF otherwise runs when pi is launched
+    from home.
+- This is a local extension (not a package), and pi loads local
+  `extensions/*.ts` before npm-package extensions, so the env is set before
+  `@ff-labs/pi-fff` is imported. Same trick as `extensions/cursor/cursor-env.ts`.
+- User overrides via `--fff-mode` / `PI_FFF_MODE` or `--fff-enable-home-scan` /
+  `FFF_ENABLE_HOME_SCAN` are preserved.
+- Runtime commands from the package: `/fff-health`, `/fff-rescan`, `/fff-mode`.
+
+Sync with `./install.sh <target>` (or `--all`); the package lands in every
+profile's `settings.json` `packages[]` and the env-setter extension lands at
+`extensions/fff-env.ts`.
+
 ## Development
 
 ```bash

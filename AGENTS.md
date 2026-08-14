@@ -147,6 +147,9 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
   editor, tool tags, footer); owns the footer + tool styling
 - `git:github.com/sting8k/pi-themes` — companion themes (incl. catppuccin-mocha)
 - `npm:@juicesharp/rpiv-ask-user-question` — ask-user-question tool
+- `npm:@ff-labs/pi-fff` — FFF file finder; replaces pi's built-in
+  `find`/`grep` (override mode, home-dir indexing off; both pinned by
+  `extensions/fff/fff-env.ts`)
 
 Note: pi-droid-styling's own config file lives at a **hardcoded**
 `~/.pi/agent/pi-droid-styling.json` (it does not follow `PI_CODING_AGENT_DIR`),

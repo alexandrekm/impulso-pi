@@ -30,6 +30,20 @@
     // Notify the active pi config dir at startup (which profile loaded).
     "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
 
+    // FFF (dmtrKovalenko/fff): Rust-native, SIMD-accelerated file finder
+    // that replaces pi's built-in `find`/`grep` (which spawn `fd`/`rg` per
+    // call) with an in-process, frecency-ranked, git-aware search. Core so
+    // every profile gets it. Runs in `override` mode (replaces the built-in
+    // tools instead of adding a second fffind/ffgrep pair) and with home-dir
+    // indexing disabled — both pinned by extensions/fff/fff-env.ts, which
+    // sets PI_FFF_MODE=override and FFF_ENABLE_HOME_SCAN=0 at import time
+    // before @ff-labs/pi-fff's factory reads them (local extensions load
+    // before npm-package extensions). Override mode means the tool names
+    // stay `find`/`grep`/`multi_grep`, so no prompt changes are needed.
+    // https://github.com/dmtrKovalenko/fff
+    "npm:@ff-labs/pi-fff": { "tags": ["core"] },
+    "extensions/fff/fff-env.ts": { "tags": ["core"] },
+
     // pi-droid-styling (sting8k): whole-TUI styling — compact startup header,
     // boxed/cli-dock editor, cleaner tool tags + message prefixes, footer
     // stats, and reload-safe render patches. Owns the footer + tool styling,
