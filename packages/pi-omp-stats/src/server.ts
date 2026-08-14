@@ -26,6 +26,8 @@ import {
 	getRecentErrors,
 	getRecentRequests,
 	getRequestDetails,
+	getCostSeriesForRange,
+	getTimeSeriesForRange,
 	getToolDashboardStats,
 	getTotalMessageCount,
 	syncAllSessions,
@@ -75,7 +77,13 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
 	if (pathname === "/api/stats") return sendJson(res, 200, await getDashboardStats(range));
 	if (pathname === "/api/stats/overview") return sendJson(res, 200, await getOverviewStats(range));
 	if (pathname === "/api/stats/model-dashboard") return sendJson(res, 200, await getModelDashboardStats(range));
-	if (pathname === "/api/stats/costs") return sendJson(res, 200, await getCostDashboardStats(range));
+	if (pathname === "/api/stats/costs") {
+		// Optional ?bucket=<ms> override: returns the same shape but bucketed
+		// finer (used by the stacked-by-model cost chart).
+		const bucket = url.searchParams.get("bucket");
+		if (bucket) return sendJson(res, 200, { costSeries: await getCostSeriesForRange(range, parseInt(bucket, 10)) });
+		return sendJson(res, 200, await getCostDashboardStats(range));
+	}
 	if (pathname === "/api/stats/behavior") return sendJson(res, 200, await getBehaviorDashboardStats(range));
 	if (pathname === "/api/stats/tools") return sendJson(res, 200, await getToolDashboardStats(range));
 	if (pathname === "/api/stats/providers") return sendJson(res, 200, await getProviderDashboardStats(range));
@@ -90,7 +98,12 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
 	}
 	if (pathname === "/api/stats/models") return sendJson(res, 200, (await getDashboardStats(range)).byModel);
 	if (pathname === "/api/stats/folders") return sendJson(res, 200, (await getDashboardStats(range)).byFolder);
-	if (pathname === "/api/stats/timeseries") return sendJson(res, 200, (await getDashboardStats(range)).timeSeries);
+	if (pathname === "/api/stats/timeseries") {
+		// Optional ?bucket=<ms> override for finer granularity (e.g. 2h). Without
+		// it, the range-config bucket is used (byte-compatible with omp).
+		const bucket = url.searchParams.get("bucket");
+		return sendJson(res, 200, await getTimeSeriesForRange(range, bucket ? parseInt(bucket, 10) : undefined));
+	}
 
 	if (pathname.startsWith("/api/request/")) {
 		const id = pathname.split("/").pop();

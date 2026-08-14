@@ -188,6 +188,15 @@ export async function initDb(): Promise<DatabaseSync> {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL
 		);
+
+		-- Maps session_file → the folder/cwd label currently applied to its rows.
+		-- When the parser's label changes (e.g. a header cwd becomes available),
+		-- the file's offset is reset so its rows are re-labelled (INSERT OR
+		-- REPLACE) without re-inserting message rows (dedup guard).
+		CREATE TABLE IF NOT EXISTS folder_sessions (
+			session_file TEXT PRIMARY KEY,
+			folder TEXT NOT NULL
+		);
 	`);
 
 	return db;
@@ -243,6 +252,37 @@ export function setFileOffset(sessionFile: string, offset: number, lastModified:
 		offset,
 		lastModified,
 	);
+}
+
+/** The folder/cwd label last applied to a session file's rows, if known. */
+export function getFolderLabel(sessionFile: string): string | null {
+	if (!db) return null;
+	const row = db.prepare("SELECT folder FROM folder_sessions WHERE session_file = ?").get(sessionFile) as
+		| { folder: string }
+		| undefined;
+	return row ? row.folder : null;
+}
+
+export function setFolderLabel(sessionFile: string, folder: string): void {
+	if (!db) return;
+	db.prepare("INSERT OR REPLACE INTO folder_sessions (session_file, folder) VALUES (?, ?)").run(sessionFile, folder);
+}
+
+/** Relabel every row a session file owns with a (new) folder. Indexed by
+ * `session_file`; idempotent. Used to fix rows persisted before header-cwd
+ * folder parsing landed. */
+export function relabelSessionFolder(sessionFile: string, folder: string): void {
+	if (!db) return;
+	for (const table of ["messages", "user_messages", "tool_calls"]) {
+		db.prepare(`UPDATE ${table} SET folder = ? WHERE session_file = ?`).run(folder, sessionFile);
+	}
+}
+
+/** Reset all file offsets so the next sync re-reads every file (used to
+ * re-label folders when the label source changes, e.g. header cwd parsing). */
+export function resetAllFileOffsets(): void {
+	if (!db) return;
+	db.exec("DELETE FROM file_offsets");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -692,12 +732,12 @@ export function getModelPerformanceSeries(
 	}));
 }
 
-export function getCostTimeSeries(days = 90, cutoff?: number | null): CostTimeSeriesPoint[] {
+export function getCostTimeSeries(days = 90, cutoff?: number | null, bucketMs = 24 * 60 * 60 * 1000): CostTimeSeriesPoint[] {
 	if (!db) return [];
 	const hasCutoff = cutoff !== null;
 	const seriesCutoff = hasCutoff ? cutoff ?? Date.now() - days * 24 * 60 * 60 * 1000 : 0;
 	const sql = `
-		SELECT (timestamp / 86400000) * 86400000 as bucket, model, provider,
+		SELECT (timestamp / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket, model, provider,
 			SUM(cost_total) as cost,
 			SUM(cost_input) as cost_input,
 			SUM(cost_output) as cost_output,
@@ -709,7 +749,7 @@ export function getCostTimeSeries(days = 90, cutoff?: number | null): CostTimeSe
 		GROUP BY bucket, model, provider
 		ORDER BY bucket ASC
 	`;
-	const rows = (hasCutoff ? db.prepare(sql).all(seriesCutoff) : db.prepare(sql).all()) as unknown as Array<{
+	const rows = (hasCutoff ? db.prepare(sql).all(bucketMs, bucketMs, seriesCutoff) : db.prepare(sql).all(bucketMs, bucketMs)) as unknown as Array<{
 		bucket: number;
 		model: string;
 		provider: string;

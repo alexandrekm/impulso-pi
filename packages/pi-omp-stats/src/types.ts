@@ -274,6 +274,8 @@ export interface ParseSessionResult {
 	userLinks: UserMessageLink[];
 	toolCalls: ToolCallStats[];
 	toolResults: ToolResultLink[];
+	/** Best-known folder/cwd for this session (header cwd, else lossy path decode). */
+	folder?: string;
 	newOffset: number;
 }
 

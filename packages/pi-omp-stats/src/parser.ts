@@ -33,6 +33,7 @@ import type {
 	MessageStats,
 	ParseSessionResult,
 	SessionEntry,
+	SessionHeader,
 	SessionMessageEntry,
 	ToolCallStats,
 	ToolResultLink,
@@ -193,6 +194,15 @@ function isUserMessage(entry: SessionEntry): entry is SessionMessageEntry {
 function isToolResultMessage(entry: SessionEntry): entry is SessionMessageEntry {
 	if (entry.type !== "message") return false;
 	return (entry as SessionMessageEntry).message?.role === "toolResult";
+}
+
+function isSessionHeader(entry: SessionEntry): entry is SessionHeader {
+	return entry.type === "session";
+}
+
+/** The real cwd recorded in a session header, if present. */
+function extractCwd(entry: SessionHeader): string | null {
+	return typeof entry.cwd === "string" && entry.cwd.length > 0 ? entry.cwd : null;
 }
 
 function extractUserText(content: unknown): string {
@@ -404,7 +414,10 @@ export async function parseSessionFile(sessionPath: string, fromOffset = 0): Pro
 		throw err;
 	}
 
-	const folder = extractFolderFromPath(sessionPath);
+	// `folder` is `let`: a later session-header entry may refine it (see the
+	// loop below). The path-derived value is a lossy fallback — pi encodes the
+	// cwd's `/` as `-`, which is not reversible for paths that contain `-`.
+	let folder = extractFolderFromPath(sessionPath);
 	const agentType = classifyAgentType(sessionPath);
 	const stats: MessageStats[] = [];
 	const userStats: UserMessageStats[] = [];
@@ -417,6 +430,13 @@ export async function parseSessionFile(sessionPath: string, fromOffset = 0): Pro
 	const { entries, read } = parseSessionEntriesLenient(unprocessed);
 
 	for (const entry of entries) {
+		// The session header records the real cwd; prefer it over the lossy
+		// path-derived label so folder labels are exact.
+		if (isSessionHeader(entry)) {
+			const cwd = extractCwd(entry);
+			if (cwd) folder = cwd;
+			continue;
+		}
 		if (isUserMessage(entry)) {
 			const userMsg = extractUserStats(sessionPath, folder, entry);
 			if (userMsg) {
@@ -456,7 +476,35 @@ export async function parseSessionFile(sessionPath: string, fromOffset = 0): Pro
 		}
 	}
 
-	return { stats, userStats, userLinks, toolCalls, toolResults, newOffset: start + read };
+	return { stats, userStats, userLinks, toolCalls, toolResults, folder, newOffset: start + read };
+}
+
+/**
+ * Read just the folder/cwd label for a session file: the first parseable
+ * line's session header cwd, else the lossy path-derived decode. Cheap —
+ * reads only the first JSONL line, so it can run on every skip-path file.
+ */
+export async function readSessionFolder(sessionPath: string): Promise<string> {
+	const fallback = extractFolderFromPath(sessionPath);
+	try {
+		const handle = await fs.open(sessionPath);
+		const stream = handle.createReadStream();
+		const rl = readline.createInterface({ crlfDelay: Infinity, input: stream });
+		for await (const line of rl) {
+			const entry = parseJsonLine(Buffer.from(line), 0, line.length);
+			rl.close();
+			stream.destroy();
+			await handle.close();
+			if (entry && isSessionHeader(entry)) {
+				const cwd = extractCwd(entry);
+				if (cwd) return cwd;
+			}
+			return fallback; // first parseable line isn't a header
+		}
+	} catch {
+		/* fall through to the path-derived fallback */
+	}
+	return fallback;
 }
 
 /** List all session directories (folders) under the sessions dir. */

@@ -20,6 +20,7 @@ import {
 	getBehaviorTimeSeries,
 	getCostTimeSeries,
 	getFileOffset,
+	getFolderLabel,
 	getMessageById,
 	getMessageCount,
 	getStatsDbPath,
@@ -43,7 +44,9 @@ import {
 	insertToolCalls,
 	insertUserMessageStats,
 	markSessionBackfillsComplete,
+	relabelSessionFolder,
 	setFileOffset,
+	setFolderLabel,
 	updateToolResults,
 	updateUserMessageLinks,
 } from "./db.js";
@@ -51,6 +54,7 @@ import {
 	getSessionEntry,
 	listAllSessionFiles,
 	parseSessionFile,
+	readSessionFolder,
 	resolveSessionsDir,
 } from "./parser.js";
 import type {
@@ -59,7 +63,7 @@ import type {
 	ProviderDashboardStats,
 	ToolDashboardStats,
 } from "./shared-types.js";
-import type { MessageStats, ParseSessionResult, RequestDetails } from "./types.js";
+import type { CostTimeSeriesPoint, MessageStats, ParseSessionResult, RequestDetails, TimeSeriesPoint } from "./types.js";
 
 /** Apply a freshly parsed result to the database (single SQLite handle). */
 function applyParseResult(sessionFile: string, lastModified: number, result: ParseSessionResult): number {
@@ -68,6 +72,13 @@ function applyParseResult(sessionFile: string, lastModified: number, result: Par
 	if (result.userLinks.length > 0) updateUserMessageLinks(result.userLinks);
 	if (result.toolCalls.length > 0) insertToolCalls(result.toolCalls);
 	if (result.toolResults.length > 0) updateToolResults(result.toolResults);
+	if (result.folder) {
+		// Relabel all of this file's rows (old + new) with the header-derived
+		// folder. Indexed UPDATE; idempotent, and fixes rows persisted before
+		// header-cwd parsing landed.
+		relabelSessionFolder(sessionFile, result.folder);
+		setFolderLabel(sessionFile, result.folder);
+	}
 	setFileOffset(sessionFile, result.newOffset, lastModified);
 	return result.stats.length + result.userStats.length;
 }
@@ -115,6 +126,15 @@ export async function syncAllSessions(opts?: SyncOptions): Promise<{ processed: 
 		const lastModified = fileStats.mtimeMs;
 		const stored = getFileOffset(sessionFile);
 		if (stored && stored.lastModified >= lastModified) {
+			// File unchanged. The folder label may still be outdated (e.g. synced
+			// before header-cwd parsing). Read just the header to refine it; if it
+			// changed, relabel this file's rows with a cheap indexed UPDATE (no
+			// re-parse, no offset reset).
+			const folder = await readSessionFolder(sessionFile);
+			if (folder !== getFolderLabel(sessionFile)) {
+				relabelSessionFolder(sessionFile, folder);
+				setFolderLabel(sessionFile, folder);
+			}
 			completed++;
 			opts?.onProgress?.({ current: completed, total: files.length, processed: totalProcessed, sessionFile });
 			continue;
@@ -222,6 +242,29 @@ export async function getCostDashboardStats(range?: string | null): Promise<Pick
 	await initDb();
 	const { costSeriesDays, cutoff } = getTimeRangeConfig(range);
 	return { costSeries: getCostTimeSeries(costSeriesDays, cutoff) };
+}
+
+/**
+ * Time series for a range with an optional bucket-size override. The default
+ * keeps the range-config granularity (byte-compatible with omp's
+ * `/api/stats/timeseries`); `bucketMs` lets a client request finer buckets
+ * (e.g. 2h) for a smoother curve over long windows.
+ */
+export async function getTimeSeriesForRange(range?: string | null, bucketMs?: number): Promise<TimeSeriesPoint[]> {
+	await initDb();
+	const { timeSeriesHours, timeSeriesBucketMs, cutoff } = getTimeRangeConfig(range);
+	return getTimeSeries(timeSeriesHours, cutoff, bucketMs && bucketMs > 0 ? bucketMs : timeSeriesBucketMs);
+}
+
+/**
+ * Per-(bucket, model) cost time series with an optional bucket-size override.
+ * Default keeps the range-config granularity (day buckets, byte-compatible);
+ * `bucketMs` enables finer per-model cost buckets for a stacked cost chart.
+ */
+export async function getCostSeriesForRange(range?: string | null, bucketMs?: number): Promise<CostTimeSeriesPoint[]> {
+	await initDb();
+	const { costSeriesDays, cutoff } = getTimeRangeConfig(range);
+	return getCostTimeSeries(costSeriesDays, cutoff, bucketMs && bucketMs > 0 ? bucketMs : 24 * 60 * 60 * 1000);
 }
 
 export async function getBehaviorDashboardStats(range?: string | null): Promise<BehaviorDashboardStats> {
