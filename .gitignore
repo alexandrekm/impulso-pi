@@ -1,5 +1,6 @@
-# Reference implementations checked out locally (read-only source for pi/omp)
-reference-impl/
+# Reference implementations checked out locally (read-only source for pi/omp).
+# No trailing slash so both a real directory AND a worktree symlink are ignored.
+/reference-impl
 
 # gitleaks-action output (left in the working directory by the CI job)
 results.sarif
