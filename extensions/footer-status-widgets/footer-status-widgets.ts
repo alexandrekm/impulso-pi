@@ -20,7 +20,8 @@
 import { execFile } from "node:child_process";
 
 const FAST_REFRESH_MS = 1000;
-const PR_REFRESH_MS = 20_000;
+const PR_REFRESH_MS = 20_000; // branch changed / PR exists
+const PR_NO_PR_MS = 5 * 60_000; // last check found no PR — re-check rarely
 
 function setStatus(ctx: any, key: string, text: string | undefined): void {
   try {
@@ -128,21 +129,32 @@ export default function (pi: any): void {
       // clear any ctxpct a previous version of this extension set
       setStatus(ctx, "ctxpct", undefined);
     };
+    let prTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastPr = ""; // last status string — skip redundant setStatus calls
+
+    const schedulePr = (ms: number) => {
+      if (prTimer) clearTimeout(prTimer);
+      prTimer = setTimeout(publishPr, ms);
+      unrefTimer(prTimer);
+    };
+
     const publishPr = async () => {
       const pr = await runGhPrView(cwd);
-      setStatus(ctx, "pr", pr === "" ? undefined : pr);
+      if (pr !== lastPr) {
+        lastPr = pr;
+        setStatus(ctx, "pr", pr === "" ? undefined : pr);
+      }
+      schedulePr(pr === "" ? PR_NO_PR_MS : PR_REFRESH_MS);
     };
 
     publishFast();
     publishPr();
     const fastTimer = setInterval(publishFast, FAST_REFRESH_MS);
-    const prTimer = setInterval(publishPr, PR_REFRESH_MS);
     unrefTimer(fastTimer);
-    unrefTimer(prTimer);
 
     pi.on("session_shutdown", () => {
       clearInterval(fastTimer);
-      clearInterval(prTimer);
+      if (prTimer) clearTimeout(prTimer);
     });
   });
 }
