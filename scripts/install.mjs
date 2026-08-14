@@ -31,12 +31,14 @@ import {
   readdirSync,
   lstatSync,
   cpSync,
+  realpathSync,
 } from "node:fs";
 import { join, dirname, resolve, relative } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 import * as readline from "node:readline/promises";
 
 import {
@@ -702,10 +704,11 @@ function deployPpiAuto() {
 // that live in this repo and should be installed globally (npm i -g). Separate
 // from the profile resource sync — these are not synced into any profile dir.
 // Idempotent: skips a tool whose globally-installed version already matches.
-function installStandaloneTools(profiles) {
+export function installStandaloneTools(profiles) {
   const tools = profiles.tools || {};
   const entries = Object.entries(tools);
-  if (entries.length === 0) return;
+  const freshlyInstalled = [];
+  if (entries.length === 0) return freshlyInstalled;
   if (!hasCmd("npm")) {
     console.error("  standalone tools: 'npm' not found on PATH, skipping");
     return;
@@ -746,6 +749,7 @@ function installStandaloneTools(profiles) {
       console.log(`  ${pkgName}: v${localVersion} already installed globally`);
       continue;
     }
+    const wasMissing = !globalVersion;
 
     console.log(`==> tool -> ${pkgName} v${localVersion} (global install from ${dir})`);
     // `npm install` installs devDeps and runs `prepare` (builds dist/).
@@ -771,6 +775,63 @@ function installStandaloneTools(profiles) {
     const binName =
       localPkg.bin && typeof localPkg.bin === "object" ? Object.keys(localPkg.bin)[0] : pkgName;
     console.log(`  ${pkgName}: v${localVersion} installed (bin: ${binName})`);
+    freshlyInstalled.push({ pkgName, binName, version: localVersion, wasMissing });
+  }
+  return freshlyInstalled;
+}
+
+// ---- pi-omp-stats service offer -------------------------------------------
+// After a *fresh* global install of pi-omp-stats (not present before, or
+// version changed), offer to register it as a launchd/systemd user service so
+// the dashboard always runs. Skipped in --yes mode (a background daemon is a
+// side effect you don't want auto-enabled in CI); we just print a hint there.
+// Also skipped if the service is already registered.
+export async function maybeOfferStatsService(freshlyInstalled, yes) {
+  const stats = freshlyInstalled.find(
+    (t) => t.binName === "pi-omp-stats" || t.pkgName === "pi-omp-stats",
+  );
+  if (!stats) return;
+
+  // If the bin isn't resolvable on PATH, we can't do anything useful.
+  if (!hasCmd("pi-omp-stats")) return;
+
+  // Already registered? `service status` exits 0 when loaded/running.
+  const statusRes = spawnSync("pi-omp-stats", ["service", "status"], {
+    stdio: "ignore",
+  });
+  if (statusRes.status === 0) {
+    console.log("  pi-omp-stats service is already registered and running.");
+    return;
+  }
+
+  if (yes) {
+    console.log(
+      "  Tip: run `pi-omp-stats service install` to keep the dashboard always on (launchd/systemd).",
+    );
+    return;
+  }
+
+  // Interactive prompt (y/N, default No — a daemon is opt-in).
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const ans = await rl.question(
+      "Register pi-omp-stats as a background service so the dashboard always runs? [y/N]: ",
+    );
+    rl.close();
+    const a = ans.trim().toLowerCase();
+    if (a !== "y" && a !== "yes") {
+      console.log("  Skipped. You can register it later with: pi-omp-stats service install");
+      return;
+    }
+  } catch {
+    rl.close();
+    return;
+  }
+
+  console.log("==> pi-omp-stats service install");
+  const res = spawnSync("pi-omp-stats", ["service", "install"], { stdio: "inherit" });
+  if (res.status !== 0) {
+    console.error("  service install failed; you can retry with: pi-omp-stats service install");
   }
 }
 
@@ -869,7 +930,10 @@ async function main() {
     deployPayloadBrowser();
     // Standalone global CLI tools (profiles.tools) — regular npm packages
     // installed globally, separate from the profile sync above.
-    installStandaloneTools(profiles);
+    const freshlyInstalledTools = installStandaloneTools(profiles);
+    // Offer to register pi-omp-stats as a background service after a fresh
+    // install (interactive only; --yes prints a hint instead).
+    await maybeOfferStatsService(freshlyInstalledTools, yes);
     console.log("\nDone. Reload pi (/reload) or start a new session to pick up changes.");
   } else if (cmd === "status") {
     for (const t of names) {
@@ -892,7 +956,21 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e.message);
-  process.exit(1);
-});
+// Only run main() when invoked directly (so the module is also importable for
+// unit tests of the helper functions without triggering a full install).
+const invokedDirectly = (() => {
+  try {
+    return (
+      process.argv[1] &&
+      realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+    );
+  } catch {
+    return false;
+  }
+})();
+if (invokedDirectly) {
+  main().catch((e) => {
+    console.error(e.message);
+    process.exit(1);
+  });
+}

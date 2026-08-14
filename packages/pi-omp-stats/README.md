@@ -26,11 +26,16 @@ The package is **not yet published to npm**, so build it from a checkout:
 ```bash
 cd packages/pi-omp-stats
 npm install        # dev deps (typescript, @types/node, tsx)
-npm run build      # tsc + copy dashboard.html -> dist/
+npm run build      # tsc + copy dashboard.html -> dist/  (also chmod +x dist/index.js)
 npm start          # node dist/index.js  ->  http://127.0.0.1:3847
 # or run from source (Node >= 23.6 strips types natively):
 node src/index.ts
 ```
+
+The build step also marks `dist/index.js` executable, because `tsc` does not
+carry the `+x` bit from `src/index.ts` and the npm `bin` symlink invokes it
+directly via its `#!/usr/bin/env node` shebang — without `+x` the global
+`pi-omp-stats` command fails with `Permission denied`.
 
 To get the `pi-omp-stats` command on your `PATH` from the checkout:
 
@@ -51,6 +56,7 @@ npx pi-omp-stats
 
 ```
 pi-omp-stats [options]
+pi-omp-stats service <action> [options]
 
 Options:
   -p, --port <port>           Port for the dashboard server (default: 3847)
@@ -59,6 +65,13 @@ Options:
   -s, --sync                  Sync session files and print a summary, no server
       --sessions-dir <path>   Override the sessions directory
   -h, --help                  Show help
+
+Service actions:
+  install                     Register + start a user service (launchd on macOS,
+                              systemd --user on Linux) that auto-runs on boot.
+  uninstall                   Stop + remove the service.
+  status                      Show whether the service is running (exit 0 = up).
+  start | stop | restart      Control an already-installed service.
 ```
 
 Default action (no flags): sync then start the server and print
@@ -71,6 +84,38 @@ pi-omp-stats --sync          # print a human summary, exit
 pi-omp-stats --port 8080     # custom port
 PI_CODING_AGENT_DIR=/x pi-omp-stats --sync   # read /x/sessions/
 ```
+
+### Run as a background service (always on)
+
+`pi-omp-stats service install` registers a **user-level** daemon so the
+dashboard stays up across reboots without needing a terminal. It auto-detects
+the platform's service manager:
+
+- **macOS** → launchd `~/Library/LaunchAgents/dev.pi.omp-stats.plist`
+  (`RunAtLoad` + `KeepAlive`, logs at `~/.pi/agent/pi-omp-stats.log`).
+  Manage with `launchctl list dev.pi.omp-stats` / `pi-omp-stats service ...`.
+- **Linux** → systemd user unit `~/.config/systemd/user/pi-omp-stats.service`
+  (`Restart=always`, `WantedBy=default.target`).
+  Logs: `journalctl --user -u pi-omp-stats.service -f`.
+
+```bash
+pi-omp-stats service install              # register + start (default port 3847)
+pi-omp-stats service install --port 8080  # register on a custom port
+pi-omp-stats service status               # is it up? (exit 0 = running)
+pi-omp-stats service restart              # pick up a rebuilt dist/index.js
+pi-omp-stats service stop                 # suspend (KeepAlive may relaunch)
+pi-omp-stats service uninstall            # stop + remove the service
+```
+
+The service runs `node <dist/index.js> --port <P> --host <H>` and forwards the
+`PI_STATS_*` / `PI_CODING_AGENT_*` env vars that are set at install time, so the
+daemon reads the same sessions dir the installer does. No root required — both
+are user services, matching the loopback-only personal-dashboard use case.
+
+> Rebuilding `dist/` (e.g. `npm run build` or `npm i -g .`) after an install
+> is fine; the service references the absolute `dist/index.js` path, so a
+> `pi-omp-stats service restart` picks up the new code. Re-run `service
+> install` only if you change `--port` / `--host` or the forwarded env vars.
 
 ## Environment variables
 

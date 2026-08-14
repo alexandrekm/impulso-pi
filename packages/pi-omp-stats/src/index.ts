@@ -23,11 +23,18 @@ import {
 } from "./aggregator.js";
 import { resolveSessionsDir } from "./parser.js";
 import { startServer } from "./server.js";
+import {
+  describeInstalledService,
+  isValidServiceAction,
+  runServiceCommand,
+  type ServiceAction,
+} from "./service.js";
 
 export { getDashboardStats, getTotalMessageCount, syncAllSessions } from "./aggregator.js";
 export { closeDb } from "./db.js";
 export { startServer } from "./server.js";
 export { resolveSessionsDir } from "./parser.js";
+export { runServiceCommand, isValidServiceAction } from "./service.js";
 
 /* -------------------------------------------------------------------------- */
 /* Formatting (replaces omp pi-utils format* helpers)                    */
@@ -124,6 +131,17 @@ Options:
                               / PI_CODING_AGENT_DIR / default ~/.pi/agent/sessions)
   -h, --help                  Show this help message
 
+Service management (background daemon, survives reboot):
+  pi-omp-stats service install [--port P] [--host H]
+                              Register + start a user service (launchd on macOS,
+                              systemd --user on Linux). KeepAlive/Restart=always.
+  pi-omp-stats service uninstall
+                              Stop + remove the service.
+  pi-omp-stats service status
+                              Show whether the service is running (exit 0 = up).
+  pi-omp-stats service start|stop|restart
+                              Control an already-installed service.
+
 Environment:
   PI_STATS_SESSIONS_DIR       Override sessions directory (highest precedence)
   PI_CODING_AGENT_SESSION_DIR pi's own session-dir override
@@ -135,6 +153,8 @@ Examples:
   pi-omp-stats --json         # Print stats as JSON and exit
   pi-omp-stats --port 8080    # Start on a custom port
   pi-omp-stats --sync         # Sync and print a summary
+  pi-omp-stats service install          # auto-start on boot (macOS/Linux)
+  pi-omp-stats service status           # is the daemon up?
 `);
 }
 
@@ -168,7 +188,7 @@ async function runSync(): Promise<{ processed: number; files: number }> {
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     options: {
       port: { type: "string", short: "p", default: "3847" },
       host: { type: "string", default: "127.0.0.1" },
@@ -183,6 +203,39 @@ async function main(): Promise<void> {
   if (values.help) {
     printHelp();
     return;
+  }
+
+  // `service <action>` subcommand: register/unregister a launchd/systemd
+  // user service so the dashboard always runs. Handled before the sessions-dir
+  // env wiring below — a service install should not need to sync first.
+  if (positionals[0] === "service") {
+    const action = positionals[1] ?? "";
+    if (!action) {
+      console.error("Usage: pi-omp-stats service <install|uninstall|status|start|stop|restart>");
+      process.exit(2);
+    }
+    if (!isValidServiceAction(action)) {
+      console.error(`Unknown service action "${action}".`);
+      console.error("Valid actions: install | uninstall | status | start | stop | restart");
+      process.exit(2);
+    }
+    const port = parseInt(values.port || "3847", 10);
+    const host = values.host || "127.0.0.1";
+    if (action === "status") {
+      const installed = describeInstalledService();
+      if (installed?.port) {
+        process.stderr.write(`Configured for http://${installed.host ?? host}:${installed.port}\n`);
+      }
+    }
+    try {
+      const code = runServiceCommand(action as ServiceAction, { port, host });
+      closeDb();
+      process.exit(code);
+    } catch (error) {
+      console.error("Error:", error instanceof Error ? error.message : error);
+      closeDb();
+      process.exit(1);
+    }
   }
 
   // `--sessions-dir` is the highest-precedence override for the sessions dir.
