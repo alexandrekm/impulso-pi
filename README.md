@@ -60,8 +60,8 @@ file before installing or pulling.
 
 In-repo replacement for `@gotgenes/pi-permission-system`. Glob `ask`/`deny`
 lists, wrapper peeling (`timeout`, `xargs`, `env`, `bash -c`), and a hardcoded
-`.env` deny. Work asks on `git push*`; personal does not. `./install.sh`
-uninstalls the old npm package so both gates cannot run at once.
+`.env` deny. Work also asks on mutating Anyscale and AWS CLI commands.
+`./install.sh` uninstalls the old npm package so both gates cannot run at once.
 
 ### `extensions/footer/` — powerline-style status footer
 

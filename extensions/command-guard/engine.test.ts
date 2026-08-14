@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   decideProgram,
   flagStripped,
@@ -9,6 +13,10 @@ import {
   splitCommands,
   type GuardConfig,
 } from "./engine.ts";
+
+const workCfg = JSON.parse(
+  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "config.work.json"), "utf8"),
+) as GuardConfig;
 
 const cfg: GuardConfig = {
   ask: ["git push*", "rm *", "sudo *"],
@@ -123,5 +131,33 @@ describe("subshell depth", () => {
 describe("splitCommands", () => {
   test("pipes split so xargs is its own unit", () => {
     assert.deepEqual(splitCommands("find . | xargs wc -l"), ["find .", "xargs wc -l"]);
+  });
+});
+
+describe("work config", () => {
+  test("allows git push", () => {
+    assert.equal(d("git push origin main", workCfg), "allow");
+  });
+  test("asks on mutating anyscale, allows readonly", () => {
+    assert.equal(d("anyscale job submit -f job.yaml", workCfg), "ask");
+    assert.equal(d("anyscale job terminate --name my-job", workCfg), "ask");
+    assert.equal(d("anyscale service deploy -f svc.yaml", workCfg), "ask");
+    assert.equal(d("anyscale workspace_v2 start -n ws", workCfg), "ask");
+    assert.equal(d("anyscale job list", workCfg), "allow");
+    assert.equal(d("anyscale job status --name my-job", workCfg), "allow");
+    assert.equal(d("anyscale job logs --name my-job", workCfg), "allow");
+  });
+  test("asks on mutating aws, allows readonly", () => {
+    assert.equal(d("aws s3 rm s3://bucket/key", workCfg), "ask");
+    assert.equal(d("aws --profile prod s3 rm s3://bucket/key", workCfg), "ask");
+    assert.equal(d("aws ec2 terminate-instances --instance-ids i-1", workCfg), "ask");
+    assert.equal(d("aws iam create-user --user-name x", workCfg), "ask");
+    assert.equal(
+      d("aws cloudformation deploy --stack-name s --template-file t.yml", workCfg),
+      "ask",
+    );
+    assert.equal(d("aws s3 ls", workCfg), "allow");
+    assert.equal(d("aws ec2 describe-instances", workCfg), "allow");
+    assert.equal(d("aws sts get-caller-identity", workCfg), "allow");
   });
 });

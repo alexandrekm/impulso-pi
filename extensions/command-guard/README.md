@@ -14,10 +14,14 @@ Synced per profile as `extensions/command-guard/command-guard.json`:
 
 ```json
 {
-  "ask": ["rm *", "sudo *", "git push*"],
+  "ask": ["rm *", "sudo *", "anyscale * submit*", "aws s3 rm*", "aws * delete-*"],
   "deny": []
 }
 ```
+
+Work additionally asks on mutating Anyscale verbs (`submit`, `deploy`,
+`terminate`, …) and AWS write-style operations (`s3 rm`/`sync`, `create-*`,
+`delete-*`, `terminate-*`, …). `git push` is allowed.
 
 - Default is allow. Only listed globs prompt or block.
 - `include` may point at another JSON file (relative or `~/…`); rules are concatenated.
