@@ -83,20 +83,6 @@ function computeCacheHitRate(ctx: any): string {
   return `${Math.round((cacheRead / total) * 100)}%`;
 }
 
-function currentBranch(cwd: string): Promise<string> {
-  return new Promise((resolve) => {
-    execFile(
-      "git",
-      ["symbolic-ref", "--short", "HEAD"],
-      { cwd, timeout: 5000 },
-      (error, stdout) => {
-        if (error) resolve("");
-        else resolve(stdout.trim());
-      },
-    );
-  });
-}
-
 function runGhPrView(cwd: string): Promise<string> {
   return new Promise((resolve) => {
     execFile(
@@ -143,9 +129,8 @@ export default function (pi: any): void {
       // clear any ctxpct a previous version of this extension set
       setStatus(ctx, "ctxpct", undefined);
     };
-    let lastBranch = "";
-    let lastPr = "|"; // sentinel: never matched yet
     let prTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastPr = ""; // last status string — skip redundant setStatus calls
 
     const schedulePr = (ms: number) => {
       if (prTimer) clearTimeout(prTimer);
@@ -154,16 +139,11 @@ export default function (pi: any): void {
     };
 
     const publishPr = async () => {
-      const branch = await currentBranch(cwd);
-      // Re-query only when the branch changed since the last check.
-      if (branch === lastBranch && lastPr !== "|") {
-        schedulePr(lastPr === "" ? PR_NO_PR_MS : PR_REFRESH_MS);
-        return;
-      }
-      lastBranch = branch;
       const pr = await runGhPrView(cwd);
-      lastPr = pr;
-      setStatus(ctx, "pr", pr === "" ? undefined : pr);
+      if (pr !== lastPr) {
+        lastPr = pr;
+        setStatus(ctx, "pr", pr === "" ? undefined : pr);
+      }
       schedulePr(pr === "" ? PR_NO_PR_MS : PR_REFRESH_MS);
     };
 
