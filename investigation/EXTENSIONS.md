@@ -57,6 +57,11 @@ Real-time code feedback for pi — LSP diagnostics and navigation, language-spec
 
 > **OMP:** `lsp` built-in (same surface — LSP diagnostics/navigation). `ast_grep` built-in (pi-lens bundles ast-grep for structural rules; omp ships its own `ast_grep` tool — same library, different tool wrappers). `ast_edit` built-in (omp's `ast_edit` does staged structural rewrites via ast-grep codemods; pi-lens does not provide an equivalent rewrite tool). OMP's `security_scan` is a separate, heavier pipeline (native security reviews + Codex Security cloud scans, SARIF reports) — not pi-lens's inline lint-style scanning.
 
+### [command-guard](../extensions/command-guard/) (this repo)
+Default-allow bash gate: glob `ask`/`deny` lists, wrapper peeling (`timeout`, `xargs`, `env`, `bash -c`, …), compound-command most-restrictive. Replaces `@gotgenes/pi-permission-system`, which floors wrappers like `xargs`/`timeout` to always-ask.
+
+> **OMP:** not covered. omp has approval mode but not this glob policy.
+
 ### [@gotgenes/pi-permission-system](https://pi.dev/packages/@gotgenes/pi-permission-system)
 Centralized, deterministic permission gates over tool, bash, MCP, skill, and special operations. Hides disallowed tools before the agent starts, enforces `allow`/`ask`/`deny` at call time with UI confirmation, gates bash commands with wildcard patterns, protects sensitive file paths (cross-cutting, symlink-resolved), guards external directories, and fails closed on parse errors or indirection wrappers. Supports per-agent overrides and an authorizer chain for case-by-case decisions.
 
@@ -157,8 +162,7 @@ pi install npm:pi-web-access
 # Code feedback (LSP, linters)
 pi install npm:pi-lens
 
-# Permissions
-pi install npm:@gotgenes/pi-permission-system
+# Permissions (in-repo command-guard extension; not an npm package)
 
 # TUI styling
 pi install npm:pi-zentui

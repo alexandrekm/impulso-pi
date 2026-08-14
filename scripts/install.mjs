@@ -165,6 +165,15 @@ function piUpdate(pkg, dir) {
   if (r.status !== 0) throw new Error(`pi update ${pkg} failed`);
 }
 
+function piUninstall(pkg, dir) {
+  const r = spawnSync("pi", ["uninstall", pkg], {
+    stdio: "inherit",
+    env: { ...process.env, PI_CODING_AGENT_DIR: dir },
+  });
+  if (r.error) throw new Error("'pi' CLI not found. Install pi first: https://pi.dev");
+  return r.status === 0;
+}
+
 // ---- npm version checks --------------------------------------------------
 
 const latestCache = new Map();
@@ -454,6 +463,46 @@ function migrateLegacyPayloads(t) {
     console.log(`  [migrated]    removed ${removed} legacy flat payload file(s) under payloads/`);
 }
 
+// command-guard replaced @gotgenes/pi-permission-system. Drop the npm package,
+// its leftover config dir, and the old manifest rows so both gates cannot run.
+const LEGACY_PERMISSION_PKG = "npm:@gotgenes/pi-permission-system";
+const LEGACY_PERMISSION_DIR = "extensions/pi-permission-system";
+const LEGACY_PERMISSION_MANIFEST_KEYS = [
+  LEGACY_PERMISSION_PKG,
+  "extensions/pi-permission-system/config.work.json",
+  "extensions/pi-permission-system/config.personal.json",
+];
+
+function settingsHasPackage(dir, spec) {
+  const p = join(dir, "settings.json");
+  if (!existsSync(p)) return false;
+  try {
+    const current = JSON.parse(readFileSync(p, "utf8"));
+    return Array.isArray(current.packages) && current.packages.includes(spec);
+  } catch {
+    return false;
+  }
+}
+
+function migrateLegacyPermissionSystem(t) {
+  const map = manifestRead(t.dir);
+  const pkgDir = join(t.dir, "npm", "node_modules", "@gotgenes", "pi-permission-system");
+  const hasPkg =
+    Boolean(manifestGet(map, LEGACY_PERMISSION_PKG)) ||
+    existsSync(pkgDir) ||
+    settingsHasPackage(t.dir, LEGACY_PERMISSION_PKG);
+  const legacyDir = join(t.dir, LEGACY_PERMISSION_DIR);
+  const hasDir = existsSync(legacyDir);
+  const hasManifest = LEGACY_PERMISSION_MANIFEST_KEYS.some((k) => map.has(k));
+  if (!hasPkg && !hasDir && !hasManifest) return;
+
+  if (hasPkg) piUninstall(LEGACY_PERMISSION_PKG, t.dir);
+  if (existsSync(legacyDir)) rmSync(legacyDir, { recursive: true, force: true });
+  for (const key of LEGACY_PERMISSION_MANIFEST_KEYS) map.delete(key);
+  manifestWrite(t.dir, map);
+  console.log(`  [migrated]    removed @gotgenes/pi-permission-system`);
+}
+
 // Merge the top-level "settings" object from profiles.jsonc into a target's
 // settings.json. Only declared keys are written; everything else (including
 // the packages[] managed by pi install) is preserved. Keys removed from
@@ -722,6 +771,7 @@ async function main() {
     // 5. File sync.
     for (const t of names) {
       console.log(`==> install -> ${t.base ? "base" : t.name} (${t.dir})`);
+      migrateLegacyPermissionSystem(t);
       doInstallFiles(t, profiles);
       doInstallSettings(t, profiles);
       migrateLegacyPayloads(t);

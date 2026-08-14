@@ -51,20 +51,40 @@
     // non-vision models. Chosen over @getpipher/vision for less context + bloat.
     "npm:pi-vision-handoff": { "tags": ["core"] },
 
-    // Permission system: the extension is core, but its config is
-    // per-profile (work vs personal). Both variants map to the config path
-    // the extension reads, and no profile has both tags, so they never
-    // collide. On --base both are selected and config.personal.json wins
-    // (alphabetical tie-break, flagged as shadowed).
-    "npm:@gotgenes/pi-permission-system": { "tags": ["core"] },
-    "extensions/pi-permission-system/config.work.json": {
+    // command-guard: default-allow bash policy (ask/deny globs). Engine +
+    // index land as a directory extension; config is per-profile. On --base
+    // both configs are selected and config.personal.json wins (alphabetical
+    // tie-break, flagged as shadowed).
+    "extensions/command-guard/command-guard.ts": {
+      "tags": ["core"],
+      "dest": "extensions/command-guard/index.ts",
+    },
+    "extensions/command-guard/engine.ts": {
+      "tags": ["core"],
+      "dest": "extensions/command-guard/engine.ts",
+    },
+    "extensions/command-guard/config.work.json": {
       "tags": ["work"],
-      "dest": "extensions/pi-permission-system/config.json",
+      "dest": "extensions/command-guard/command-guard.json",
     },
-    "extensions/pi-permission-system/config.personal.json": {
+    "extensions/command-guard/config.personal.json": {
       "tags": ["personal"],
-      "dest": "extensions/pi-permission-system/config.json",
+      "dest": "extensions/command-guard/command-guard.json",
     },
+
+    // Cursor models (Claude/GPT/Gemini/Grok/Composer) as a pi provider via
+    // @rahularya01/pi-cursor. OAuth login (/login cursor), live GetUsableModels
+    // discovery, native Connect/protobuf streaming over HTTP/2, and a tool
+    // bridge that maps Cursor tool calls onto pi's own tool loop (pi executes
+    // the tools with its permission system; the provider parks the HTTP/2
+    // bridge and resumes it on the next turn). Then /model cursor/<id>.
+    //
+    // The env-setter extension below pins two wire values Cursor now requires
+    // (client version + chat endpoint) to the fresher values oh-my-pi uses;
+    // upstream's defaults are stale and Cursor rejects them. Override either
+    // with PI_CURSOR_CLIENT_VERSION / PI_CURSOR_AGENT_URL if Cursor moves again.
+    "npm:@rahularya01/pi-cursor": { "tags": ["core"] },
+    "extensions/cursor/cursor-env.ts": { "tags": ["core"] },
 
     // search_docs: query the team's internal docs Knowledge Base (AWS
     // Bedrock) via the API Gateway proxy before falling back to the web.

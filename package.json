@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check:json": "node scripts/check-json.mjs"
+    "check:json": "node scripts/check-json.mjs",
+    "test": "node --test --experimental-strip-types extensions/command-guard/*.test.ts"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.1",
