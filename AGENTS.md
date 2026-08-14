@@ -178,6 +178,11 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
   `grep: false` so it doesn't collide with FFF's `grep` override; it reads
   via pi's `getAgentDir()`, so the config is per-profile (unlike
   pi-droid-styling)
+- `npm:pi-provider-litellm` — LiteLLM proxy native Provider extension;
+  discovers models from a self-hosted LiteLLM proxy and registers them under
+  pi providers (default `litellm`, aliases via `litellm.providers` in
+  settings.json); supports `/login litellm`, LiteLLM MCP tools, and LiteLLM
+  Skills Gateway prompt injection
 
 Note: pi-droid-styling's own config file lives at a **hardcoded**
 `~/.pi/agent/pi-droid-styling.json` (it does not follow `PI_CODING_AGENT_DIR`),
