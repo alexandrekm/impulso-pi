@@ -9,6 +9,8 @@
   // else (including packages[]) is left alone.
   "settings": {
     "hideThinkingBlock": true,
+    // Catppuccin Mocha, from the pi-themes package (git: below).
+    "theme": "catppuccin-mocha",
   },
 
   "profiles": {
@@ -19,23 +21,23 @@
   "resources": {
     // "core" baseline = everything currently in this repo. Always installed
     // (every profile, and --base).
-    "extensions/footer/footer-widgets.ts": { "tags": ["core"] },
-    "extensions/footer/pi-footer.json": { "tags": ["core"] },
-    "npm:pi-footer": { "tags": ["core"] },
+    "extensions/footer-status-widgets/footer-status-widgets.ts": { "tags": ["core"] },
     "npm:@juicesharp/rpiv-ask-user-question": { "tags": ["core"] },
     "npm:@alfonzjanfrithz/pi-websearch": { "tags": ["core"] },
 
     // Notify the active pi config dir at startup (which profile loaded).
     "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
 
-    // pi-toolbox (@andy8647): rounded transparent framed boxes around EVERY
-    // tool call (built-in, MCP, subagents) — status-aware border colors
-    // (grey executing, green success, red error) + token-level bash command
-    // syntax highlighting. Works by patching ToolExecutionComponent.render
-    // rather than re-registering tools. Config via "toolbox" key in
-    // settings.json (enabled/highlightBash/collapseAnchor).
-    // https://github.com/Andy8647/pi-toolbox
-    "npm:@andy8647/pi-toolbox": { "tags": ["core"] },
+    // pi-droid-styling (sting8k): whole-TUI styling — compact startup header,
+    // boxed/cli-dock editor, cleaner tool tags + message prefixes, footer
+    // stats, and reload-safe render patches. Owns the footer + tool styling,
+    // so it replaces pi-footer and pi-toolbox. Config (global, hardcoded to
+    // ~/.pi/agent/pi-droid-styling.json): presentationStyle/userZoneStyle/
+    // inputBox/dimToolOutput/...; it hot-reloads. Companion themes via
+    // pi-themes. Git-only (not on npm), so it uses the git: resource kind.
+    // https://github.com/sting8k/pi-droid-styling
+    "git:github.com/sting8k/pi-droid-styling": { "tags": ["core"] },
+    "git:github.com/sting8k/pi-themes": { "tags": ["core"] },
 
     // Save every LLM provider request payload to <configDir>/payloads/ for
     // inspecting system prompts, messages, tool definitions, etc. Defaults

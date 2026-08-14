@@ -90,6 +90,11 @@ Resource key forms:
 | `extensions/<feature>/<file>.json` | `<profile>/extensions/<file>` |
 | `skills/<name>/` (trailing slash) | `<profile>/skills/<name>/` |
 | `npm:<pkg>` | appended to `<profile>/settings.json` `packages[]` |
+| `git:<host>/<owner>/<repo>` | appended to `<profile>/settings.json` `packages[]` |
+
+`npm:` and `git:` are both package resources (installed via `pi install`);
+`git:` is for packages not published to npm (e.g. pi-droid-styling). Update
+checks only apply to `npm:` (git packages have no registry version).
 
 File resources may set an optional `"dest"` (path relative to the profile
 dir) to land at a nested path — e.g. an extension's config file. If several
@@ -105,8 +110,9 @@ and never collide because no profile has both tags.
 The optional top-level `"settings"` object in `profiles.jsonc` is merged
 into every target's `settings.json` on install (all profiles and `--base`).
 Only declared keys are written; `packages[]` and any other existing keys are
-preserved. `"packages"` is rejected there — use `npm:` resources instead.
-Currently used for `"hideThinkingBlock": true`.
+preserved. `"packages"` is rejected there — use `npm:`/`git:` resources
+instead. Currently used for `"hideThinkingBlock": true` and the shared
+`"theme": "catppuccin-mocha"` (from the pi-themes package).
 
 ### Global vs. per-profile
 
@@ -128,13 +134,20 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
 ## Current core resources
 
 - `extensions/command-guard/` — bash command-guard (default-allow glob policy)
-- `extensions/footer/footer-widgets.ts` — footer widget extension
-- `extensions/footer/pi-footer.json` — footer layout config
-- `npm:pi-footer` — the footer renderer
+- `extensions/footer-status-widgets/footer-status-widgets.ts` — custom footer
+  stats (tok/s, cost, cache-hit-rate, PR status) via pi's native `setStatus()`,
+  surfaced by pi-droid-styling's user-zone footer
+- `git:github.com/sting8k/pi-droid-styling` — whole-TUI styling (startup,
+  editor, tool tags, footer); owns the footer + tool styling
+- `git:github.com/sting8k/pi-themes` — companion themes (incl. catppuccin-mocha)
 - `npm:@juicesharp/rpiv-ask-user-question` — ask-user-question tool
-- `npm:@andy8647/pi-toolbox` — rounded transparent framed boxes around every
-  tool call (built-in, MCP, subagents) with status-aware border colors and
-  bash syntax highlighting; config via `"toolbox"` key in settings.json
+
+Note: pi-droid-styling's own config file lives at a **hardcoded**
+`~/.pi/agent/pi-droid-styling.json` (it does not follow `PI_CODING_AGENT_DIR`),
+so it is global across profiles and is intentionally NOT synced via
+profiles.jsonc. Edit it directly; it hot-reloads. Recommended:
+`presentationStyle: "reasonix"`, `userZoneStyle: "cli-dock"`,
+`dimToolOutput: true`.
 
 ## Prerequisites
 

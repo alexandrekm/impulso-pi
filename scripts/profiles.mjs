@@ -95,15 +95,21 @@ export function loadProfiles(profilesPath) {
 /** Classify a profiles.jsonc resource key into a kind. */
 export function classify(key) {
   if (key.startsWith("npm:")) return "npm";
+  if (key.startsWith("git:")) return "git";
   if (key.startsWith("extensions/")) return "file";
   if (key.startsWith("skills/")) return "skill";
-  throw new Error(`Unknown resource key (not npm:/extensions//skills/): ${key}`);
+  throw new Error(`Unknown resource key (not npm:/git:/extensions//skills/): ${key}`);
 }
 
-/** Does the on-disk resource exist for a non-npm key? */
+/** Whether the key is an installable package (npm: or git:), not a synced file/skill. */
+export function isPackageKind(kind) {
+  return kind === "npm" || kind === "git";
+}
+
+/** Does the on-disk resource exist for a non-package key? */
 export function resourceExists(repoDir, key) {
   const kind = classify(key);
-  if (kind === "npm") return true;
+  if (isPackageKind(kind)) return true;
   const rel = kind === "skill" ? key.replace(/\/$/, "") : key;
   return existsSync(join(repoDir, rel));
 }
@@ -211,7 +217,7 @@ export function validateProfiles(profiles, repoDir) {
         errors.push(e.message);
         continue;
       }
-      if (kind !== "npm" && !resourceExists(repoDir, key)) {
+      if (!isPackageKind(kind) && !resourceExists(repoDir, key)) {
         errors.push(`resource "${key}" not found on disk`);
       }
       const tags = resources[key]?.tags;
