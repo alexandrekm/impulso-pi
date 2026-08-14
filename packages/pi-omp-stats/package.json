@@ -1,6 +1,6 @@
 {
   "name": "pi-omp-stats",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Standalone local observability dashboard for pi AI usage statistics. A Node port of @oh-my-pi/omp-stats that reads pi session JSONL files.",
   "license": "MIT",
   "author": "Can Boluk (original omp-stats); impulso-pi port authors",

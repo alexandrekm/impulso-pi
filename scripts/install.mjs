@@ -693,6 +693,74 @@ function deployPpiAuto() {
   }
 }
 
+// ---- standalone global tools (NOT pi resources) ---------------------------
+// Reads profiles.tools: a map of name -> { path } for standalone npm packages
+// that live in this repo and should be installed globally (npm i -g). Separate
+// from the profile resource sync — these are not synced into any profile dir.
+// Idempotent: skips a tool whose globally-installed version already matches.
+function installStandaloneTools(profiles) {
+  const tools = profiles.tools || {};
+  const entries = Object.entries(tools);
+  if (entries.length === 0) return;
+  if (!hasCmd("npm")) {
+    console.error("  standalone tools: 'npm' not found on PATH, skipping");
+    return;
+  }
+  const globalRootRes = spawnSync("npm", ["root", "-g"], { encoding: "utf8" });
+  const globalRoot = globalRootRes.status === 0 ? globalRootRes.stdout.trim() : null;
+
+  for (const [name, tool] of entries) {
+    const dir = join(REPO_DIR, tool.path || name);
+    const pkgPath = join(dir, "package.json");
+    if (!existsSync(pkgPath)) {
+      console.error(`  ${name}: no package.json at ${dir}, skipping`);
+      continue;
+    }
+    let localPkg;
+    try {
+      localPkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+    } catch {
+      console.error(`  ${name}: could not parse ${pkgPath}, skipping`);
+      continue;
+    }
+    const pkgName = localPkg.name || name;
+    const localVersion = localPkg.version;
+
+    // Up-to-date? Compare against the globally installed package version.
+    let globalVersion = null;
+    if (globalRoot) {
+      const gpkg = join(globalRoot, pkgName, "package.json");
+      if (existsSync(gpkg)) {
+        try {
+          globalVersion = JSON.parse(readFileSync(gpkg, "utf8")).version;
+        } catch {
+          /* unreadable — treat as missing */
+        }
+      }
+    }
+    if (globalVersion && globalVersion === localVersion) {
+      console.log(`  ${pkgName}: v${localVersion} already installed globally`);
+      continue;
+    }
+
+    console.log(`==> tool -> ${pkgName} v${localVersion} (global install from ${dir})`);
+    // `npm install` installs devDeps and runs `prepare` (builds dist/).
+    if (spawnSync("npm", ["install", "--no-audit", "--no-fund"], { cwd: dir, stdio: "inherit" }).status !== 0) {
+      console.error(`  ${pkgName}: 'npm install' failed, skipping`);
+      continue;
+    }
+    // Global install packs the dir (dist/ included via the package's `files`)
+    // and links the bin. `prepare` may be blocked by npm's allow-scripts
+    // policy here, but dist/ was already built by the step above.
+    if (spawnSync("npm", ["install", "-g", ".", "--no-audit", "--no-fund"], { cwd: dir, stdio: "inherit" }).status !== 0) {
+      console.error(`  ${pkgName}: 'npm install -g .' failed, skipping`);
+      continue;
+    }
+    const binName = localPkg.bin && typeof localPkg.bin === "object" ? Object.keys(localPkg.bin)[0] : pkgName;
+    console.log(`  ${pkgName}: v${localVersion} installed (bin: ${binName})`);
+  }
+}
+
 // ---- main ----------------------------------------------------------------
 
 async function main() {
@@ -786,6 +854,9 @@ async function main() {
     // The payload-browser wrapper is a core convenience tool — deploy it
     // on every install run (any target), as long as the source exists.
     deployPayloadBrowser();
+    // Standalone global CLI tools (profiles.tools) — regular npm packages
+    // installed globally, separate from the profile sync above.
+    installStandaloneTools(profiles);
     console.log("\nDone. Reload pi (/reload) or start a new session to pick up changes.");
   } else if (cmd === "status") {
     for (const t of names) {
