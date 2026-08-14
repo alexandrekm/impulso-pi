@@ -32,7 +32,7 @@ import {
   lstatSync,
   cpSync,
 } from "node:fs";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname, resolve, relative } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -72,8 +72,11 @@ function hashFile(p) {
   return sha256(readFileSync(p));
 }
 
-// Deterministic, order-independent hash of a directory's contents, matching
-// the prior bash installer's `find -print0 | sort -z | xargs shasum | shasum`.
+// Deterministic, order-independent hash of a directory's contents. Paths
+// are stored relative to the directory root so the hash is location-
+// independent: a freshly copied directory hashes the same as its source
+// (absolute path prefixes would otherwise differ), keeping skill (directory)
+// resources in sync across installs instead of always "locally modified".
 function hashDir(p) {
   const files = [];
   const walk = (d) => {
@@ -85,7 +88,8 @@ function hashDir(p) {
   };
   walk(p);
   files.sort();
-  const blob = files.map((fp) => `${sha256(readFileSync(fp))}  ${fp}`).join("\n") + "\n";
+  const blob =
+    files.map((fp) => `${sha256(readFileSync(fp))}  ${relative(p, fp)}`).join("\n") + "\n";
   return sha256(Buffer.from(blob));
 }
 

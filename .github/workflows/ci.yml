@@ -64,12 +64,13 @@ jobs:
           fi
           PATH="$STUB_BIN:$PATH" PI_AGENT_DIR="$TEST_AGENT_DIR" ./install.sh status --base
           # Every non-npm resource must have landed at its resolved dest
-          # (collision-aware: on --base, shadowed variants don't land).
+          # (collision-aware: on --base, shadowed variants don't land). Use
+          # `test -e` (not -f): skill resources land as directories.
           node --input-type=module -e '
             import { loadProfiles, classify, isPackageKind, relDestPath, resolveFileKeys } from "./scripts/profiles.mjs";
             const p = loadProfiles("profiles.jsonc");
             const keys = resolveFileKeys(Object.keys(p.resources).filter((k) => !isPackageKind(classify(k))), p.resources);
             for (const k of keys) console.log(relDestPath(k, p.resources[k]));
           ' | while read -r dest; do
-            test -f "$TEST_AGENT_DIR/$dest" || { echo "missing: $dest" >&2; exit 1; }
+            test -e "$TEST_AGENT_DIR/$dest" || { echo "missing: $dest" >&2; exit 1; }
           done
