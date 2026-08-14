@@ -745,18 +745,27 @@ function installStandaloneTools(profiles) {
 
     console.log(`==> tool -> ${pkgName} v${localVersion} (global install from ${dir})`);
     // `npm install` installs devDeps and runs `prepare` (builds dist/).
-    if (spawnSync("npm", ["install", "--no-audit", "--no-fund"], { cwd: dir, stdio: "inherit" }).status !== 0) {
+    if (
+      spawnSync("npm", ["install", "--no-audit", "--no-fund"], { cwd: dir, stdio: "inherit" })
+        .status !== 0
+    ) {
       console.error(`  ${pkgName}: 'npm install' failed, skipping`);
       continue;
     }
     // Global install packs the dir (dist/ included via the package's `files`)
     // and links the bin. `prepare` may be blocked by npm's allow-scripts
     // policy here, but dist/ was already built by the step above.
-    if (spawnSync("npm", ["install", "-g", ".", "--no-audit", "--no-fund"], { cwd: dir, stdio: "inherit" }).status !== 0) {
+    if (
+      spawnSync("npm", ["install", "-g", ".", "--no-audit", "--no-fund"], {
+        cwd: dir,
+        stdio: "inherit",
+      }).status !== 0
+    ) {
       console.error(`  ${pkgName}: 'npm install -g .' failed, skipping`);
       continue;
     }
-    const binName = localPkg.bin && typeof localPkg.bin === "object" ? Object.keys(localPkg.bin)[0] : pkgName;
+    const binName =
+      localPkg.bin && typeof localPkg.bin === "object" ? Object.keys(localPkg.bin)[0] : pkgName;
     console.log(`  ${pkgName}: v${localVersion} installed (bin: ${binName})`);
   }
 }

@@ -171,6 +171,6 @@
   // synced into any profile dir and are not loaded by pi. `path` is relative
   // to the repo root; `bin` is informational (read from package.json).
   "tools": {
-    "pi-omp-stats": { "path": "packages/pi-omp-stats" }
+    "pi-omp-stats": { "path": "packages/pi-omp-stats" },
   },
 }

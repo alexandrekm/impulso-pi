@@ -26,21 +26,21 @@ import * as path from "node:path";
 import * as readline from "node:readline";
 import { computeUserMessageMetrics } from "./user-metrics.js";
 import type {
-	AgentMessage,
-	AgentType,
-	AssistantMessage,
-	ContentBlock,
-	MessageStats,
-	ParseSessionResult,
-	SessionEntry,
-	SessionHeader,
-	SessionMessageEntry,
-	ToolCallStats,
-	ToolResultLink,
-	ToolResultMessage,
-	Usage,
-	UserMessageLink,
-	UserMessageStats,
+  AgentMessage,
+  AgentType,
+  AssistantMessage,
+  ContentBlock,
+  MessageStats,
+  ParseSessionResult,
+  SessionEntry,
+  SessionHeader,
+  SessionMessageEntry,
+  ToolCallStats,
+  ToolResultLink,
+  ToolResultMessage,
+  Usage,
+  UserMessageLink,
+  UserMessageStats,
 } from "./types.js";
 
 /* -------------------------------------------------------------------------- */
@@ -58,31 +58,32 @@ import type {
  * pi-lineage sessions dir via env makes the tool fork-agnostic.
  */
 export function resolveSessionsDir(override?: string): string {
-	const expand = (p: string): string => (p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p);
+  const expand = (p: string): string =>
+    p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
 
-	if (override && override.trim()) return expand(override.trim());
+  if (override && override.trim()) return expand(override.trim());
 
-	const env = process.env;
-	if (env.PI_STATS_SESSIONS_DIR && env.PI_STATS_SESSIONS_DIR.trim()) {
-		return expand(env.PI_STATS_SESSIONS_DIR.trim());
-	}
-	if (env.PI_CODING_AGENT_SESSION_DIR && env.PI_CODING_AGENT_SESSION_DIR.trim()) {
-		return expand(env.PI_CODING_AGENT_SESSION_DIR.trim());
-	}
-	if (env.PI_CODING_AGENT_DIR && env.PI_CODING_AGENT_DIR.trim()) {
-		return path.join(expand(env.PI_CODING_AGENT_DIR.trim()), "sessions");
-	}
-	return path.join(os.homedir(), ".pi", "agent", "sessions");
+  const env = process.env;
+  if (env.PI_STATS_SESSIONS_DIR && env.PI_STATS_SESSIONS_DIR.trim()) {
+    return expand(env.PI_STATS_SESSIONS_DIR.trim());
+  }
+  if (env.PI_CODING_AGENT_SESSION_DIR && env.PI_CODING_AGENT_SESSION_DIR.trim()) {
+    return expand(env.PI_CODING_AGENT_SESSION_DIR.trim());
+  }
+  if (env.PI_CODING_AGENT_DIR && env.PI_CODING_AGENT_DIR.trim()) {
+    return path.join(expand(env.PI_CODING_AGENT_DIR.trim()), "sessions");
+  }
+  return path.join(os.homedir(), ".pi", "agent", "sessions");
 }
 
 /** Resolve the stats (DB) directory: `PI_STATS_DIR` or `~/.pi/agent`. */
 export function resolveStatsDir(): string {
-	const env = process.env;
-	if (env.PI_STATS_DIR && env.PI_STATS_DIR.trim()) {
-		const p = env.PI_STATS_DIR.trim();
-		return p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
-	}
-	return path.join(os.homedir(), ".pi", "agent");
+  const env = process.env;
+  if (env.PI_STATS_DIR && env.PI_STATS_DIR.trim()) {
+    const p = env.PI_STATS_DIR.trim();
+    return p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p;
+  }
+  return path.join(os.homedir(), ".pi", "agent");
 }
 
 /* -------------------------------------------------------------------------- */
@@ -94,13 +95,13 @@ const CR = 0x0d;
 const jsonLineDecoder = new TextDecoder();
 
 function parseJsonLine(bytes: Uint8Array, start: number, end: number): SessionEntry | null {
-	while (end > start && bytes[end - 1] === CR) end--;
-	if (end <= start) return null;
-	try {
-		return JSON.parse(jsonLineDecoder.decode(bytes.subarray(start, end))) as SessionEntry;
-	} catch {
-		return null;
-	}
+  while (end > start && bytes[end - 1] === CR) end--;
+  if (end <= start) return null;
+  try {
+    return JSON.parse(jsonLineDecoder.decode(bytes.subarray(start, end))) as SessionEntry;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -112,33 +113,36 @@ function parseJsonLine(bytes: Uint8Array, start: number, end: number): SessionEn
  * (no newline before EOF — e.g. a write mid-flush) is left unparsed so the
  * next incremental sync can retry it from `read`.
  */
-function visitSessionEntriesLenient(bytes: Uint8Array, visit: (entry: SessionEntry) => void): number {
-	let cursor = 0;
-	let read = 0;
+function visitSessionEntriesLenient(
+  bytes: Uint8Array,
+  visit: (entry: SessionEntry) => void,
+): number {
+  let cursor = 0;
+  let read = 0;
 
-	while (cursor < bytes.length) {
-		const newline = bytes.indexOf(LF, cursor);
-		const hasNewline = newline !== -1;
-		const lineEnd = hasNewline ? newline : bytes.length;
-		const entry = parseJsonLine(bytes, cursor, lineEnd);
-		if (entry) {
-			visit(entry);
-			read = hasNewline ? newline + 1 : lineEnd;
-		} else if (hasNewline) {
-			read = newline + 1;
-		} else {
-			break;
-		}
-		cursor = hasNewline ? newline + 1 : lineEnd;
-	}
+  while (cursor < bytes.length) {
+    const newline = bytes.indexOf(LF, cursor);
+    const hasNewline = newline !== -1;
+    const lineEnd = hasNewline ? newline : bytes.length;
+    const entry = parseJsonLine(bytes, cursor, lineEnd);
+    if (entry) {
+      visit(entry);
+      read = hasNewline ? newline + 1 : lineEnd;
+    } else if (hasNewline) {
+      read = newline + 1;
+    } else {
+      break;
+    }
+    cursor = hasNewline ? newline + 1 : lineEnd;
+  }
 
-	return read;
+  return read;
 }
 
 function parseSessionEntriesLenient(bytes: Uint8Array): { entries: SessionEntry[]; read: number } {
-	const entries: SessionEntry[] = [];
-	const read = visitSessionEntriesLenient(bytes, entry => entries.push(entry));
-	return { entries, read };
+  const entries: SessionEntry[] = [];
+  const read = visitSessionEntriesLenient(bytes, (entry) => entries.push(entry));
+  return { entries, read };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -156,7 +160,7 @@ function parseSessionEntriesLenient(bytes: Uint8Array): { entries: SessionEntry[
  * (see `classifyAgentType` in the omp original).
  */
 function classifyAgentType(_sessionPath: string): AgentType {
-	return "main";
+  return "main";
 }
 
 /**
@@ -170,84 +174,88 @@ function classifyAgentType(_sessionPath: string): AgentType {
  * `--` → `/` transform is identical to omp's and works unchanged across forks.
  */
 function extractFolderFromPath(sessionPath: string): string {
-	const projectDir = path.basename(path.dirname(sessionPath));
-	return projectDir.replace(/^--/, "/").replace(/--/g, "/");
+  const projectDir = path.basename(path.dirname(sessionPath));
+  return projectDir.replace(/^--/, "/").replace(/--/g, "/");
 }
 
 function isAssistantMessage(entry: SessionEntry): entry is SessionMessageEntry {
-	if (entry.type !== "message") return false;
-	const msgEntry = entry as SessionMessageEntry;
-	// Legacy sessions (pre-id tracking) recorded message entries without an
-	// `id`. They're not linkable and would violate the messages.entry_id NOT
-	// NULL constraint, so skip them at the parser boundary.
-	if (typeof msgEntry.id !== "string" || msgEntry.id.length === 0) return false;
-	return (msgEntry.message as AgentMessage)?.role === "assistant";
+  if (entry.type !== "message") return false;
+  const msgEntry = entry as SessionMessageEntry;
+  // Legacy sessions (pre-id tracking) recorded message entries without an
+  // `id`. They're not linkable and would violate the messages.entry_id NOT
+  // NULL constraint, so skip them at the parser boundary.
+  if (typeof msgEntry.id !== "string" || msgEntry.id.length === 0) return false;
+  return (msgEntry.message as AgentMessage)?.role === "assistant";
 }
 
 function isUserMessage(entry: SessionEntry): entry is SessionMessageEntry {
-	if (entry.type !== "message") return false;
-	const msgEntry = entry as SessionMessageEntry;
-	if (typeof msgEntry.id !== "string" || msgEntry.id.length === 0) return false;
-	return (msgEntry.message as AgentMessage)?.role === "user";
+  if (entry.type !== "message") return false;
+  const msgEntry = entry as SessionMessageEntry;
+  if (typeof msgEntry.id !== "string" || msgEntry.id.length === 0) return false;
+  return (msgEntry.message as AgentMessage)?.role === "user";
 }
 
 function isToolResultMessage(entry: SessionEntry): entry is SessionMessageEntry {
-	if (entry.type !== "message") return false;
-	return (entry as SessionMessageEntry).message?.role === "toolResult";
+  if (entry.type !== "message") return false;
+  return (entry as SessionMessageEntry).message?.role === "toolResult";
 }
 
 function isSessionHeader(entry: SessionEntry): entry is SessionHeader {
-	return entry.type === "session";
+  return entry.type === "session";
 }
 
 /** The real cwd recorded in a session header, if present. */
 function extractCwd(entry: SessionHeader): string | null {
-	return typeof entry.cwd === "string" && entry.cwd.length > 0 ? entry.cwd : null;
+  return typeof entry.cwd === "string" && entry.cwd.length > 0 ? entry.cwd : null;
 }
 
 function extractUserText(content: unknown): string {
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	const parts: string[] = [];
-	for (const block of content) {
-		if (block && typeof block === "object" && (block as { type?: unknown }).type === "text") {
-			const text = (block as { text?: unknown }).text;
-			if (typeof text === "string") parts.push(text);
-		}
-	}
-	return parts.join("");
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  const parts: string[] = [];
+  for (const block of content) {
+    if (block && typeof block === "object" && (block as { type?: unknown }).type === "text") {
+      const text = (block as { text?: unknown }).text;
+      if (typeof text === "string") parts.push(text);
+    }
+  }
+  return parts.join("");
 }
 
-function extractUserStats(sessionFile: string, folder: string, entry: SessionMessageEntry): UserMessageStats | null {
-	const msg = entry.message as { role: "user"; content?: unknown; synthetic?: boolean };
-	if (msg.role !== "user" || msg.synthetic) return null;
-	const text = extractUserText(msg.content);
-	if (!text.trim()) return null;
-	const metrics = computeUserMessageMetrics(text);
-	const ts = Date.parse(entry.timestamp);
-	return {
-		sessionFile,
-		entryId: entry.id,
-		folder,
-		timestamp: Number.isFinite(ts) ? ts : 0,
-		model: null,
-		provider: null,
-		chars: metrics.chars,
-		words: metrics.words,
-		yelling: metrics.yelling,
-		profanity: metrics.profanity,
-		anguish: metrics.anguish,
-		negation: metrics.negation,
-		repetition: metrics.repetition,
-		blame: metrics.blame,
-	};
+function extractUserStats(
+  sessionFile: string,
+  folder: string,
+  entry: SessionMessageEntry,
+): UserMessageStats | null {
+  const msg = entry.message as { role: "user"; content?: unknown; synthetic?: boolean };
+  if (msg.role !== "user" || msg.synthetic) return null;
+  const text = extractUserText(msg.content);
+  if (!text.trim()) return null;
+  const metrics = computeUserMessageMetrics(text);
+  const ts = Date.parse(entry.timestamp);
+  return {
+    sessionFile,
+    entryId: entry.id,
+    folder,
+    timestamp: Number.isFinite(ts) ? ts : 0,
+    model: null,
+    provider: null,
+    chars: metrics.chars,
+    words: metrics.words,
+    yelling: metrics.yelling,
+    profanity: metrics.profanity,
+    anguish: metrics.anguish,
+    negation: metrics.negation,
+    repetition: metrics.repetition,
+    blame: metrics.blame,
+  };
 }
 
 /** Message timestamp, falling back to the entry's ISO timestamp, then 0. */
 function coerceEntryTimestamp(timestamp: number | undefined, entry: SessionMessageEntry): number {
-	if (typeof timestamp === "number" && Number.isFinite(timestamp)) return timestamp;
-	const ts = Date.parse(entry.timestamp);
-	return Number.isFinite(ts) ? ts : 0;
+  if (typeof timestamp === "number" && Number.isFinite(timestamp)) return timestamp;
+  const ts = Date.parse(entry.timestamp);
+  return Number.isFinite(ts) ? ts : 0;
 }
 
 const ZERO_USAGE_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
@@ -264,122 +272,149 @@ const ZERO_USAGE_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tota
  * (missing `model`/`provider`/`api`/`usage`) instead of crashing the whole
  * sync with a constraint violation.
  */
-function extractStats(sessionFile: string, folder: string, entry: SessionMessageEntry, agentType: AgentType): MessageStats | null {
-	const msg = entry.message as AssistantMessage;
-	if (msg?.role !== "assistant") return null;
-	if (typeof msg.model !== "string" || typeof msg.provider !== "string" || typeof msg.api !== "string") return null;
-	const rawUsage = msg.usage as Partial<Usage> | undefined;
-	if (!rawUsage || typeof rawUsage !== "object") return null;
+function extractStats(
+  sessionFile: string,
+  folder: string,
+  entry: SessionMessageEntry,
+  agentType: AgentType,
+): MessageStats | null {
+  const msg = entry.message as AssistantMessage;
+  if (msg?.role !== "assistant") return null;
+  if (
+    typeof msg.model !== "string" ||
+    typeof msg.provider !== "string" ||
+    typeof msg.api !== "string"
+  )
+    return null;
+  const rawUsage = msg.usage as Partial<Usage> | undefined;
+  if (!rawUsage || typeof rawUsage !== "object") return null;
 
-	const wellFormed =
-		typeof rawUsage.input === "number" &&
-		typeof rawUsage.output === "number" &&
-		typeof rawUsage.cacheRead === "number" &&
-		typeof rawUsage.cacheWrite === "number" &&
-		typeof rawUsage.totalTokens === "number";
-	const usage: Usage = wellFormed
-		? (rawUsage as Usage)
-		: {
-				...rawUsage,
-				input: rawUsage.input ?? 0,
-				output: rawUsage.output ?? 0,
-				cacheRead: rawUsage.cacheRead ?? 0,
-				cacheWrite: rawUsage.cacheWrite ?? 0,
-				totalTokens: rawUsage.totalTokens ?? 0,
-				cost: rawUsage.cost ?? ZERO_USAGE_COST,
-				premiumRequests: 0,
-			};
+  const wellFormed =
+    typeof rawUsage.input === "number" &&
+    typeof rawUsage.output === "number" &&
+    typeof rawUsage.cacheRead === "number" &&
+    typeof rawUsage.cacheWrite === "number" &&
+    typeof rawUsage.totalTokens === "number";
+  const usage: Usage = wellFormed
+    ? (rawUsage as Usage)
+    : {
+        ...rawUsage,
+        input: rawUsage.input ?? 0,
+        output: rawUsage.output ?? 0,
+        cacheRead: rawUsage.cacheRead ?? 0,
+        cacheWrite: rawUsage.cacheWrite ?? 0,
+        totalTokens: rawUsage.totalTokens ?? 0,
+        cost: rawUsage.cost ?? ZERO_USAGE_COST,
+        premiumRequests: 0,
+      };
 
-	return {
-		sessionFile,
-		entryId: entry.id,
-		folder,
-		model: msg.model,
-		provider: msg.provider,
-		api: msg.api,
-		timestamp: coerceEntryTimestamp(msg.timestamp, entry),
-		duration: msg.duration ?? null,
-		ttft: msg.ttft ?? null,
-		// A message persisted without a terminal stop reason never completed
-		// normally: classify by whether it carried an error.
-		stopReason: msg.stopReason ?? (msg.errorMessage ? "error" : "aborted"),
-		errorMessage: msg.errorMessage ?? null,
-		usage,
-		agentType,
-	};
+  return {
+    sessionFile,
+    entryId: entry.id,
+    folder,
+    model: msg.model,
+    provider: msg.provider,
+    api: msg.api,
+    timestamp: coerceEntryTimestamp(msg.timestamp, entry),
+    duration: msg.duration ?? null,
+    ttft: msg.ttft ?? null,
+    // A message persisted without a terminal stop reason never completed
+    // normally: classify by whether it carried an error.
+    stopReason: msg.stopReason ?? (msg.errorMessage ? "error" : "aborted"),
+    errorMessage: msg.errorMessage ?? null,
+    usage,
+    agentType,
+  };
 }
 
 /** Extract one {@link ToolCallStats} per `toolCall` content block. */
 function extractToolCalls(
-	sessionFile: string,
-	folder: string,
-	entry: SessionMessageEntry,
-	agentType: AgentType,
+  sessionFile: string,
+  folder: string,
+  entry: SessionMessageEntry,
+  agentType: AgentType,
 ): ToolCallStats[] {
-	const msg = entry.message as AssistantMessage;
-	if (msg?.role !== "assistant" || !Array.isArray(msg.content)) return [];
-	// `tool_calls` columns are NOT NULL: skip turns that can't be attributed
-	// (malformed persisted entries — see extractStats) and blocks missing ids.
-	if (typeof msg.model !== "string" || typeof msg.provider !== "string") return [];
-	const model = msg.model;
-	const provider = msg.provider;
+  const msg = entry.message as AssistantMessage;
+  if (msg?.role !== "assistant" || !Array.isArray(msg.content)) return [];
+  // `tool_calls` columns are NOT NULL: skip turns that can't be attributed
+  // (malformed persisted entries — see extractStats) and blocks missing ids.
+  if (typeof msg.model !== "string" || typeof msg.provider !== "string") return [];
+  const model = msg.model;
+  const provider = msg.provider;
 
-	const blocks = msg.content.filter(
-		(block: ContentBlock): block is { type: "toolCall"; id: string; name: string; arguments: unknown } =>
-			block !== null &&
-			typeof block === "object" &&
-			(block as { type?: unknown }).type === "toolCall" &&
-			typeof (block as { id?: unknown }).id === "string" &&
-			typeof (block as { name?: unknown }).name === "string",
-	);
-	if (blocks.length === 0) return [];
+  const blocks = msg.content.filter(
+    (
+      block: ContentBlock,
+    ): block is { type: "toolCall"; id: string; name: string; arguments: unknown } =>
+      block !== null &&
+      typeof block === "object" &&
+      (block as { type?: unknown }).type === "toolCall" &&
+      typeof (block as { id?: unknown }).id === "string" &&
+      typeof (block as { name?: unknown }).name === "string",
+  );
+  if (blocks.length === 0) return [];
 
-	return blocks.map((block: { type: "toolCall"; id: string; name: string; arguments: unknown }) => {
-		let argsChars = 0;
-		try {
-			argsChars = JSON.stringify(block.arguments ?? {}).length;
-		} catch {
-			// Non-serializable arguments (shouldn't happen in persisted JSONL); size unknown.
-		}
-		return {
-			sessionFile,
-			entryId: entry.id,
-			toolCallId: block.id,
-			folder,
-			toolName: block.name,
-			model,
-			provider,
-			timestamp: coerceEntryTimestamp(msg.timestamp, entry),
-			agentType,
-			callsInTurn: blocks.length,
-			argsChars,
-		};
-	});
+  return blocks.map((block: { type: "toolCall"; id: string; name: string; arguments: unknown }) => {
+    let argsChars = 0;
+    try {
+      argsChars = JSON.stringify(block.arguments ?? {}).length;
+    } catch {
+      // Non-serializable arguments (shouldn't happen in persisted JSONL); size unknown.
+    }
+    return {
+      sessionFile,
+      entryId: entry.id,
+      toolCallId: block.id,
+      folder,
+      toolName: block.name,
+      model,
+      provider,
+      timestamp: coerceEntryTimestamp(msg.timestamp, entry),
+      agentType,
+      callsInTurn: blocks.length,
+      argsChars,
+    };
+  });
 }
 
 /** Build the result linkage for a `toolResult` entry. */
-function extractToolResultLink(sessionFile: string, entry: SessionMessageEntry): ToolResultLink | null {
-	const msg = entry.message as ToolResultMessage;
-	if (msg.role !== "toolResult" || typeof msg.toolCallId !== "string" || msg.toolCallId.length === 0) return null;
-	let resultChars = 0;
-	if (Array.isArray(msg.content)) {
-		for (const block of msg.content) {
-			if (block && typeof block === "object" && (block as { type?: unknown }).type === "text" && typeof (block as { text?: unknown }).text === "string") {
-				resultChars += (block as { text: string }).text.length;
-			}
-		}
-	}
-	return {
-		sessionFile,
-		toolCallId: msg.toolCallId,
-		resultChars,
-		isError: msg.isError === true,
-	};
+function extractToolResultLink(
+  sessionFile: string,
+  entry: SessionMessageEntry,
+): ToolResultLink | null {
+  const msg = entry.message as ToolResultMessage;
+  if (
+    msg.role !== "toolResult" ||
+    typeof msg.toolCallId !== "string" ||
+    msg.toolCallId.length === 0
+  )
+    return null;
+  let resultChars = 0;
+  if (Array.isArray(msg.content)) {
+    for (const block of msg.content) {
+      if (
+        block &&
+        typeof block === "object" &&
+        (block as { type?: unknown }).type === "text" &&
+        typeof (block as { text?: unknown }).text === "string"
+      ) {
+        resultChars += (block as { text: string }).text.length;
+      }
+    }
+  }
+  return {
+    sessionFile,
+    toolCallId: msg.toolCallId,
+    resultChars,
+    isError: msg.isError === true,
+  };
 }
 
 /** Inline `isEnoent` (replaces `omp pi-utils`). */
 function isEnoent(err: unknown): boolean {
-	return typeof err === "object" && err !== null && (err as NodeJS.ErrnoException).code === "ENOENT";
+  return (
+    typeof err === "object" && err !== null && (err as NodeJS.ErrnoException).code === "ENOENT"
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -395,88 +430,91 @@ function isEnoent(err: unknown): boolean {
  *
  * Lenient on malformed lines (see {@link visitSessionEntriesLenient}).
  */
-export async function parseSessionFile(sessionPath: string, fromOffset = 0): Promise<ParseSessionResult> {
-	const empty: ParseSessionResult = {
-		stats: [],
-		userStats: [],
-		userLinks: [],
-		toolCalls: [],
-		toolResults: [],
-		newOffset: fromOffset,
-	};
+export async function parseSessionFile(
+  sessionPath: string,
+  fromOffset = 0,
+): Promise<ParseSessionResult> {
+  const empty: ParseSessionResult = {
+    stats: [],
+    userStats: [],
+    userLinks: [],
+    toolCalls: [],
+    toolResults: [],
+    newOffset: fromOffset,
+  };
 
-	let bytes: Uint8Array;
-	try {
-		const buf = await fs.readFile(sessionPath);
-		bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-	} catch (err) {
-		if (isEnoent(err)) return empty;
-		throw err;
-	}
+  let bytes: Uint8Array;
+  try {
+    const buf = await fs.readFile(sessionPath);
+    bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  } catch (err) {
+    if (isEnoent(err)) return empty;
+    throw err;
+  }
 
-	// `folder` is `let`: a later session-header entry may refine it (see the
-	// loop below). The path-derived value is a lossy fallback — pi encodes the
-	// cwd's `/` as `-`, which is not reversible for paths that contain `-`.
-	let folder = extractFolderFromPath(sessionPath);
-	const agentType = classifyAgentType(sessionPath);
-	const stats: MessageStats[] = [];
-	const userStats: UserMessageStats[] = [];
-	const userLinks: UserMessageLink[] = [];
-	const toolCalls: ToolCallStats[] = [];
-	const toolResults: ToolResultLink[] = [];
-	const userByEntryId = new Map<string, UserMessageStats>();
-	const start = Math.max(0, Math.min(fromOffset, bytes.length));
-	const unprocessed = bytes.subarray(start);
-	const { entries, read } = parseSessionEntriesLenient(unprocessed);
+  // `folder` is `let`: a later session-header entry may refine it (see the
+  // loop below). The path-derived value is a lossy fallback — pi encodes the
+  // cwd's `/` as `-`, which is not reversible for paths that contain `-`.
+  let folder = extractFolderFromPath(sessionPath);
+  const agentType = classifyAgentType(sessionPath);
+  const stats: MessageStats[] = [];
+  const userStats: UserMessageStats[] = [];
+  const userLinks: UserMessageLink[] = [];
+  const toolCalls: ToolCallStats[] = [];
+  const toolResults: ToolResultLink[] = [];
+  const userByEntryId = new Map<string, UserMessageStats>();
+  const start = Math.max(0, Math.min(fromOffset, bytes.length));
+  const unprocessed = bytes.subarray(start);
+  const { entries, read } = parseSessionEntriesLenient(unprocessed);
 
-	for (const entry of entries) {
-		// The session header records the real cwd; prefer it over the lossy
-		// path-derived label so folder labels are exact.
-		if (isSessionHeader(entry)) {
-			const cwd = extractCwd(entry);
-			if (cwd) folder = cwd;
-			continue;
-		}
-		if (isUserMessage(entry)) {
-			const userMsg = extractUserStats(sessionPath, folder, entry);
-			if (userMsg) {
-				userStats.push(userMsg);
-				userByEntryId.set(entry.id, userMsg);
-			}
-			continue;
-		}
-		if (isToolResultMessage(entry)) {
-			const link = extractToolResultLink(sessionPath, entry);
-			if (link) toolResults.push(link);
-			continue;
-		}
-		if (isAssistantMessage(entry)) {
-			const msgStats = extractStats(sessionPath, folder, entry, agentType);
-			if (msgStats) stats.push(msgStats);
-			toolCalls.push(...extractToolCalls(sessionPath, folder, entry, agentType));
-			// Link assistant's responding model back to the user message it answered.
-			const parentId = entry.parentId;
-			if (parentId) {
-				const msg = entry.message as AssistantMessage;
-				if (msg.model && msg.provider) {
-					// Emit unconditionally. The aggregator's UPDATE is guarded by
-					// `model IS NULL` so this is idempotent: a no-op for already
-					// linked rows, a fix-up for fresh inserts (which start NULL
-					// because the user row is recorded before its reply lands) and
-					// for cross-pass orphans whose parent was committed by an
-					// earlier incremental sync.
-					userLinks.push({
-						sessionFile: sessionPath,
-						entryId: parentId,
-						model: msg.model,
-						provider: msg.provider,
-					});
-				}
-			}
-		}
-	}
+  for (const entry of entries) {
+    // The session header records the real cwd; prefer it over the lossy
+    // path-derived label so folder labels are exact.
+    if (isSessionHeader(entry)) {
+      const cwd = extractCwd(entry);
+      if (cwd) folder = cwd;
+      continue;
+    }
+    if (isUserMessage(entry)) {
+      const userMsg = extractUserStats(sessionPath, folder, entry);
+      if (userMsg) {
+        userStats.push(userMsg);
+        userByEntryId.set(entry.id, userMsg);
+      }
+      continue;
+    }
+    if (isToolResultMessage(entry)) {
+      const link = extractToolResultLink(sessionPath, entry);
+      if (link) toolResults.push(link);
+      continue;
+    }
+    if (isAssistantMessage(entry)) {
+      const msgStats = extractStats(sessionPath, folder, entry, agentType);
+      if (msgStats) stats.push(msgStats);
+      toolCalls.push(...extractToolCalls(sessionPath, folder, entry, agentType));
+      // Link assistant's responding model back to the user message it answered.
+      const parentId = entry.parentId;
+      if (parentId) {
+        const msg = entry.message as AssistantMessage;
+        if (msg.model && msg.provider) {
+          // Emit unconditionally. The aggregator's UPDATE is guarded by
+          // `model IS NULL` so this is idempotent: a no-op for already
+          // linked rows, a fix-up for fresh inserts (which start NULL
+          // because the user row is recorded before its reply lands) and
+          // for cross-pass orphans whose parent was committed by an
+          // earlier incremental sync.
+          userLinks.push({
+            sessionFile: sessionPath,
+            entryId: parentId,
+            model: msg.model,
+            provider: msg.provider,
+          });
+        }
+      }
+    }
+  }
 
-	return { stats, userStats, userLinks, toolCalls, toolResults, folder, newOffset: start + read };
+  return { stats, userStats, userLinks, toolCalls, toolResults, folder, newOffset: start + read };
 }
 
 /**
@@ -485,79 +523,82 @@ export async function parseSessionFile(sessionPath: string, fromOffset = 0): Pro
  * reads only the first JSONL line, so it can run on every skip-path file.
  */
 export async function readSessionFolder(sessionPath: string): Promise<string> {
-	const fallback = extractFolderFromPath(sessionPath);
-	try {
-		const handle = await fs.open(sessionPath);
-		const stream = handle.createReadStream();
-		const rl = readline.createInterface({ crlfDelay: Infinity, input: stream });
-		for await (const line of rl) {
-			const entry = parseJsonLine(Buffer.from(line), 0, line.length);
-			rl.close();
-			stream.destroy();
-			await handle.close();
-			if (entry && isSessionHeader(entry)) {
-				const cwd = extractCwd(entry);
-				if (cwd) return cwd;
-			}
-			return fallback; // first parseable line isn't a header
-		}
-	} catch {
-		/* fall through to the path-derived fallback */
-	}
-	return fallback;
+  const fallback = extractFolderFromPath(sessionPath);
+  try {
+    const handle = await fs.open(sessionPath);
+    const stream = handle.createReadStream();
+    const rl = readline.createInterface({ crlfDelay: Infinity, input: stream });
+    for await (const line of rl) {
+      const entry = parseJsonLine(Buffer.from(line), 0, line.length);
+      rl.close();
+      stream.destroy();
+      await handle.close();
+      if (entry && isSessionHeader(entry)) {
+        const cwd = extractCwd(entry);
+        if (cwd) return cwd;
+      }
+      return fallback; // first parseable line isn't a header
+    }
+  } catch {
+    /* fall through to the path-derived fallback */
+  }
+  return fallback;
 }
 
 /** List all session directories (folders) under the sessions dir. */
 export async function listSessionFolders(sessionsDir: string): Promise<string[]> {
-	try {
-		const entries = await fs.readdir(sessionsDir, { withFileTypes: true });
-		return entries.filter(e => e.isDirectory()).map(e => path.join(sessionsDir, e.name));
-	} catch (err) {
-		if (isEnoent(err)) return [];
-		throw err;
-	}
+  try {
+    const entries = await fs.readdir(sessionsDir, { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => path.join(sessionsDir, e.name));
+  } catch (err) {
+    if (isEnoent(err)) return [];
+    throw err;
+  }
 }
 
 /** List all `.jsonl` session files in a folder, recursively. */
 export async function listSessionFiles(folderPath: string): Promise<string[]> {
-	try {
-		const entries = await fs.readdir(folderPath, { recursive: true, withFileTypes: true });
-		return entries
-			.filter(e => e.isFile() && e.name.endsWith(".jsonl"))
-			.map(e => path.join(e.parentPath, e.name));
-	} catch (err) {
-		if (isEnoent(err)) return [];
-		throw err;
-	}
+  try {
+    const entries = await fs.readdir(folderPath, { recursive: true, withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile() && e.name.endsWith(".jsonl"))
+      .map((e) => path.join(e.parentPath, e.name));
+  } catch (err) {
+    if (isEnoent(err)) return [];
+    throw err;
+  }
 }
 
 /** List all `.jsonl` session files across all folders. */
 export async function listAllSessionFiles(sessionsDir: string): Promise<string[]> {
-	const folders = await listSessionFolders(sessionsDir);
-	const allFiles: string[] = [];
-	for (const folder of folders) {
-		const files = await listSessionFiles(folder);
-		allFiles.push(...files);
-	}
-	return allFiles;
+  const folders = await listSessionFolders(sessionsDir);
+  const allFiles: string[] = [];
+  for (const folder of folders) {
+    const files = await listSessionFiles(folder);
+    allFiles.push(...files);
+  }
+  return allFiles;
 }
 
 /** Find a specific entry in a session file by entry id. */
-export async function getSessionEntry(sessionPath: string, entryId: string): Promise<SessionEntry | null> {
-	try {
-		const stream = (await fs.open(sessionPath)).createReadStream();
-		const rl = readline.createInterface({ crlfDelay: Infinity, input: stream });
-		for await (const line of rl) {
-			const entry = parseJsonLine(Buffer.from(line), 0, line.length);
-			if (entry && "id" in entry && entry.id === entryId) {
-				rl.close();
-				stream.destroy();
-				return entry;
-			}
-		}
-	} catch (err) {
-		if (isEnoent(err)) return null;
-		throw err;
-	}
-	return null;
+export async function getSessionEntry(
+  sessionPath: string,
+  entryId: string,
+): Promise<SessionEntry | null> {
+  try {
+    const stream = (await fs.open(sessionPath)).createReadStream();
+    const rl = readline.createInterface({ crlfDelay: Infinity, input: stream });
+    for await (const line of rl) {
+      const entry = parseJsonLine(Buffer.from(line), 0, line.length);
+      if (entry && "id" in entry && entry.id === entryId) {
+        rl.close();
+        stream.destroy();
+        return entry;
+      }
+    }
+  } catch (err) {
+    if (isEnoent(err)) return null;
+    throw err;
+  }
+  return null;
 }

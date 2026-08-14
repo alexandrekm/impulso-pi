@@ -18,11 +18,11 @@
 
 /** Cost breakdown reported on a single assistant request. */
 export interface UsageCost {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	total: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
 }
 
 /**
@@ -32,24 +32,24 @@ export interface UsageCost {
  * kept here only so JSON.parse rows type-check when introspected.
  */
 export interface Usage {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	totalTokens: number;
-	/** Premium/priority request count. earendil-works pi does not emit
-	 * service-tier changes, so this is always 0 in the port (Diff 3). */
-	premiumRequests?: number;
-	/** Reasoning-token count (earendil-works pi). Ignored by aggregation. */
-	reasoning?: number;
-	cost: UsageCost;
-	/** Orchestration sub-usage some forks record. Ignored by aggregation. */
-	orchestration?: {
-		input?: number;
-		output?: number;
-		cacheRead?: number;
-		cacheWrite?: number;
-	};
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+  /** Premium/priority request count. earendil-works pi does not emit
+   * service-tier changes, so this is always 0 in the port (Diff 3). */
+  premiumRequests?: number;
+  /** Reasoning-token count (earendil-works pi). Ignored by aggregation. */
+  reasoning?: number;
+  cost: UsageCost;
+  /** Orchestration sub-usage some forks record. Ignored by aggregation. */
+  orchestration?: {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+  };
 }
 
 /**
@@ -59,76 +59,71 @@ export interface Usage {
  * `toolUse`, `error`, `aborted`.
  */
 export type StopReason =
-	| "stop"
-	| "toolUse"
-	| "error"
-	| "aborted"
-	| "length"
-	| "content_filter"
-	| (string & {});
+  "stop" | "toolUse" | "error" | "aborted" | "length" | "content_filter" | (string & {});
 
 export interface TextBlock {
-	type: "text";
-	text: string;
+  type: "text";
+  text: string;
 }
 
 export interface ThinkingBlock {
-	type: "thinking";
-	thinking: string;
-	thinkingSignature?: string;
+  type: "thinking";
+  thinking: string;
+  thinkingSignature?: string;
 }
 
 export interface ToolCallBlock {
-	type: "toolCall";
-	id: string;
-	name: string;
-	arguments: unknown;
+  type: "toolCall";
+  id: string;
+  name: string;
+  arguments: unknown;
 }
 
 /** Image content block — shape kept loose; not parsed by the stats layer. */
 export interface ImageBlock {
-	type: "image";
-	source: unknown;
+  type: "image";
+  source: unknown;
 }
 
-export type ContentBlock = TextBlock | ThinkingBlock | ToolCallBlock | ImageBlock | { type: string; [k: string]: unknown };
+export type ContentBlock =
+  TextBlock | ThinkingBlock | ToolCallBlock | ImageBlock | { type: string; [k: string]: unknown };
 
 /** An assistant message as recorded in session JSONL. */
 export interface AssistantMessage {
-	role: "assistant";
-	content?: ContentBlock[];
-	api?: string;
-	provider?: string;
-	model?: string;
-	usage?: Usage;
-	stopReason?: StopReason;
-	/** Unix milliseconds. Falls back to the entry's ISO timestamp. */
-	timestamp?: number;
-	/** Request duration in ms (not emitted by earendil-works pi as of this port). */
-	duration?: number;
-	/** Time-to-first-token in ms (not emitted by earendil-works pi as of this port). */
-	ttft?: number;
-	errorMessage?: string | null;
-	responseId?: string;
-	rawStopReason?: string;
+  role: "assistant";
+  content?: ContentBlock[];
+  api?: string;
+  provider?: string;
+  model?: string;
+  usage?: Usage;
+  stopReason?: StopReason;
+  /** Unix milliseconds. Falls back to the entry's ISO timestamp. */
+  timestamp?: number;
+  /** Request duration in ms (not emitted by earendil-works pi as of this port). */
+  duration?: number;
+  /** Time-to-first-token in ms (not emitted by earendil-works pi as of this port). */
+  ttft?: number;
+  errorMessage?: string | null;
+  responseId?: string;
+  rawStopReason?: string;
 }
 
 /** A user prompt as recorded in session JSONL. */
 export interface UserMessage {
-	role: "user";
-	content?: unknown;
-	/** Harness-synthesised prompts (e.g. hook injections) are skipped. */
-	synthetic?: boolean;
-	timestamp?: number;
+  role: "user";
+  content?: unknown;
+  /** Harness-synthesised prompts (e.g. hook injections) are skipped. */
+  synthetic?: boolean;
+  timestamp?: number;
 }
 
 /** A tool result fed back into context. */
 export interface ToolResultMessage {
-	role: "toolResult";
-	toolCallId?: string;
-	toolName?: string;
-	content?: unknown;
-	isError?: boolean;
+  role: "toolResult";
+  toolCallId?: string;
+  toolName?: string;
+  content?: unknown;
+  isError?: boolean;
 }
 
 export type AgentMessage = AssistantMessage | UserMessage | ToolResultMessage;
@@ -138,30 +133,30 @@ export type AgentMessage = AssistantMessage | UserMessage | ToolResultMessage;
 /* -------------------------------------------------------------------------- */
 
 export interface SessionHeader {
-	type: "session";
-	version?: number; // v1 sessions don't carry this
-	id: string;
-	timestamp: string;
-	cwd: string;
-	parentSession?: string;
-	title?: string;
+  type: "session";
+  version?: number; // v1 sessions don't carry this
+  id: string;
+  timestamp: string;
+  cwd: string;
+  parentSession?: string;
+  title?: string;
 }
 
 export interface SessionMessageEntry {
-	type: "message";
-	id: string;
-	parentId: string | null;
-	timestamp: string;
-	message: AgentMessage;
+  type: "message";
+  id: string;
+  parentId: string | null;
+  timestamp: string;
+  message: AgentMessage;
 }
 
 /** Any other entry type the session format emits (model_change, compaction, …). */
 export interface SessionOtherEntry {
-	type: string;
-	id?: string;
-	parentId?: string | null;
-	timestamp?: string;
-	[k: string]: unknown;
+  type: string;
+  id?: string;
+  parentId?: string | null;
+  timestamp?: string;
+  [k: string]: unknown;
 }
 
 export type SessionEntry = SessionHeader | SessionMessageEntry | SessionOtherEntry;
@@ -188,26 +183,26 @@ export type AgentType = "main" | "subagent" | "advisor";
  * sync with a constraint violation.
  */
 export interface MessageStats {
-	id?: number;
-	sessionFile: string;
-	entryId: string;
-	folder: string;
-	model: string;
-	provider: string;
-	api: string;
-	timestamp: number;
-	duration: number | null;
-	ttft: number | null;
-	stopReason: StopReason;
-	errorMessage: string | null;
-	usage: Usage;
-	agentType: AgentType;
+  id?: number;
+  sessionFile: string;
+  entryId: string;
+  folder: string;
+  model: string;
+  provider: string;
+  api: string;
+  timestamp: number;
+  duration: number | null;
+  ttft: number | null;
+  stopReason: StopReason;
+  errorMessage: string | null;
+  usage: Usage;
+  agentType: AgentType;
 }
 
 /** Full details of a request, including the raw session entry. */
 export interface RequestDetails extends MessageStats {
-	messages: unknown[];
-	output: unknown;
+  messages: unknown[];
+  output: unknown;
 }
 
 /**
@@ -215,30 +210,30 @@ export interface RequestDetails extends MessageStats {
  * pure string analysis, no omp deps; see `user-metrics.ts`).
  */
 export interface UserMessageStats {
-	id?: number;
-	sessionFile: string;
-	entryId: string;
-	folder: string;
-	timestamp: number;
-	model: string | null;
-	provider: string | null;
-	chars: number;
-	words: number;
-	yelling: number;
-	profanity: number;
-	anguish: number;
-	negation: number;
-	repetition: number;
-	blame: number;
+  id?: number;
+  sessionFile: string;
+  entryId: string;
+  folder: string;
+  timestamp: number;
+  model: string | null;
+  provider: string | null;
+  chars: number;
+  words: number;
+  yelling: number;
+  profanity: number;
+  anguish: number;
+  negation: number;
+  repetition: number;
+  blame: number;
 }
 
 /** Link emitted when an assistant message's parentId points to a user message
  * parsed in an earlier incremental sync pass. */
 export interface UserMessageLink {
-	sessionFile: string;
-	entryId: string;
-	model: string;
-	provider: string;
+  sessionFile: string;
+  entryId: string;
+  model: string;
+  provider: string;
 }
 
 /**
@@ -247,36 +242,36 @@ export interface UserMessageLink {
  * so aggregation can split the turn's real provider usage evenly per call.
  */
 export interface ToolCallStats {
-	sessionFile: string;
-	entryId: string;
-	toolCallId: string;
-	folder: string;
-	toolName: string;
-	model: string;
-	provider: string;
-	timestamp: number;
-	agentType: AgentType;
-	callsInTurn: number;
-	argsChars: number;
+  sessionFile: string;
+  entryId: string;
+  toolCallId: string;
+  folder: string;
+  toolName: string;
+  model: string;
+  provider: string;
+  timestamp: number;
+  agentType: AgentType;
+  callsInTurn: number;
+  argsChars: number;
 }
 
 /** Result linkage for a `toolResult` entry, applied as an UPDATE on the call. */
 export interface ToolResultLink {
-	sessionFile: string;
-	toolCallId: string;
-	resultChars: number;
-	isError: boolean;
+  sessionFile: string;
+  toolCallId: string;
+  resultChars: number;
+  isError: boolean;
 }
 
 export interface ParseSessionResult {
-	stats: MessageStats[];
-	userStats: UserMessageStats[];
-	userLinks: UserMessageLink[];
-	toolCalls: ToolCallStats[];
-	toolResults: ToolResultLink[];
-	/** Best-known folder/cwd for this session (header cwd, else lossy path decode). */
-	folder?: string;
-	newOffset: number;
+  stats: MessageStats[];
+  userStats: UserMessageStats[];
+  userLinks: UserMessageLink[];
+  toolCalls: ToolCallStats[];
+  toolResults: ToolResultLink[];
+  /** Best-known folder/cwd for this session (header cwd, else lossy path decode). */
+  folder?: string;
+  newOffset: number;
 }
 
 // Re-export the shared aggregation shapes so callers can import everything from ./types (mirrors omp).

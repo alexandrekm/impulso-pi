@@ -6,71 +6,71 @@
  */
 
 export interface UserMessageMetrics {
-	/** Total characters of analyzed text. */
-	chars: number;
-	/** Whitespace-delimited word count. */
-	words: number;
-	/**
-	 * Number of "yelling" sentences: sentences where more than half of the
-	 * alphabetic characters are uppercase (and there are enough letters to
-	 * make the ratio meaningful - short acronyms like "OK" don't count).
-	 * A sentence also needs either two uppercase runs ("WHAT THE HELL") or
-	 * one elongated run ("CMOOON") so a lone acronym/env var ("use JSON",
-	 * "HOME=/tmp") doesn't register.
-	 */
-	yelling: number;
-	/** Profanity hits (word-boundary, case-insensitive). */
-	profanity: number;
-	/**
-	 * Catch-all "obviously upset" signal computed on a *prose-only* body
-	 * (code fences, XML/HTML tags, URLs, file mentions, and quoted lines
-	 * are stripped first; messages whose remaining prose is >=3 lines score
-	 * zero because formatted prompts aren't tantrums).
-	 *
-	 * Sum of:
-	 * - drama runs: 3+ `!` / `?` (with `1`-mishit fallout)
-	 * - interjections, elongated where the short form is ambiguous:
-	 *   `noooo`, `ahhh`, `ugh(h)`, `argh`, `grr`, `stooop`, `whyyy`,
-	 *   `fuuu(ck)`, `wtfff`, `omggg`, `yesss`, `goddd`, `bruhh`
-	 * - standalone `dude`
-	 * - sad emoticons: `:(`, `;(`, `:-(((`
-	 */
-	anguish: number;
-	/**
-	 * Corrective negation: the user is telling us we got it wrong.
-	 *
-	 * Counted on the same prose-only body as {@link anguish}.
-	 *
-	 * - line-leading `nope` / `nah` / `nvm` / `wrong` / `incorrect`
-	 *   (word-bounded, so `now`, `nobody`, `north` don't match)
-	 * - line-leading `no` when used as an interjection - followed by
-	 *   punctuation, end-of-text, or a discourse word (`no i meant`,
-	 *   `no, wait`). Determiner `no` (`no extensions to the page`,
-	 *   `no auto start`) doesn't count.
-	 * - `that(?:'s)? not (what|right|it)` and `not what i (meant|asked|said|wanted)`
-	 * - `makes (no|zero) sense`
-	 */
-	negation: number;
-	/**
-	 * The user is repeating themselves - strong signal the previous turn
-	 * missed the ask. Counts hits for:
-	 *
-	 * - `i (meant|said|asked|told you|already (said|told|did|asked|wrote))`
-	 * - `(like|as) i (said|told you|asked)`
-	 * - `still (doesn't|isn't|not|broken|wrong|fails|failing|the same|same)`
-	 *
-	 * Bare `still` / `again` are too ambiguous to count alone (they show up
-	 * in normal speech like "try again" or "still works").
-	 */
-	repetition: number;
-	/**
-	 * Direct second-person reproach pinned on the agent:
-	 *
-	 * - `you (didn't|did not|broke|missed|forgot|keep|always|never|still|ignored)`
-	 * - `why (would|did) (you|u)`
-	 * - sentence-leading `stop <verb>ing` imperatives
-	 */
-	blame: number;
+  /** Total characters of analyzed text. */
+  chars: number;
+  /** Whitespace-delimited word count. */
+  words: number;
+  /**
+   * Number of "yelling" sentences: sentences where more than half of the
+   * alphabetic characters are uppercase (and there are enough letters to
+   * make the ratio meaningful - short acronyms like "OK" don't count).
+   * A sentence also needs either two uppercase runs ("WHAT THE HELL") or
+   * one elongated run ("CMOOON") so a lone acronym/env var ("use JSON",
+   * "HOME=/tmp") doesn't register.
+   */
+  yelling: number;
+  /** Profanity hits (word-boundary, case-insensitive). */
+  profanity: number;
+  /**
+   * Catch-all "obviously upset" signal computed on a *prose-only* body
+   * (code fences, XML/HTML tags, URLs, file mentions, and quoted lines
+   * are stripped first; messages whose remaining prose is >=3 lines score
+   * zero because formatted prompts aren't tantrums).
+   *
+   * Sum of:
+   * - drama runs: 3+ `!` / `?` (with `1`-mishit fallout)
+   * - interjections, elongated where the short form is ambiguous:
+   *   `noooo`, `ahhh`, `ugh(h)`, `argh`, `grr`, `stooop`, `whyyy`,
+   *   `fuuu(ck)`, `wtfff`, `omggg`, `yesss`, `goddd`, `bruhh`
+   * - standalone `dude`
+   * - sad emoticons: `:(`, `;(`, `:-(((`
+   */
+  anguish: number;
+  /**
+   * Corrective negation: the user is telling us we got it wrong.
+   *
+   * Counted on the same prose-only body as {@link anguish}.
+   *
+   * - line-leading `nope` / `nah` / `nvm` / `wrong` / `incorrect`
+   *   (word-bounded, so `now`, `nobody`, `north` don't match)
+   * - line-leading `no` when used as an interjection - followed by
+   *   punctuation, end-of-text, or a discourse word (`no i meant`,
+   *   `no, wait`). Determiner `no` (`no extensions to the page`,
+   *   `no auto start`) doesn't count.
+   * - `that(?:'s)? not (what|right|it)` and `not what i (meant|asked|said|wanted)`
+   * - `makes (no|zero) sense`
+   */
+  negation: number;
+  /**
+   * The user is repeating themselves - strong signal the previous turn
+   * missed the ask. Counts hits for:
+   *
+   * - `i (meant|said|asked|told you|already (said|told|did|asked|wrote))`
+   * - `(like|as) i (said|told you|asked)`
+   * - `still (doesn't|isn't|not|broken|wrong|fails|failing|the same|same)`
+   *
+   * Bare `still` / `again` are too ambiguous to count alone (they show up
+   * in normal speech like "try again" or "still works").
+   */
+  repetition: number;
+  /**
+   * Direct second-person reproach pinned on the agent:
+   *
+   * - `you (didn't|did not|broke|missed|forgot|keep|always|never|still|ignored)`
+   * - `why (would|did) (you|u)`
+   * - sentence-leading `stop <verb>ing` imperatives
+   */
+  blame: number;
 }
 
 /**
@@ -87,347 +87,347 @@ export interface UserMessageMetrics {
  * scored as anguish instead.
  */
 const PROFANITY: readonly string[] = [
-	// f-word family
-	"fuck",
-	"fucks",
-	"fucked",
-	"fucking",
-	"fuckin",
-	"fucker",
-	"fuckers",
-	"fuckup",
-	"fuckups",
-	"fuckhead",
-	"fuckheads",
-	"fuckface",
-	"fuckwit",
-	"fuckwits",
-	"fucktard",
-	"fuckery",
-	"fuckoff",
-	"motherfucker",
-	"motherfuckers",
-	"motherfucking",
-	"clusterfuck",
-	"ratfuck",
-	"unfuck",
-	// censored / euphemistic f-word
-	"fk",
-	"fks",
-	"fking",
-	"fkin",
-	"fker",
-	"fck",
-	"fcks",
-	"fcking",
-	"fckin",
-	"fcker",
-	"fuk",
-	"fuking",
-	"fukin",
-	"eff",
-	"effs",
-	"effed",
-	"effing",
-	"frick",
-	"fricks",
-	"fricked",
-	"fricking",
-	"frickin",
-	"freaking",
-	"freakin",
-	"freaked",
-	// s-word family
-	"shit",
-	"shits",
-	"shat",
-	"shitty",
-	"shittier",
-	"shittiest",
-	"shite",
-	"shites",
-	"shited",
-	"shitting",
-	"shitter",
-	"shitters",
-	"shithead",
-	"shitheads",
-	"shitshow",
-	"shitstorm",
-	"shitstain",
-	"shitfaced",
-	"shitload",
-	"shitbag",
-	"shitcan",
-	"shitcanned",
-	"shitpost",
-	"shitposting",
-	"bullshit",
-	"bullshits",
-	"bullshitting",
-	"bullshitter",
-	"horseshit",
-	"batshit",
-	"dogshit",
-	"dipshit",
-	"jackshit",
-	"dumbshit",
-	"holyshit",
-	// mild swears
-	"damn",
-	"damns",
-	"damned",
-	"damning",
-	"dammit",
-	"goddamn",
-	"goddamned",
-	"goddamnit",
-	"goddammit",
-	"darn",
-	"darns",
-	"darned",
-	"darnit",
-	"dang",
-	"danged",
-	"dangit",
-	"hell",
-	"hells",
-	"heck",
-	"hecks",
-	"heckin",
-	"gosh",
-	"bloody",
-	"bollocks",
-	"bollox",
-	// crap family
-	"crap",
-	"craps",
-	"crappy",
-	"crappier",
-	"crappiest",
-	"crapped",
-	"crapping",
-	"crapload",
-	"crapola",
-	// piss family
-	"piss",
-	"pisses",
-	"pissed",
-	"pissing",
-	"pisser",
-	"pisspoor",
-	"pisstake",
-	"pisshead",
-	// ass family
-	"ass",
-	"asses",
-	"asshole",
-	"assholes",
-	"asshat",
-	"asshats",
-	"asswipe",
-	"asswipes",
-	"assclown",
-	"assbag",
-	"asskisser",
-	"dumbass",
-	"dumbasses",
-	"jackass",
-	"jackasses",
-	"smartass",
-	"smartasses",
-	"badass",
-	"badasses",
-	"lazyass",
-	"fatass",
-	"hardass",
-	"halfass",
-	"halfassed",
-	"arse",
-	"arsed",
-	"arsehole",
-	"arseholes",
-	"arsewipe",
-	// bitch family
-	"bitch",
-	"bitches",
-	"bitched",
-	"bitching",
-	"bitchy",
-	"bitchier",
-	"bitchiest",
-	"sonofabitch",
-	"biatch",
-	"biotch",
-	// strong vulgarity
-	"cunt",
-	"cunts",
-	"cunty",
-	"cuntish",
-	"twat",
-	"twats",
-	"twatty",
-	"bastard",
-	"bastards",
-	// body-part insults
-	"dick",
-	"dicks",
-	"dickhead",
-	"dickheads",
-	"dickish",
-	"dickwad",
-	"dickwads",
-	"dickface",
-	"dickbag",
-	"prick",
-	"pricks",
-	"prickish",
-	"cock",
-	"cocks",
-	"cocky",
-	"cockier",
-	"cockiest",
-	"cockhead",
-	"cockblock",
-	"cocksucker",
-	"cocksuckers",
-	"knobhead",
-	"knobheads",
-	"knobend",
-	"wanker",
-	"wankers",
-	"wankery",
-	"tosser",
-	"tossers",
-	"jerkoff",
-	"jerkoffs",
-	"douche",
-	"douches",
-	"douchebag",
-	"douchebags",
-	"douchey",
-	"scumbag",
-	"scumbags",
-	"scum",
-	"sleazebag",
-	"sleazeball",
-	"slimeball",
-	"lowlife",
-	"lowlifes",
-	"deadbeat",
-	// intelligence-based insults
-	"idiot",
-	"idiots",
-	"idiotic",
-	"idiocy",
-	"stupid",
-	"stupider",
-	"stupidest",
-	"stupidity",
-	"moron",
-	"morons",
-	"moronic",
-	"imbecile",
-	"imbeciles",
-	"retard",
-	"retards",
-	"retarded",
-	"dumb",
-	"dumber",
-	"dumbest",
-	"dumbo",
-	"fool",
-	"fools",
-	"foolish",
-	"foolery",
-	"clown",
-	"clowns",
-	"clownish",
-	"buffoon",
-	"buffoons",
-	"simpleton",
-	"halfwit",
-	"halfwits",
-	"nitwit",
-	"nitwits",
-	"dimwit",
-	"dimwits",
-	"dolt",
-	"dolts",
-	"doltish",
-	"knucklehead",
-	"knuckleheads",
-	"blockhead",
-	"blockheads",
-	"lamebrain",
-	"airhead",
-	"airheads",
-	"scatterbrain",
-	"numbnuts",
-	"numbskull",
-	"numpty",
-	"numpties",
-	"muppet",
-	"muppets",
-	"pillock",
-	"pillocks",
-	"plonker",
-	"plonkers",
-	"prat",
-	"prats",
-	"berk",
-	"berks",
-	"ninny",
-	"ninnies",
-	"dingbat",
-	"dingbats",
-	"putz",
-	"putzes",
-	"schmuck",
-	"schmucks",
-	"jerk",
-	"jerks",
-	"jerkface",
-	"gits",
-	"sod",
-	"sodding",
-	"bugger",
-	"buggered",
-	// generic aggression / dismissal
-	"suck",
-	"sucks",
-	"sucked",
-	"sucking",
-	"sucky",
-	"suckage",
-	"trashy",
-	// religious exclamations
-	"jesus",
-	"christ",
-	"jeez",
-	"jeezus",
-	"sheesh",
-	"godsake",
-	// chat acronyms
-	"wtf",
-	"wth",
-	"wtaf",
-	"stfu",
-	"gtfo",
-	"omfg",
-	"omg",
-	"ffs",
-	"jfc",
-	"kys",
-	"fml",
-	"smh",
-	"smdh",
-	"smfh",
-	"idgaf",
-	"idfc",
-	"lmfao",
-	"fubar",
-	"snafu",
+  // f-word family
+  "fuck",
+  "fucks",
+  "fucked",
+  "fucking",
+  "fuckin",
+  "fucker",
+  "fuckers",
+  "fuckup",
+  "fuckups",
+  "fuckhead",
+  "fuckheads",
+  "fuckface",
+  "fuckwit",
+  "fuckwits",
+  "fucktard",
+  "fuckery",
+  "fuckoff",
+  "motherfucker",
+  "motherfuckers",
+  "motherfucking",
+  "clusterfuck",
+  "ratfuck",
+  "unfuck",
+  // censored / euphemistic f-word
+  "fk",
+  "fks",
+  "fking",
+  "fkin",
+  "fker",
+  "fck",
+  "fcks",
+  "fcking",
+  "fckin",
+  "fcker",
+  "fuk",
+  "fuking",
+  "fukin",
+  "eff",
+  "effs",
+  "effed",
+  "effing",
+  "frick",
+  "fricks",
+  "fricked",
+  "fricking",
+  "frickin",
+  "freaking",
+  "freakin",
+  "freaked",
+  // s-word family
+  "shit",
+  "shits",
+  "shat",
+  "shitty",
+  "shittier",
+  "shittiest",
+  "shite",
+  "shites",
+  "shited",
+  "shitting",
+  "shitter",
+  "shitters",
+  "shithead",
+  "shitheads",
+  "shitshow",
+  "shitstorm",
+  "shitstain",
+  "shitfaced",
+  "shitload",
+  "shitbag",
+  "shitcan",
+  "shitcanned",
+  "shitpost",
+  "shitposting",
+  "bullshit",
+  "bullshits",
+  "bullshitting",
+  "bullshitter",
+  "horseshit",
+  "batshit",
+  "dogshit",
+  "dipshit",
+  "jackshit",
+  "dumbshit",
+  "holyshit",
+  // mild swears
+  "damn",
+  "damns",
+  "damned",
+  "damning",
+  "dammit",
+  "goddamn",
+  "goddamned",
+  "goddamnit",
+  "goddammit",
+  "darn",
+  "darns",
+  "darned",
+  "darnit",
+  "dang",
+  "danged",
+  "dangit",
+  "hell",
+  "hells",
+  "heck",
+  "hecks",
+  "heckin",
+  "gosh",
+  "bloody",
+  "bollocks",
+  "bollox",
+  // crap family
+  "crap",
+  "craps",
+  "crappy",
+  "crappier",
+  "crappiest",
+  "crapped",
+  "crapping",
+  "crapload",
+  "crapola",
+  // piss family
+  "piss",
+  "pisses",
+  "pissed",
+  "pissing",
+  "pisser",
+  "pisspoor",
+  "pisstake",
+  "pisshead",
+  // ass family
+  "ass",
+  "asses",
+  "asshole",
+  "assholes",
+  "asshat",
+  "asshats",
+  "asswipe",
+  "asswipes",
+  "assclown",
+  "assbag",
+  "asskisser",
+  "dumbass",
+  "dumbasses",
+  "jackass",
+  "jackasses",
+  "smartass",
+  "smartasses",
+  "badass",
+  "badasses",
+  "lazyass",
+  "fatass",
+  "hardass",
+  "halfass",
+  "halfassed",
+  "arse",
+  "arsed",
+  "arsehole",
+  "arseholes",
+  "arsewipe",
+  // bitch family
+  "bitch",
+  "bitches",
+  "bitched",
+  "bitching",
+  "bitchy",
+  "bitchier",
+  "bitchiest",
+  "sonofabitch",
+  "biatch",
+  "biotch",
+  // strong vulgarity
+  "cunt",
+  "cunts",
+  "cunty",
+  "cuntish",
+  "twat",
+  "twats",
+  "twatty",
+  "bastard",
+  "bastards",
+  // body-part insults
+  "dick",
+  "dicks",
+  "dickhead",
+  "dickheads",
+  "dickish",
+  "dickwad",
+  "dickwads",
+  "dickface",
+  "dickbag",
+  "prick",
+  "pricks",
+  "prickish",
+  "cock",
+  "cocks",
+  "cocky",
+  "cockier",
+  "cockiest",
+  "cockhead",
+  "cockblock",
+  "cocksucker",
+  "cocksuckers",
+  "knobhead",
+  "knobheads",
+  "knobend",
+  "wanker",
+  "wankers",
+  "wankery",
+  "tosser",
+  "tossers",
+  "jerkoff",
+  "jerkoffs",
+  "douche",
+  "douches",
+  "douchebag",
+  "douchebags",
+  "douchey",
+  "scumbag",
+  "scumbags",
+  "scum",
+  "sleazebag",
+  "sleazeball",
+  "slimeball",
+  "lowlife",
+  "lowlifes",
+  "deadbeat",
+  // intelligence-based insults
+  "idiot",
+  "idiots",
+  "idiotic",
+  "idiocy",
+  "stupid",
+  "stupider",
+  "stupidest",
+  "stupidity",
+  "moron",
+  "morons",
+  "moronic",
+  "imbecile",
+  "imbeciles",
+  "retard",
+  "retards",
+  "retarded",
+  "dumb",
+  "dumber",
+  "dumbest",
+  "dumbo",
+  "fool",
+  "fools",
+  "foolish",
+  "foolery",
+  "clown",
+  "clowns",
+  "clownish",
+  "buffoon",
+  "buffoons",
+  "simpleton",
+  "halfwit",
+  "halfwits",
+  "nitwit",
+  "nitwits",
+  "dimwit",
+  "dimwits",
+  "dolt",
+  "dolts",
+  "doltish",
+  "knucklehead",
+  "knuckleheads",
+  "blockhead",
+  "blockheads",
+  "lamebrain",
+  "airhead",
+  "airheads",
+  "scatterbrain",
+  "numbnuts",
+  "numbskull",
+  "numpty",
+  "numpties",
+  "muppet",
+  "muppets",
+  "pillock",
+  "pillocks",
+  "plonker",
+  "plonkers",
+  "prat",
+  "prats",
+  "berk",
+  "berks",
+  "ninny",
+  "ninnies",
+  "dingbat",
+  "dingbats",
+  "putz",
+  "putzes",
+  "schmuck",
+  "schmucks",
+  "jerk",
+  "jerks",
+  "jerkface",
+  "gits",
+  "sod",
+  "sodding",
+  "bugger",
+  "buggered",
+  // generic aggression / dismissal
+  "suck",
+  "sucks",
+  "sucked",
+  "sucking",
+  "sucky",
+  "suckage",
+  "trashy",
+  // religious exclamations
+  "jesus",
+  "christ",
+  "jeez",
+  "jeezus",
+  "sheesh",
+  "godsake",
+  // chat acronyms
+  "wtf",
+  "wth",
+  "wtaf",
+  "stfu",
+  "gtfo",
+  "omfg",
+  "omg",
+  "ffs",
+  "jfc",
+  "kys",
+  "fml",
+  "smh",
+  "smdh",
+  "smfh",
+  "idgaf",
+  "idfc",
+  "lmfao",
+  "fubar",
+  "snafu",
 ];
 
 const PROFANITY_RE = new RegExp(String.raw`\b(?:${PROFANITY.join("|")})\b`, "gi");
@@ -449,19 +449,19 @@ const WORD_RE = /\S+/g;
 // Picked to avoid hex / base64 contamination via the surrounding `\b` plus
 // letter-only alternatives.
 const ANGUISH_PATTERNS: readonly string[] = [
-	"no{3,}", //          nooo, noooooo
-	"a+h{2,}", //         ahh, aaaahhh
-	"u+r?g+h+", //        ugh, ughh, urgh, uuugh
-	"a+r+g+h+", //        argh, aaargh, arrgghhh
-	"g+r{2,}", //         grr, grrrr
-	"st+o{3,}p+", //      stooop, sttooopp
-	"w+h+y{3,}", //       whyyy, whyyyyy
-	"f+u{3,}c*k*", //     fuuu, fuuuck
-	"wtf{3,}", //         wtfff
-	"o+m+g{2,}", //       omgg, omggg
-	"ye+s{3,}", //        yesss, yeessss
-	"g+o+d{3,}", //       goddd, goddddd
-	"br+u+h{2,}", //      bruhh, bruuuhh
+  "no{3,}", //          nooo, noooooo
+  "a+h{2,}", //         ahh, aaaahhh
+  "u+r?g+h+", //        ugh, ughh, urgh, uuugh
+  "a+r+g+h+", //        argh, aaargh, arrgghhh
+  "g+r{2,}", //         grr, grrrr
+  "st+o{3,}p+", //      stooop, sttooopp
+  "w+h+y{3,}", //       whyyy, whyyyyy
+  "f+u{3,}c*k*", //     fuuu, fuuuck
+  "wtf{3,}", //         wtfff
+  "o+m+g{2,}", //       omgg, omggg
+  "ye+s{3,}", //        yesss, yeessss
+  "g+o+d{3,}", //       goddd, goddddd
+  "br+u+h{2,}", //      bruhh, bruuuhh
 ];
 const ANGUISH_RE = new RegExp(String.raw`\b(?:${ANGUISH_PATTERNS.join("|")})\b`, "gi");
 const DUDE_RE = /\bdude\b/gi;
@@ -490,9 +490,9 @@ const SAD_EMOTICON_RE = /(?<=^|[\s.!?])[:;]-?\(+/g;
 // / `nono ...` also count (via `no` + follower `u`/`no`) - on the real
 // corpus every such hit is a genuine correction.
 const NEGATION_LEAD_RE =
-	/^[ \t]*(?:(?:nope|nah|nvm|wrong|incorrect)\b|no(?=\s*(?:[,.!?;:\u2013\u2014]|-(?!\w)|$|(?:i|im|u|you|ur|we|it|its|that|thats|this|the|they|theyre|he|she|man|dude|bro|wait|dont|not|stop|just|again|please|plz|but|actually|literally|seriously|sorry|no|never|nothing|wtf|why|what|wrong)\b)))/gi;
+  /^[ \t]*(?:(?:nope|nah|nvm|wrong|incorrect)\b|no(?=\s*(?:[,.!?;:\u2013\u2014]|-(?!\w)|$|(?:i|im|u|you|ur|we|it|its|that|thats|this|the|they|theyre|he|she|man|dude|bro|wait|dont|not|stop|just|again|please|plz|but|actually|literally|seriously|sorry|no|never|nothing|wtf|why|what|wrong)\b)))/gi;
 const NEGATION_PHRASE_RE =
-	/\b(?:that['\u2019]?s\s+not\s+(?:what|right|it)|not\s+what\s+i\s+(?:meant|asked|said|wanted)|makes\s+(?:no|zero)\s+sense)\b/gi;
+  /\b(?:that['\u2019]?s\s+not\s+(?:what|right|it)|not\s+what\s+i\s+(?:meant|asked|said|wanted)|makes\s+(?:no|zero)\s+sense)\b/gi;
 
 // User repeating themselves. The recall pattern accepts an optional
 // `like ` / `as ` prefix so "like i said" doesn't double-count with bare
@@ -502,13 +502,14 @@ const NEGATION_PHRASE_RE =
 // ambiguous so we only count `still` when followed by a negative or
 // sameness marker.
 const REPETITION_RECALL_RE =
-	/\b(?:(?:like|as)\s+i\s+(?:said|told\s+you|asked)|i\s+(?:meant|said|told\s+you|asked\s+you|already\s+(?:said|told|did|asked|wrote)))\b/gi;
+  /\b(?:(?:like|as)\s+i\s+(?:said|told\s+you|asked)|i\s+(?:meant|said|told\s+you|asked\s+you|already\s+(?:said|told|did|asked|wrote)))\b/gi;
 const REPETITION_STILL_RE =
-	/\bstill\s+(?:doesn['\u2019]?t|doesnt|isn['\u2019]?t|isnt|not|broken|wrong|fails|failing|the\s+same|same)\b/gi;
+  /\bstill\s+(?:doesn['\u2019]?t|doesnt|isn['\u2019]?t|isnt|not|broken|wrong|fails|failing|the\s+same|same)\b/gi;
 
 // Direct second-person reproach. `you` alone is too generic (>7k hits in
 // short prose), so we anchor it to a small set of accusatory verbs.
-const BLAME_YOU_RE = /\byou\s+(?:didn['\u2019]?t|did\s+not|broke|missed|forgot|keep|always|never|still|ignored)\b/gi;
+const BLAME_YOU_RE =
+  /\byou\s+(?:didn['\u2019]?t|did\s+not|broke|missed|forgot|keep|always|never|still|ignored)\b/gi;
 // `why would/did you ...` is reproach even when politely phrased. Bare
 // `why you` / `why are you` are dominated by neutral how-does-this-work
 // questions, so only the past/conditional forms count.
@@ -547,10 +548,10 @@ const MAX_PROSE_LINES = 3;
 
 /** Count regex hits without materializing the match array. */
 function countMatches(text: string, re: RegExp): number {
-	let count = 0;
-	re.lastIndex = 0;
-	while (re.exec(text) !== null) count++;
-	return count;
+  let count = 0;
+  re.lastIndex = 0;
+  while (re.exec(text) !== null) count++;
+  return count;
 }
 
 // A sentence needs 2+ uppercase runs ("WHAT THE HELL"), or a single elongated
@@ -561,10 +562,10 @@ const UPPER_RUN_RE = /\p{Lu}{2,}/gu;
 const TRIPLED_LETTER_RE = /(\p{Lu})\1\1/u;
 
 function isShoutedSentence(sentence: string): boolean {
-	const runs = sentence.match(UPPER_RUN_RE);
-	if (!runs) return false;
-	if (runs.length >= 2) return true;
-	return runs[0].length >= YELLING_MIN_LETTERS && TRIPLED_LETTER_RE.test(runs[0]);
+  const runs = sentence.match(UPPER_RUN_RE);
+  if (!runs) return false;
+  if (runs.length >= 2) return true;
+  return runs[0].length >= YELLING_MIN_LETTERS && TRIPLED_LETTER_RE.test(runs[0]);
 }
 
 /**
@@ -576,19 +577,19 @@ function isShoutedSentence(sentence: string): boolean {
  * {@link isShoutedSentence}.
  */
 function countYellingSentences(text: string): number {
-	let count = 0;
-	SENTENCE_RE.lastIndex = 0;
-	let match: RegExpExecArray | null = SENTENCE_RE.exec(text);
-	while (match !== null) {
-		const sentence = match[0];
-		const letters = countMatches(sentence, LETTER_RE);
-		if (letters >= YELLING_MIN_LETTERS) {
-			const upper = countMatches(sentence, UPPER_LETTER_RE);
-			if (upper / letters > YELLING_THRESHOLD && isShoutedSentence(sentence)) count++;
-		}
-		match = SENTENCE_RE.exec(text);
-	}
-	return count;
+  let count = 0;
+  SENTENCE_RE.lastIndex = 0;
+  let match: RegExpExecArray | null = SENTENCE_RE.exec(text);
+  while (match !== null) {
+    const sentence = match[0];
+    const letters = countMatches(sentence, LETTER_RE);
+    if (letters >= YELLING_MIN_LETTERS) {
+      const upper = countMatches(sentence, UPPER_LETTER_RE);
+      if (upper / letters > YELLING_THRESHOLD && isShoutedSentence(sentence)) count++;
+    }
+    match = SENTENCE_RE.exec(text);
+  }
+  return count;
 }
 
 /**
@@ -598,25 +599,25 @@ function countYellingSentences(text: string): number {
  * reflects what was removed instead of merging neighbors.
  */
 function stripStructuredContent(text: string): string {
-	return text
-		.replace(FENCED_CODE_RE, "\n")
-		.replace(XML_TAG_PAIR_RE, "\n")
-		.replace(XML_TAG_BARE_RE, " ")
-		.replace(INLINE_CODE_RE, " ")
-		.replace(URL_RE, " ")
-		.replace(FILE_MENTION_RE, "$1 ")
-		.replace(DOTTED_TOKEN_RE, " ")
-		.replace(QUOTE_LINE_RE, "")
-		.replace(IMAGE_MARKER_RE, " ")
-		.replace(ANSI_ESCAPE_RE, "");
+  return text
+    .replace(FENCED_CODE_RE, "\n")
+    .replace(XML_TAG_PAIR_RE, "\n")
+    .replace(XML_TAG_BARE_RE, " ")
+    .replace(INLINE_CODE_RE, " ")
+    .replace(URL_RE, " ")
+    .replace(FILE_MENTION_RE, "$1 ")
+    .replace(DOTTED_TOKEN_RE, " ")
+    .replace(QUOTE_LINE_RE, "")
+    .replace(IMAGE_MARKER_RE, " ")
+    .replace(ANSI_ESCAPE_RE, "");
 }
 
 function countNonEmptyLines(text: string): number {
-	let count = 0;
-	for (const line of text.split("\n")) {
-		if (line.trim().length > 0) count++;
-	}
-	return count;
+  let count = 0;
+  for (const line of text.split("\n")) {
+    if (line.trim().length > 0) count++;
+  }
+  return count;
 }
 
 /**
@@ -625,71 +626,74 @@ function countNonEmptyLines(text: string): number {
  * `text` may be empty or whitespace; in that case every metric is 0.
  */
 export function computeUserMessageMetrics(text: string): UserMessageMetrics {
-	const trimmed = text.trim();
-	if (!trimmed) {
-		return {
-			chars: 0,
-			words: 0,
-			yelling: 0,
-			profanity: 0,
-			anguish: 0,
-			negation: 0,
-			repetition: 0,
-			blame: 0,
-		};
-	}
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return {
+      chars: 0,
+      words: 0,
+      yelling: 0,
+      profanity: 0,
+      anguish: 0,
+      negation: 0,
+      repetition: 0,
+      blame: 0,
+    };
+  }
 
-	const chars = trimmed.length;
-	const words = countMatches(trimmed, WORD_RE);
+  const chars = trimmed.length;
+  const words = countMatches(trimmed, WORD_RE);
 
-	// Behavior signals are computed on a stripped prose body; long /
-	// well-formatted messages score zero because they are deliberate, not
-	// emotional outbursts.
-	const prose = stripStructuredContent(trimmed).trim();
-	if (!prose || countNonEmptyLines(prose) >= MAX_PROSE_LINES) {
-		return {
-			chars,
-			words,
-			yelling: 0,
-			profanity: 0,
-			anguish: 0,
-			negation: 0,
-			repetition: 0,
-			blame: 0,
-		};
-	}
+  // Behavior signals are computed on a stripped prose body; long /
+  // well-formatted messages score zero because they are deliberate, not
+  // emotional outbursts.
+  const prose = stripStructuredContent(trimmed).trim();
+  if (!prose || countNonEmptyLines(prose) >= MAX_PROSE_LINES) {
+    return {
+      chars,
+      words,
+      yelling: 0,
+      profanity: 0,
+      anguish: 0,
+      negation: 0,
+      repetition: 0,
+      blame: 0,
+    };
+  }
 
-	const anguish =
-		countMatches(prose, DRAMA_RE) +
-		countMatches(prose, ANGUISH_RE) +
-		countMatches(prose, DUDE_RE) +
-		countMatches(prose, SAD_EMOTICON_RE);
+  const anguish =
+    countMatches(prose, DRAMA_RE) +
+    countMatches(prose, ANGUISH_RE) +
+    countMatches(prose, DUDE_RE) +
+    countMatches(prose, SAD_EMOTICON_RE);
 
-	const negation = countMatches(prose, NEGATION_LEAD_RE) + countMatches(prose, NEGATION_PHRASE_RE);
-	const repetition = countMatches(prose, REPETITION_RECALL_RE) + countMatches(prose, REPETITION_STILL_RE);
-	const blame =
-		countMatches(prose, BLAME_YOU_RE) + countMatches(prose, BLAME_WHY_RE) + countMatches(prose, BLAME_STOP_RE);
+  const negation = countMatches(prose, NEGATION_LEAD_RE) + countMatches(prose, NEGATION_PHRASE_RE);
+  const repetition =
+    countMatches(prose, REPETITION_RECALL_RE) + countMatches(prose, REPETITION_STILL_RE);
+  const blame =
+    countMatches(prose, BLAME_YOU_RE) +
+    countMatches(prose, BLAME_WHY_RE) +
+    countMatches(prose, BLAME_STOP_RE);
 
-	return {
-		chars,
-		words,
-		yelling: countYellingSentences(prose),
-		profanity: countMatches(prose, PROFANITY_RE),
-		anguish,
-		negation,
-		repetition,
-		blame,
-	};
+  return {
+    chars,
+    words,
+    yelling: countYellingSentences(prose),
+    profanity: countMatches(prose, PROFANITY_RE),
+    anguish,
+    negation,
+    repetition,
+    blame,
+  };
 }
 
 /** Empty metrics constant for callers that need a default. */
 export const EMPTY_USER_METRICS: UserMessageMetrics = Object.freeze({
-	chars: 0,
-	words: 0,
-	yelling: 0,
-	profanity: 0,
-	anguish: 0,
-	negation: 0,
-	repetition: 0,
-	blame: 0,
+  chars: 0,
+  words: 0,
+  yelling: 0,
+  profanity: 0,
+  anguish: 0,
+  negation: 0,
+  repetition: 0,
+  blame: 0,
 });
