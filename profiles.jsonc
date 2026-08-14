@@ -174,4 +174,13 @@
     // "skills/home-lab/": { "tags": ["personal"] },
     // "npm:@pi-stef/atlassian": { "tags": ["work"] }
   },
+
+  // Standalone global CLI tools (NOT pi resources). These are regular npm
+  // packages that live in this repo and are installed globally (npm i -g) by
+  // ./install.sh, separate from the profile resource sync above. They are not
+  // synced into any profile dir and are not loaded by pi. `path` is relative
+  // to the repo root; `bin` is informational (read from package.json).
+  "tools": {
+    "pi-omp-stats": { "path": "packages/pi-omp-stats" },
+  },
 }

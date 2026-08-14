@@ -130,6 +130,27 @@ instead. Currently used for `"hideThinkingBlock": true` and the shared
 - **Per-profile:** syncs only resources whose tags match that profile (plus
   all `core`).
 
+### Standalone tools (global CLIs)
+
+The optional top-level `"tools"` object in `profiles.jsonc` declares
+**standalone npm packages that live in this repo and are installed globally**
+(`npm i -g`) by `./install.sh`. These are **not pi resources**: they are not
+synced into any profile dir, not loaded by pi, and not installed via
+`pi install`. They're regular global CLI tools that happen to be versioned
+alongside the repo.
+
+```jsonc
+"tools": {
+  "pi-omp-stats": { "path": "packages/pi-omp-stats" }
+}
+```
+
+`path` is relative to the repo root; the bin name and version are read from
+the tool's `package.json`. On install, `install.sh` runs `npm install` (builds
+`dist/` via `prepare`) then `npm i -g .` for each tool, and **skips a tool
+whose globally-installed version already matches** (idempotent). Currently the
+only tool is `pi-omp-stats` (see `packages/pi-omp-stats/`).
+
 ## Non-clobber sync
 
 `install.sh` tracks a hash of every synced file in
