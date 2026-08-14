@@ -20,7 +20,8 @@
 import { execFile } from "node:child_process";
 
 const FAST_REFRESH_MS = 1000;
-const PR_REFRESH_MS = 20_000;
+const PR_REFRESH_MS = 20_000; // branch changed / PR exists
+const PR_NO_PR_MS = 5 * 60_000; // last check found no PR — re-check rarely
 
 function setStatus(ctx: any, key: string, text: string | undefined): void {
   try {
@@ -82,6 +83,20 @@ function computeCacheHitRate(ctx: any): string {
   return `${Math.round((cacheRead / total) * 100)}%`;
 }
 
+function currentBranch(cwd: string): Promise<string> {
+  return new Promise((resolve) => {
+    execFile(
+      "git",
+      ["symbolic-ref", "--short", "HEAD"],
+      { cwd, timeout: 5000 },
+      (error, stdout) => {
+        if (error) resolve("");
+        else resolve(stdout.trim());
+      },
+    );
+  });
+}
+
 function runGhPrView(cwd: string): Promise<string> {
   return new Promise((resolve) => {
     execFile(
@@ -128,21 +143,38 @@ export default function (pi: any): void {
       // clear any ctxpct a previous version of this extension set
       setStatus(ctx, "ctxpct", undefined);
     };
+    let lastBranch = "";
+    let lastPr = "|"; // sentinel: never matched yet
+    let prTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedulePr = (ms: number) => {
+      if (prTimer) clearTimeout(prTimer);
+      prTimer = setTimeout(publishPr, ms);
+      unrefTimer(prTimer);
+    };
+
     const publishPr = async () => {
+      const branch = await currentBranch(cwd);
+      // Re-query only when the branch changed since the last check.
+      if (branch === lastBranch && lastPr !== "|") {
+        schedulePr(lastPr === "" ? PR_NO_PR_MS : PR_REFRESH_MS);
+        return;
+      }
+      lastBranch = branch;
       const pr = await runGhPrView(cwd);
+      lastPr = pr;
       setStatus(ctx, "pr", pr === "" ? undefined : pr);
+      schedulePr(pr === "" ? PR_NO_PR_MS : PR_REFRESH_MS);
     };
 
     publishFast();
     publishPr();
     const fastTimer = setInterval(publishFast, FAST_REFRESH_MS);
-    const prTimer = setInterval(publishPr, PR_REFRESH_MS);
     unrefTimer(fastTimer);
-    unrefTimer(prTimer);
 
     pi.on("session_shutdown", () => {
       clearInterval(fastTimer);
-      clearInterval(prTimer);
+      if (prTimer) clearTimeout(prTimer);
     });
   });
 }
