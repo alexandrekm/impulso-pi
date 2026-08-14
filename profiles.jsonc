@@ -57,6 +57,13 @@
       "dest": "extensions/pi-permission-system/config.json",
     },
 
+    // search_docs: query the team's internal docs Knowledge Base (AWS
+    // Bedrock) via the API Gateway proxy before falling back to the web.
+    // Gateway mode only — needs KB_GATEWAY_URL + KB_GATEWAY_KEY. If the KB
+    // has nothing, the tool tells the agent to use the `websearch` tool.
+    // Work-only: the KB holds internal/work documentation.
+    "extensions/search_docs/search_docs.ts": { "tags": ["work"] },
+
     // Future tagged resources, e.g.:
     // "skills/jira/": { "tags": ["work"] },
     // "skills/home-lab/": { "tags": ["personal"] },
