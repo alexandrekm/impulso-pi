@@ -135,6 +135,9 @@ Service management (background daemon, survives reboot):
   pi-omp-stats service install [--port P] [--host H]
                               Register + start a user service (launchd on macOS,
                               systemd --user on Linux). KeepAlive/Restart=always.
+                              Defaults to --host 0.0.0.0 (unattended daemon,
+                              often reached from other machines); pass
+                              --host 127.0.0.1 to keep it loopback-only.
   pi-omp-stats service uninstall
                               Stop + remove the service.
   pi-omp-stats service status
@@ -191,7 +194,7 @@ async function main(): Promise<void> {
   const { values, positionals } = parseArgs({
     options: {
       port: { type: "string", short: "p", default: "3847" },
-      host: { type: "string", default: "127.0.0.1" },
+      host: { type: "string" },
       json: { type: "boolean", short: "j", default: false },
       sync: { type: "boolean", short: "s", default: false },
       "sessions-dir": { type: "string" },
@@ -220,7 +223,10 @@ async function main(): Promise<void> {
       process.exit(2);
     }
     const port = parseInt(values.port || "3847", 10);
-    const host = values.host || "127.0.0.1";
+    // Service (install/start/restart) defaults to 0.0.0.0: it's meant to run
+    // unattended as a daemon, often reached from other machines, unlike the
+    // ad-hoc foreground run below which stays loopback-only for safety.
+    const host = values.host || "0.0.0.0";
     if (action === "status") {
       const installed = describeInstalledService();
       if (installed?.port) {
@@ -265,6 +271,7 @@ async function main(): Promise<void> {
     const port = parseInt(values.port || "3847", 10);
     const host = values.host || "127.0.0.1";
     const { hostname, port: actualPort } = await startServer(port, host);
+
     console.log(`Dashboard available at: http://${hostname}:${actualPort}`);
     console.log("Press Ctrl+C to stop\n");
 

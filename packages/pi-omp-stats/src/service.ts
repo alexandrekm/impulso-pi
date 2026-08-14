@@ -6,11 +6,14 @@
  *   - macOS  → launchd user agent  (~/Library/LaunchAgents/dev.pi.omp-stats.plist)
  *   - Linux  → systemd user unit   (~/.config/systemd/user/pi-omp-stats.service)
  *
- * Both are *user* services (no root), matching the loopback-only personal
- * dashboard use case. The daemon runs `node <dist/index.js> --port <P>
- * --host <H>` with KeepAlive/Restart=always, and inherits the PI_STATS_* /
- * PI_CODING_AGENT_* env vars that are set at install time so it reads the same
- * sessions dir the installer does.
+ * Both are *user* services (no root). The daemon runs `node <dist/index.js>
+ * --port <P> --host <H>` with KeepAlive/Restart=always, and inherits the
+ * PI_STATS_* / PI_CODING_AGENT_* env vars that are set at install time so it
+ * reads the same sessions dir the installer does. Unlike the ad-hoc foreground
+ * CLI (loopback-only by default), the service defaults to `--host 0.0.0.0`
+ * (see index.ts) since it's meant to run unattended and be reachable from
+ * other machines; pass `--host 127.0.0.1` at install time to keep it
+ * loopback-only.
  *
  * MIT, © impulso-pi port authors.
  */

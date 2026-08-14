@@ -17,7 +17,9 @@ JSONL shape.
 - **`node:sqlite`** stores aggregates (requires **Node ≥ 22.5**).
 - **Single-file dashboard** — vanilla JS + Chart.js (CDN, with a local-inline
   option for a zero-CDN build).
-- **Loopback by default** — binds `127.0.0.1`; `--host` is required to expose.
+- **Loopback by default in the foreground CLI** — `pi-omp-stats` binds
+  `127.0.0.1`; pass `--host` to expose. The background **service** (see
+  below) defaults to `0.0.0.0` since it's meant to run unattended.
 
 ## Install
 
@@ -99,18 +101,23 @@ the platform's service manager:
   Logs: `journalctl --user -u pi-omp-stats.service -f`.
 
 ```bash
-pi-omp-stats service install              # register + start (default port 3847)
-pi-omp-stats service install --port 8080  # register on a custom port
-pi-omp-stats service status               # is it up? (exit 0 = running)
-pi-omp-stats service restart              # pick up a rebuilt dist/index.js
-pi-omp-stats service stop                 # suspend (KeepAlive may relaunch)
-pi-omp-stats service uninstall            # stop + remove the service
+pi-omp-stats service install                    # register + start (port 3847, host 0.0.0.0)
+pi-omp-stats service install --port 8080        # register on a custom port
+pi-omp-stats service install --host 127.0.0.1   # keep the daemon loopback-only
+pi-omp-stats service status                     # is it up? (exit 0 = running)
+pi-omp-stats service restart                    # pick up a rebuilt dist/index.js
+pi-omp-stats service stop                       # suspend (KeepAlive may relaunch)
+pi-omp-stats service uninstall                  # stop + remove the service
 ```
 
 The service runs `node <dist/index.js> --port <P> --host <H>` and forwards the
 `PI_STATS_*` / `PI_CODING_AGENT_*` env vars that are set at install time, so the
-daemon reads the same sessions dir the installer does. No root required — both
-are user services, matching the loopback-only personal-dashboard use case.
+daemon reads the same sessions dir the installer does. No root required — it's
+a user service. Unlike the ad-hoc foreground run (loopback-only by default),
+`service install` defaults to **`--host 0.0.0.0`** since it's meant to run
+unattended and be reachable from other machines — anyone on that interface can
+read your usage stats, so pass `--host 127.0.0.1` if you only ever access it
+locally.
 
 > Rebuilding `dist/` (e.g. `npm run build` or `npm i -g .`) after an install
 > is fine; the service references the absolute `dist/index.js` path, so a
@@ -178,12 +185,16 @@ Sections: **Overview** (metric cards + time-series), **Models**, **Folders**,
 
 ## Security
 
-The server binds to **`127.0.0.1`** by default. Use `--host 0.0.0.0` to expose
-the dashboard on other interfaces — **anyone reachable on that interface can
-read your usage stats and trigger syncs**, so only do this on a trusted
-network. There is no telemetry; all parsing and aggregation is local. The only
-outbound network call is the optional CDN Chart.js fetch (which the local-inline
-option removes).
+The foreground CLI (`pi-omp-stats`) binds to **`127.0.0.1`** by default; pass
+`--host 0.0.0.0` to expose it on other interfaces. The background **service**
+(`pi-omp-stats service install`) instead defaults to **`0.0.0.0`**, since it's
+meant to run unattended and be reached from other machines — pass
+`--host 127.0.0.1` at install time to keep it loopback-only. Either way,
+**anyone reachable on the bound interface can read your usage stats and
+trigger syncs**, so only bind `0.0.0.0` on a trusted network. There is no
+telemetry; all parsing and aggregation is local. The only outbound network
+call is the optional CDN Chart.js fetch (which the local-inline option
+removes).
 
 ## Origin & license
 
