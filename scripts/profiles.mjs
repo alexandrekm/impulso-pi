@@ -122,6 +122,8 @@ export function resourceExists(repoDir, key) {
  */
 export function relDestPath(key, entry) {
   const kind = classify(key);
+  if (isPackageKind(kind))
+    throw new Error(`relDestPath: package resource "${key}" has no file dest`);
   if (kind === "file") return entry?.dest || join("extensions", basename(key));
   return join("skills", basename(key.replace(/\/$/, "")));
 }

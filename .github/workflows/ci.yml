@@ -66,9 +66,9 @@ jobs:
           # Every non-npm resource must have landed at its resolved dest
           # (collision-aware: on --base, shadowed variants don't land).
           node --input-type=module -e '
-            import { loadProfiles, classify, relDestPath, resolveFileKeys } from "./scripts/profiles.mjs";
+            import { loadProfiles, classify, isPackageKind, relDestPath, resolveFileKeys } from "./scripts/profiles.mjs";
             const p = loadProfiles("profiles.jsonc");
-            const keys = resolveFileKeys(Object.keys(p.resources).filter((k) => classify(k) !== "npm"), p.resources);
+            const keys = resolveFileKeys(Object.keys(p.resources).filter((k) => !isPackageKind(classify(k))), p.resources);
             for (const k of keys) console.log(relDestPath(k, p.resources[k]));
           ' | while read -r dest; do
             test -f "$TEST_AGENT_DIR/$dest" || { echo "missing: $dest" >&2; exit 1; }
