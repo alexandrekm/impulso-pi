@@ -159,6 +159,34 @@
     // https://pi.dev/packages/pi-cache-graph
     "npm:pi-cache-graph": { "tags": ["core"] },
 
+    // Orca Dev integration: Orca hardcodes ~/.pi/agent for its managed pi
+    // extensions (it sets ORCA_PI_SOURCE_AGENT_DIR unconditionally), so under
+    // ppi profiles they land in the wrong dir and are never loaded (pi only
+    // reads PI_CODING_AGENT_DIR, i.e. the active profile). Vendored here so
+    // install.sh puts them where pi actually looks. Orca overwrites its own
+    // copies in ~/.pi/agent/extensions on integration updates — re-copy those
+    // into this repo (`extensions/orca-integration/`, `extensions/herdr/`) and
+    // re-run install.sh when Orca bumps them; check HERDR_INTEGRATION_VERSION
+    // / the `@orca-managed-pi-extension` header for drift. Core so every
+    // profile gets Orca's dashboard status/prefill/title features.
+    //   - orca-agent-status.ts: posts session/tool/message lifecycle events
+    //     to Orca's local hook server (dashboard status, active tool, last
+    //     message preview).
+    //   - orca-prefill.ts: pre-fills the editor from ORCA_PI_PREFILL on
+    //     startup (Orca "send prompt" suggestions).
+    //   - orca-titlebar-spinner.ts: animates the terminal title while the
+    //     agent is working.
+    //   - herdr/herdr-agent-state.ts: reports working/blocked/idle state to
+    //     herdr (Orca's pane orchestration layer) over a unix socket, for
+    //     the per-pane status indicator. Installed/versioned by herdr
+    //     independently of the orca-* files above (HERDR_INTEGRATION_VERSION).
+    // All four are no-ops unless the corresponding ORCA_*/HERDR_* env vars
+    // are set, so they're inert outside an Orca-launched terminal.
+    "extensions/orca-integration/orca-agent-status.ts": { "tags": ["core"] },
+    "extensions/orca-integration/orca-prefill.ts": { "tags": ["core"] },
+    "extensions/orca-integration/orca-titlebar-spinner.ts": { "tags": ["core"] },
+    "extensions/herdr/herdr-agent-state.ts": { "tags": ["core"] },
+
     // address-pr-comments: one-pass workflow to fetch, evaluate, and act on
     // every PR review comment (Copilot/bots + human) — assess each, batch-apply
     // approved fixes, commit (Conventional Commits + Jira scope), reply to and
