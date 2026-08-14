@@ -32,6 +32,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run format:check
       - run: npm run check:json
+      - run: npm test
 
       - name: shellcheck
         run: |

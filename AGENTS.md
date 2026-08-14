@@ -96,8 +96,8 @@ dir) to land at a nested path — e.g. an extension's config file. If several
 selected keys share a `dest`, tag-specific (non-core) keys beat core ones;
 remaining ties go to the alphabetically-first key and losers are flagged as
 `shadowed` (this happens on `--base`, which selects everything). Example:
-the `pi-permission-system` configs in `profiles.jsonc`, where work and
-personal variants both map to `extensions/pi-permission-system/config.json`
+the `command-guard` configs in `profiles.jsonc`, where work and
+personal variants both map to `extensions/command-guard/command-guard.json`
 and never collide because no profile has both tags.
 
 ### Shared settings
@@ -127,6 +127,7 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
 
 ## Current core resources
 
+- `extensions/command-guard/` — bash command-guard (default-allow glob policy)
 - `extensions/footer/footer-widgets.ts` — footer widget extension
 - `extensions/footer/pi-footer.json` — footer layout config
 - `npm:pi-footer` — the footer renderer

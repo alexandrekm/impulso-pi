@@ -56,6 +56,13 @@ file before installing or pulling.
 
 ## Contents
 
+### `extensions/command-guard/` — default-allow bash gate
+
+In-repo replacement for `@gotgenes/pi-permission-system`. Glob `ask`/`deny`
+lists, wrapper peeling (`timeout`, `xargs`, `env`, `bash -c`), and a hardcoded
+`.env` deny. Work also asks on mutating Anyscale and AWS CLI commands.
+`./install.sh` uninstalls the old npm package so both gates cannot run at once.
+
 ### `extensions/footer/` — powerline-style status footer
 
 Built on top of [`pi-footer`](https://github.com/wobondar/pi-footer) (installed
@@ -86,6 +93,7 @@ npm run typecheck     # tsc --noEmit on extensions/
 npm run format        # prettier --write
 npm run format:check  # prettier --check
 npm run check:json    # validate every extensions/**/*.json parses
+npm test              # command-guard engine unit tests
 ```
 
 CI (`.github/workflows/ci.yml`) runs all of the above plus `gitleaks`,
