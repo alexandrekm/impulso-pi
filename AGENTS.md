@@ -147,9 +147,12 @@ alongside the repo.
 
 `path` is relative to the repo root; the bin name and version are read from
 the tool's `package.json`. On install, `install.sh` runs `npm install` (builds
-`dist/` via `prepare`) then `npm i -g .` for each tool, and **skips a tool
-whose globally-installed version already matches** (idempotent). Currently the
-only tool is `pi-omp-stats` (see `packages/pi-omp-stats/`).
+`dist/` via `prepare`) then `npm i -g .` for each tool, **every run** — these
+packages are checked out from git rather than published, so a plain
+version-string comparison can't detect a `git pull`/merge that changed the
+source without bumping `version`; both npm commands are cheap/idempotent when
+nothing changed, so always rebuilding is what keeps the global bin in sync.
+Currently the only tool is `pi-omp-stats` (see `packages/pi-omp-stats/`).
 
 ## Non-clobber sync
 

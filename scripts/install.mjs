@@ -689,7 +689,12 @@ function deployPpiAuto() {
 // Reads profiles.tools: a map of name -> { path } for standalone npm packages
 // that live in this repo and should be installed globally (npm i -g). Separate
 // from the profile resource sync — these are not synced into any profile dir.
-// Idempotent: skips a tool whose globally-installed version already matches.
+// Always rebuilds + reinstalls: a plain version-string comparison isn't safe
+// here because these packages are checked out from git, not published — a
+// `git pull`/merge can change the source without bumping `version`, leaving a
+// stale `dist/` behind if we skip the rebuild. `npm install` (dist/ via
+// `prepare`) and `npm install -g .` are both cheap/idempotent when nothing
+// changed, so we just always run them.
 export function installStandaloneTools(profiles) {
   const tools = profiles.tools || {};
   const entries = Object.entries(tools);
@@ -719,7 +724,9 @@ export function installStandaloneTools(profiles) {
     const pkgName = localPkg.name || name;
     const localVersion = localPkg.version;
 
-    // Up-to-date? Compare against the globally installed package version.
+    // Only used to report whether this is a fresh install (for the
+    // maybeOfferStatsService prompt below) — no longer used to decide
+    // whether to rebuild/reinstall; see comment above installStandaloneTools.
     let globalVersion = null;
     if (globalRoot) {
       const gpkg = join(globalRoot, pkgName, "package.json");
@@ -730,10 +737,6 @@ export function installStandaloneTools(profiles) {
           /* unreadable — treat as missing */
         }
       }
-    }
-    if (globalVersion && globalVersion === localVersion) {
-      console.log(`  ${pkgName}: v${localVersion} already installed globally`);
-      continue;
     }
     const wasMissing = !globalVersion;
 
