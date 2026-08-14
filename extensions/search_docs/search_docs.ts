@@ -24,13 +24,21 @@
 // sees it) but immediately returns a hint to use `websearch`, so a missing
 // config never blocks the agent.
 
-// NOTE: This extension intentionally does not import
-// `@earendil-works/pi-coding-agent` or `typebox` — those packages are provided
-// by the pi runtime (resolved via jiti aliases at load time) and are not in
-// this repo's node_modules. Importing them here would break `npm run typecheck`
-// in CI. We type `pi` as `any` (same convention as the other repo extensions,
-// e.g. payload-exporter.ts) and inline the tool parameter schema as a plain
-// JSON Schema object (which is all `Type.Object(...)` produces).
+// NOTE: `pi` (pi's ExtensionAPI) is typed as `any` to avoid importing the
+// full `@earendil-works/pi-coding-agent` types just for the registerTool
+// surface, and the tool parameter schema is inlined as a plain JSON Schema
+// object (which is all `Type.Object(...)` produces). We DO import the small
+// rendering helpers we need for the custom TUI renderer:
+//   - `Text` from `@earendil-works/pi-tui` (the Component a renderResult returns)
+//   - `keyHint` from `@earendil-works/pi-coding-agent` (keybinding-aware hint)
+// These are provided by the pi runtime at load time (via jiti aliases) and are
+// also declared as devDependencies here so `npm run typecheck` resolves them in
+// CI. A custom `renderResult` is what makes pi collapse this tool's (large)
+// output by default and expand it on `app.tools.expand` (ctrl+o); without it
+// pi falls back to dumping the entire `content` text, ignoring `expanded`.
+
+import { Text } from "@earendil-works/pi-tui";
+import { keyHint } from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_NUM_RESULTS = 10;
 const GATEWAY_TIMEOUT_MS = 60_000;
@@ -186,6 +194,23 @@ interface SearchDocsInput {
   numResults?: number;
 }
 
+/** Shape of the `details` object returned by search_docs execute(). */
+interface SearchDocsResultDetails {
+  source?: "kb";
+  configured?: boolean;
+  query?: string;
+  numRequested?: number;
+  numReturned?: number;
+  minScore?: number;
+  fallBackTo?: string;
+  error?: string;
+}
+
+/** Minimal structural type for the `theme` arg passed to renderResult. */
+interface RenderTheme {
+  fg(color: string, text: string): string;
+}
+
 // `pi` is pi's ExtensionAPI. Typed as `any` to avoid importing the
 // `@earendil-works/pi-coding-agent` types (not in this repo's node_modules).
 export default function searchDocsExtension(pi: any) {
@@ -209,6 +234,68 @@ export default function searchDocsExtension(pi: any) {
       "If search_docs returns no results (or says to fall back), use the websearch tool for public/third-party documentation.",
     ],
     parameters: SearchDocsParams,
+
+    // Custom TUI renderer: pi collapses tool output by default and toggles it
+    // with `app.tools.expand` (ctrl+o), but ONLY for tools that define a
+    // renderResult. Without one, pi dumps the whole `content` text and ignores
+    // `expanded` — which is why search_docs used to print every retrieved chunk.
+    // Here we show a one-line summary when collapsed and the full chunks when
+    // expanded. See pi docs: extensions.md "renderResult" / "Best Practices".
+    renderResult(
+      result: {
+        content?: Array<{ type: string; text?: string }>;
+        details?: SearchDocsResultDetails;
+      },
+      { expanded, isPartial }: { expanded: boolean; isPartial: boolean },
+      theme: RenderTheme,
+      context: { isError?: boolean },
+    ) {
+      if (isPartial) {
+        return new Text(theme.fg("muted", "Searching Knowledge Base…"), 0, 0);
+      }
+
+      const d = result.details ?? {};
+
+      // Not configured: nudge to websearch.
+      if (d.configured === false) {
+        return new Text(theme.fg("dim", "search_docs not configured — use websearch"), 0, 0);
+      }
+
+      // Gateway failure.
+      if (context.isError || d.error) {
+        return new Text(
+          theme.fg("error", `search_docs failed: ${d.error ?? "unknown error"} — use websearch`),
+          0,
+          0,
+        );
+      }
+
+      const n = d.numReturned ?? 0;
+      const q = d.query ?? "";
+
+      // No useful results: steer to websearch.
+      if (n === 0) {
+        return new Text(theme.fg("dim", `No KB results for "${q}" — use websearch`), 0, 0);
+      }
+
+      const head =
+        theme.fg("success", `✓ ${n} doc chunk${n === 1 ? "" : "s"} from KB`) +
+        (q ? theme.fg("muted", `  “${q}”`) : "");
+
+      // Collapsed: compact one-liner with an expand hint (keyHint respects the
+      // user's keymap, e.g. ctrl+o).
+      if (!expanded) {
+        return new Text(
+          `${head}  ${theme.fg("muted", "(")}${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`,
+          0,
+          0,
+        );
+      }
+
+      // Expanded: the full formatted chunks, already assembled in content[0].text.
+      const body = result.content?.[0]?.text ?? "";
+      return new Text(theme.fg("toolOutput", body), 0, 0);
+    },
 
     async execute(
       _toolCallId: string,
