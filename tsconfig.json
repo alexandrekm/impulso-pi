@@ -10,5 +10,10 @@
     "esModuleInterop": true,
     "types": ["node"]
   },
-  "include": ["extensions/**/*.ts"]
+  "include": ["extensions/**/*.ts"],
+  // Vendored, upstream-managed extensions (Orca overwrites its own
+  // ~/.pi/agent copies on integration updates) — excluded from strict
+  // typecheck so re-vendoring stays a clean diff against upstream. herdr's
+  // file already opts out per-file via `@ts-nocheck` and needs no exclude.
+  "exclude": ["extensions/orca-integration/**"]
 }

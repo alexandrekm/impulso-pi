@@ -2,3 +2,8 @@ node_modules
 investigation/
 *.md
 results.sarif
+
+# Vendored, upstream-managed extensions (Orca/herdr own their formatting;
+# re-vendoring should stay a clean diff against upstream).
+extensions/orca-integration/
+extensions/herdr/
