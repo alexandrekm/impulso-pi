@@ -159,6 +159,16 @@
     // https://pi.dev/packages/pi-cache-graph
     "npm:pi-cache-graph": { "tags": ["core"] },
 
+    // address-pr-comments: one-pass workflow to fetch, evaluate, and act on
+    // every PR review comment (Copilot/bots + human) — assess each, batch-apply
+    // approved fixes, commit (Conventional Commits + Jira scope), reply to and
+    // resolve every thread, then report. disable-model-invocation: true in the
+    // frontmatter hides it from the system prompt, so the agent never loads it
+    // on its own — invoke explicitly with /skill:address-pr-comments. Core so
+    // every profile gets it. Ported from impulso-omp's skill of the same name;
+    // the OMP `ask` tool calls were adapted to pi's `ask_user_question` schema.
+    "skills/address-pr-comments/": { "tags": ["core"] },
+
     // Future tagged resources, e.g.:
     // "skills/jira/": { "tags": ["work"] },
     // "skills/home-lab/": { "tags": ["personal"] },
