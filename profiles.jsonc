@@ -57,6 +57,20 @@
       "dest": "extensions/pi-permission-system/config.json",
     },
 
+    // Cursor models (Claude/GPT/Gemini/Grok/Composer) as a pi provider via
+    // @rahularya01/pi-cursor. OAuth login (/login cursor), live GetUsableModels
+    // discovery, native Connect/protobuf streaming over HTTP/2, and a tool
+    // bridge that maps Cursor tool calls onto pi's own tool loop (pi executes
+    // the tools with its permission system; the provider parks the HTTP/2
+    // bridge and resumes it on the next turn). Then /model cursor/<id>.
+    //
+    // The env-setter extension below pins two wire values Cursor now requires
+    // (client version + chat endpoint) to the fresher values oh-my-pi uses;
+    // upstream's defaults are stale and Cursor rejects them. Override either
+    // with PI_CURSOR_CLIENT_VERSION / PI_CURSOR_AGENT_URL if Cursor moves again.
+    "npm:@rahularya01/pi-cursor": { "tags": ["core"] },
+    "extensions/cursor/cursor-env.ts": { "tags": ["core"] },
+
     // search_docs: query the team's internal docs Knowledge Base (AWS
     // Bedrock) via the API Gateway proxy before falling back to the web.
     // Gateway mode only — needs KB_GATEWAY_URL + KB_GATEWAY_KEY. If the KB
