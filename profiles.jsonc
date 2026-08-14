@@ -197,6 +197,16 @@
     // the OMP `ask` tool calls were adapted to pi's `ask_user_question` schema.
     "skills/address-pr-comments/": { "tags": ["core"] },
 
+    // pi-provider-litellm (balcsida): LiteLLM proxy native Provider extension.
+    // Discovers models from a self-hosted LiteLLM proxy and registers them
+    // under pi providers (default provider name `litellm`; aliases possible
+    // via `litellm.providers` in settings.json). Supports `/login litellm`
+    // (incl. enterprise SSO and Google ADC token auth), LiteLLM MCP tool
+    // discovery, and LiteLLM Skills Gateway prompt injection. Core so every
+    // profile gets it; configure via `/login litellm` or LITELLM_BASE_URL /
+    // LITELLM_API_KEY env vars. https://pi.dev/packages/pi-provider-litellm
+    "npm:pi-provider-litellm": { "tags": ["core"] },
+
     // Future tagged resources, e.g.:
     // "skills/jira/": { "tags": ["work"] },
     // "skills/home-lab/": { "tags": ["personal"] },
