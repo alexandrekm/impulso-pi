@@ -150,6 +150,13 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
 - `npm:@ff-labs/pi-fff` — FFF file finder; replaces pi's built-in
   `find`/`grep` (override mode, home-dir indexing off; both pinned by
   `extensions/fff/fff-env.ts`)
+- `npm:pi-hashline-edit` — hash-anchored `read`/`edit` override; every line
+  carries a `LINE#HASH:` anchor edits target instead of raw text, so stale
+  reads/concurrent writes can't land an edit on the wrong line. Config
+  (`extensions/hashline/hashline.json` → profile-root `hashline.json`) pins
+  `grep: false` so it doesn't collide with FFF's `grep` override; it reads
+  via pi's `getAgentDir()`, so the config is per-profile (unlike
+  pi-droid-styling)
 
 Note: pi-droid-styling's own config file lives at a **hardcoded**
 `~/.pi/agent/pi-droid-styling.json` (it does not follow `PI_CODING_AGENT_DIR`),
