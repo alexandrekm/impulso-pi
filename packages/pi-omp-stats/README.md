@@ -21,21 +21,30 @@ JSONL shape.
 
 ## Install
 
-```bash
-npm i -g pi-omp-stats     # then: pi-omp-stats
-# or
-npx pi-omp-stats
-```
-
-From a checkout of this repo:
+The package is **not yet published to npm**, so build it from a checkout:
 
 ```bash
 cd packages/pi-omp-stats
 npm install        # dev deps (typescript, @types/node, tsx)
 npm run build      # tsc + copy dashboard.html -> dist/
-npm start          # node dist/index.js
-# or run from source (Node ≥ 23.6 strips types natively):
+npm start          # node dist/index.js  ->  http://127.0.0.1:3847
+# or run from source (Node >= 23.6 strips types natively):
 node src/index.ts
+```
+
+To get the `pi-omp-stats` command on your `PATH` from the checkout:
+
+```bash
+npm i -g .         # builds dist/ via `prepare`, links the bin
+pi-omp-stats
+```
+
+Once it is published to npm, the registry install will work the same way:
+
+```bash
+npm i -g pi-omp-stats     # then: pi-omp-stats
+# or
+npx pi-omp-stats
 ```
 
 ## CLI
