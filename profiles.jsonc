@@ -115,6 +115,35 @@
     "npm:@rahularya01/pi-cursor": { "tags": ["core"] },
     "extensions/cursor/cursor-env.ts": { "tags": ["core"] },
 
+    // pi-hashline-edit (RimuruW): hash-anchored `read`/`edit` override.
+    // Every line gets a `LINE#HASH:` prefix and edits target those anchors,
+    // so edits never land on the wrong line after a concurrent write or a
+    // stale read. `read` is replaced wholesale; `edit` gains `replace`/
+    // `append`/`prepend`/`replace_text` ops validated against content hashes
+    // (multiple ops per call, applied bottom-up), with 3-way snapshot merge
+    // recovery on stale anchors. Inspired by oh-my-pi's hashline.
+    //
+    // Chosen over the YuGiMob `pi-hashline-edit-pro` fork: the fork's config
+    // path is hardcoded to XDG (~/.config/...), which would fight the
+    // profile machinery like pi-droid-styling does; this original reads its
+    // config via pi's `getAgentDir()` (see extensions/hashline/hashline.json
+    // below), so it lands per-profile. It also keeps the `edits[]` array
+    // (multi-op per call) and the opt-in `grep` override, which the fork
+    // drops to one `replace` per call.
+    //
+    // Config (`hashline.json` at the profile root) pins `grep: false` because
+    // @ff-labs/pi-fff already overrides `find`/`grep` in `override` mode —
+    // both extensions registering a `grep` tool would collide. Leave grep
+    // off and let FFF own search; the anchors FFF returns are plain line
+    // numbers, so re-`read` before editing a grep hit. Tune hashLength
+    // (2–4) / replaceText there if desired.
+    // https://github.com/RimuruW/pi-hashline-edit
+    "npm:pi-hashline-edit": { "tags": ["core"] },
+    "extensions/hashline/hashline.json": {
+      "tags": ["core"],
+      "dest": "hashline.json",
+    },
+
     // search_docs: query the team's internal docs Knowledge Base (AWS
     // Bedrock) via the API Gateway proxy before falling back to the web.
     // Gateway mode only — needs KB_GATEWAY_URL + KB_GATEWAY_KEY. If the KB
