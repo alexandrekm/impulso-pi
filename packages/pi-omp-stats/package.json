@@ -1,0 +1,56 @@
+{
+  "name": "pi-omp-stats",
+  "version": "0.1.0",
+  "description": "Standalone local observability dashboard for pi AI usage statistics. A Node port of @oh-my-pi/omp-stats that reads pi session JSONL files.",
+  "license": "MIT",
+  "author": "Can Boluk (original omp-stats); impulso-pi port authors",
+  "type": "module",
+  "homepage": "https://github.com/earendil-works/pi-coding-agent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/earendil-works/pi-coding-agent.git"
+  },
+  "keywords": [
+    "pi",
+    "ai",
+    "observability",
+    "metrics",
+    "dashboard",
+    "llm",
+    "statistics",
+    "tokens",
+    "cost"
+  ],
+  "bin": {
+    "pi-omp-stats": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICES.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "dev": "node --import tsx src/index.ts",
+    "prepare": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "prepublishOnly": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
