@@ -28,6 +28,15 @@
     // Notify the active pi config dir at startup (which profile loaded).
     "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
 
+    // pi-toolbox (@andy8647): rounded transparent framed boxes around EVERY
+    // tool call (built-in, MCP, subagents) — status-aware border colors
+    // (grey executing, green success, red error) + token-level bash command
+    // syntax highlighting. Works by patching ToolExecutionComponent.render
+    // rather than re-registering tools. Config via "toolbox" key in
+    // settings.json (enabled/highlightBash/collapseAnchor).
+    // https://github.com/Andy8647/pi-toolbox
+    "npm:@andy8647/pi-toolbox": { "tags": ["core"] },
+
     // Save every LLM provider request payload to <configDir>/payloads/ for
     // inspecting system prompts, messages, tool definitions, etc. Defaults
     // to off; the on/off choice persists per profile. Control with

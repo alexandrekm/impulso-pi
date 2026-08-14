@@ -131,6 +131,9 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
 - `extensions/footer/pi-footer.json` — footer layout config
 - `npm:pi-footer` — the footer renderer
 - `npm:@juicesharp/rpiv-ask-user-question` — ask-user-question tool
+- `npm:@andy8647/pi-toolbox` — rounded transparent framed boxes around every
+  tool call (built-in, MCP, subagents) with status-aware border colors and
+  bash syntax highlighting; config via `"toolbox"` key in settings.json
 
 ## Prerequisites
 
