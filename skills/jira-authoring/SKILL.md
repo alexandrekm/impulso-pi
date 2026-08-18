@@ -11,6 +11,8 @@ Create well-structured Jira tickets under existing epics. Every piece of work mu
 
 **Requires `acli`** installed and authenticated. If unavailable, REST fallbacks are in `skill://jira/FALLBACK.md`.
 
+If something goes wrong, check `skill://jira-authoring/TROUBLESHOOTING.md` for common mistakes.
+
 Announce at start: "I'm using the jira-authoring skill to create the Jira ticket."
 
 ## AICPE required fields
@@ -132,12 +134,3 @@ Ticket created: AICPE-XXX
   Sprint: AICPE Sprint N
   URL: https://k2labs.atlassian.net/browse/AICPE-XXX
 ```
-
-## Common mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| Creating ticket without epic | Always find an existing epic first — no orphan tickets |
-| Missing `--description` on AICPE | AICPE requires description on all types — always include it |
-| Vague description | Use the templates above — What/Why/Acceptance Criteria at minimum |
-| Forgetting to transition | Move to In Progress after creating |

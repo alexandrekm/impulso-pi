@@ -15,6 +15,8 @@ If `acli` is unavailable or fails, REST API fallbacks are in `skill://jira/FALLB
 
 Full command reference: `skill://jira/REFERENCE.md` — load it when you need flags or commands not covered below.
 
+If something goes wrong, check `skill://jira/TROUBLESHOOTING.md` for common mistakes.
+
 Announce at start: "I'm using the jira skill to resolve the Jira ticket."
 
 ## Quick command reference
@@ -159,15 +161,3 @@ Return `JIRA_KEY` (e.g., `AICPE-107`) to the calling workflow.
 { "additionalAttributes": { "customfield_10004": 3 }, "projectKey": "AICPE", "summary": "...", "type": "Story" }
 ```
 To set story points after creation, load `skill://jira/FALLBACK.md` for the REST procedure (`PUT /rest/api/2/issue/<KEY>` with `customfield_10004`).
-
-## Common mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| Silently picking a ticket | Present candidates, wait for user confirmation — never auto-select |
-| Skipping sprint search | Check sprint first — those tickets are highest priority |
-| Creating ticket without `--description` | Some projects (e.g. AICPE) require `--description` on all issue types — always include it |
-| Creating ticket without epic | Always find and confirm an epic before `workitem create` |
-| Forgetting to transition | Always move to In Progress after resolving |
-| Hardcoding transition IDs | `acli` resolves status names automatically; if it fails, discover IDs via REST (see FALLBACK.md) |
-| Using `project` in `--fields` on search | Not allowed — infer from key prefix |
