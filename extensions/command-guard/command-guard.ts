@@ -20,9 +20,10 @@ const SENSITIVE_PATH = /(^|[\\/])\.env(\..+)?$/i;
 
 type GuardFile = {
   include?: string;
+  allow?: string[];
   ask?: string[];
   deny?: string[];
-  rules?: { ask?: string[]; deny?: string[] };
+  rules?: { allow?: string[]; ask?: string[]; deny?: string[] };
 };
 
 function expandHome(path: string): string {
@@ -49,14 +50,16 @@ function collectRules(path: string, depth: number): GuardConfig {
   } catch {
     return empty;
   }
+  const allow = [...(file.allow ?? []), ...(file.rules?.allow ?? [])];
   const ask = [...(file.ask ?? []), ...(file.rules?.ask ?? [])];
   const deny = [...(file.deny ?? []), ...(file.rules?.deny ?? [])];
   if (file.include) {
     const nested = collectRules(resolveInclude(file.include, path), depth + 1);
+    allow.push(...(nested.allow ?? []));
     ask.push(...nested.ask);
     deny.push(...nested.deny);
   }
-  return { ask, deny };
+  return { allow, ask, deny };
 }
 
 function loadConfig(): GuardConfig {
@@ -68,7 +71,7 @@ function loadConfig(): GuardConfig {
     if (!existsSync(path)) continue;
     return collectRules(path, 0);
   }
-  return { ask: ["rm *", "sudo *"], deny: [] };
+  return { allow: ["rm -f*", "rm -rf*", "rm --force*"], ask: ["rm *", "sudo *"], deny: [] };
 }
 
 function bashCommand(input: unknown): string | undefined {

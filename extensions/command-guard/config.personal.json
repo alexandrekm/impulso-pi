@@ -1,4 +1,5 @@
 {
+  "allow": ["rm -f*", "rm -rf*", "rm --force*"],
   "ask": ["rm *", "sudo *"],
   "deny": []
 }

@@ -9,6 +9,7 @@
 export type Decision = "allow" | "ask" | "deny";
 
 export interface GuardConfig {
+  allow?: string[];
   ask: string[];
   deny: string[];
 }
@@ -269,6 +270,11 @@ export function decide(normalizedCmd: string, cfg: GuardConfig): DecisionResult 
   for (const pattern of cfg.deny) {
     if (matchesPattern(pattern, normalizedCmd, skeleton)) {
       return { decision: "deny", command: normalizedCmd, pattern };
+    }
+  }
+  for (const pattern of cfg.allow ?? []) {
+    if (matchesPattern(pattern, normalizedCmd, skeleton)) {
+      return { decision: "allow", command: normalizedCmd, pattern };
     }
   }
   for (const pattern of cfg.ask) {
