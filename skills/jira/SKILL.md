@@ -117,13 +117,11 @@ Search in priority order:
 1. Current sprint: `assignee = currentUser() AND sprint in openSprints() AND status not in (Done, Closed, Resolved)`
 2. If none, all open: `assignee = currentUser() AND status not in (Done, Closed, Resolved)`
 
-Present results using the `ask` tool — one option per ticket, each with key, summary, and status:
+Present results using the `ask_user_question` tool — one option per ticket, each with key, summary, and status:
 ```
-ask(i="Select Jira ticket", questions=[{
-  id: "ticket_choice",
+ask_user_question(questions=[{
   question: "Found these tickets — which is the right one?",
   header: "Jira ticket",
-  multi: false,
   options: [
     { label: "AICPE-3621", description: "Add GitHub repos for aisafety foundation model inference [In Progress]" },
     { label: "AICPE-3589", description: "Some other task [To Do]" },
@@ -132,7 +130,7 @@ ask(i="Select Jira ticket", questions=[{
 }])
 ```
 
-**REQUIRED: Use `ask` for explicit confirmation. Never silently pick a ticket.**
+**REQUIRED: Use `ask_user_question` for explicit confirmation. Never silently pick a ticket.**
 
 ### B2. Create a ticket (if none exists)
 

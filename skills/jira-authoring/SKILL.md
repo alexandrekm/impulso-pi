@@ -83,7 +83,7 @@ Epics already exist — search for one to attach the ticket to:
 acli jira workitem search --jql "project = AICPE AND type = Epic AND status != Done" --json --limit 20
 ```
 
-Present epics using the `ask` tool, let user pick → `EPIC_KEY`.
+Present epics using the `ask_user_question` tool, let user pick → `EPIC_KEY`.
 
 If no suitable epic exists, ask the user which epic to use. Do not create epics — that's a human decision.
 
