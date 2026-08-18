@@ -1,6 +1,6 @@
 ---
 name: create-pr
-description: Commit and create a PR on Motive repos with Conventional Commit format, branch validation, and Jira integration.
+description: Commit and create a PR on Motive/KeepTruckin repos with Conventional Commit format, branch validation, and Jira integration.
 disable-model-invocation: true
 author: alexandre.mendonca
 tags: [git, commit, pr, jira, github, motive]
@@ -12,13 +12,13 @@ tags: [git, commit, pr, jira, github, motive]
 > system prompt, so the agent will not load it on its own. Run it explicitly
 > with `/skill:create-pr`.
 
-Commit changes, then create a PR — one continuous workflow. Enforces Jira ticket, Conventional Commit format, branch naming, and the repo PR template, matching the `commitlint.config.js` rules used across Motive repos (verified against `folder-inference`'s services). No shortcuts.
+Commit changes, then create a PR — one continuous workflow. Enforces Jira ticket, Conventional Commit format, branch naming, and the repo PR template, matching the `commitlint.config.js` rules used across Motive repos. No shortcuts.
 
 Announce at start: "I'm using the create-pr skill to commit and create your PR."
 
 ## 0. Motive commit rules (reference)
 
-These are the Motive-standard `commitlint.config.js` rules (`@commitlint/config-conventional` + custom rules), identical across the `folder-inference` repos checked. Apply them as written — do not invent stricter or looser rules.
+The Motive-standard `commitlint.config.js` rules (`@commitlint/config-conventional` + custom rules). Apply them as written — do not invent stricter or looser rules.
 
 | Rule | Requirement |
 |------|-------------|
@@ -33,7 +33,7 @@ These are the Motive-standard `commitlint.config.js` rules (`@commitlint/config-
 | `no-special-chars-in-subject` | Only letters (unicode), numbers (unicode), spaces, and `- _ / ( ) . ,` after the `type(SCOPE): ` prefix. **No colons, backticks, brackets, or `key: value` inline.** A trailing GitHub cherry-pick suffix like ` (#30614)` is stripped before checking. |
 | `ignores` | Skip validation for a commit whose first line (lowercased) is exactly `initial plan` (Copilot cloud-agent placeholder commit) |
 
-If the current repo has its own `commitlint.config.js` that differs from this table, note the discrepancy to the user but still follow these Motive-standard rules unless told otherwise — they are the org baseline (`AGENTS.md` §1 + observed `folder-inference` configs).
+If the current repo's `commitlint.config.js` differs from this table, follow the repo's own config and flag the discrepancy to the user.
 
 ## 1. Validate branch name
 
@@ -225,4 +225,4 @@ Output the PR URL.
 | "Branch name doesn't matter" | `type-JIRA_KEY-description` is enforced. |
 | "Special chars in subject are fine" | No colons/backticks/brackets after `type(SCOPE): ` prefix — commitlint's `no-special-chars-in-subject` blocks the PR. |
 | "200 chars is generous, no need to check" | Still enforced — long AI-generated subjects get rejected too. |
-| "This repo's commitlint config might differ" | If in doubt, `cat commitlint.config.js` at repo root and diff against §0 before assuming. |
+| "Assume §0 applies as-is" | Check the repo's own `commitlint.config.js` first — follow it if it differs. |
