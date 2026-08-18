@@ -14,6 +14,7 @@ Synced per profile as `extensions/command-guard/command-guard.json`:
 
 ```json
 {
+  "allow": ["rm -f*", "rm -rf*", "rm --force*"],
   "ask": ["rm *", "sudo *", "anyscale * submit*", "aws s3 rm*", "aws * delete-*"],
   "deny": []
 }
@@ -24,5 +25,9 @@ Work additionally asks on mutating Anyscale verbs (`submit`, `deploy`,
 `delete-*`, `terminate-*`, …). `git push` is allowed.
 
 - Default is allow. Only listed globs prompt or block.
+- `allow` globs are checked after `deny` and before `ask`, so they carve
+  exceptions out of an `ask` rule. `rm -f` / `rm -rf` / `rm --force` are
+  allowed without a prompt (force-flagged `rm` is usually intentional);
+  plain `rm` and `rm -r` still ask.
 - `include` may point at another JSON file (relative or `~/…`); rules are concatenated.
 - `.env` / `.env.*` tool paths are always denied except `.env.example`.

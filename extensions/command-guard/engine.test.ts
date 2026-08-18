@@ -19,6 +19,7 @@ const workCfg = JSON.parse(
 ) as GuardConfig;
 
 const cfg: GuardConfig = {
+  allow: ["rm -f*", "rm -rf*", "rm --force*"],
   ask: ["git push*", "rm *", "sudo *"],
   deny: ["kubectl delete*"],
 };
@@ -75,7 +76,8 @@ describe("normalize wrappers", () => {
   });
   test("xargs peels to the utility", () => {
     assert.equal(d("find extensions -name '*.ts' | xargs wc -l"), "allow");
-    assert.equal(d("xargs rm -rf /tmp/foo"), "ask");
+    assert.equal(d("xargs rm -rf /tmp/foo"), "allow");
+    assert.equal(d("xargs rm /tmp/foo"), "ask");
     assert.equal(normalize("xargs wc -l"), "wc -l");
   });
   test("session-style rematch uses flag-stripped skeleton", () => {
@@ -131,6 +133,37 @@ describe("subshell depth", () => {
 describe("splitCommands", () => {
   test("pipes split so xargs is its own unit", () => {
     assert.deepEqual(splitCommands("find . | xargs wc -l"), ["find .", "xargs wc -l"]);
+  });
+});
+
+describe("allow override (rm force flags)", () => {
+  test("rm -f / -rf / --force are allowed without prompt", () => {
+    assert.equal(d("rm -f /tmp/foo"), "allow");
+    assert.equal(d("rm -rf /tmp/dir"), "allow");
+    assert.equal(d("rm -fr /tmp/dir"), "allow");
+    assert.equal(d("rm --force /tmp/foo"), "allow");
+    assert.equal(d("rm -fv /tmp/foo"), "allow");
+    assert.equal(d("rm -rfv /tmp/dir"), "allow");
+  });
+  test("plain rm and rm -r still ask", () => {
+    assert.equal(d("rm /tmp/foo"), "ask");
+    assert.equal(d("rm -r /tmp/dir"), "ask");
+    assert.equal(d("rm -v /tmp/foo"), "ask");
+  });
+  test("deny still beats allow", () => {
+    const rules: GuardConfig = {
+      allow: ["rm -f*"],
+      ask: ["rm *"],
+      deny: ["rm -f /etc/*"],
+    };
+    assert.equal(d("rm -f /etc/passwd", rules), "deny");
+    assert.equal(d("rm -f /tmp/foo", rules), "allow");
+  });
+  test("work config allows rm -f but asks on plain rm", () => {
+    assert.equal(d("rm -f /tmp/foo", workCfg), "allow");
+    assert.equal(d("rm -rf /tmp/dir", workCfg), "allow");
+    assert.equal(d("rm /tmp/foo", workCfg), "ask");
+    assert.equal(d("rm -r /tmp/dir", workCfg), "ask");
   });
 });
 
