@@ -146,7 +146,9 @@ Service management (background daemon, survives reboot):
                               Control an already-installed service.
 
 Environment:
-  PI_STATS_SESSIONS_DIR       Override sessions directory (highest precedence)
+  PI_STATS_SESSIONS_DIR       Override one sessions directory (highest precedence)
+  PI_STATS_PROFILES_DIR       Profile root to discover (e.g. ~/.pi/profiles);
+                              dashboard offers All profiles and each profile
   PI_CODING_AGENT_SESSION_DIR pi's own session-dir override
   PI_CODING_AGENT_DIR         pi agent dir; sessions at <dir>/sessions
   PI_STATS_DIR                Stats DB directory (default ~/.pi/agent)
@@ -251,8 +253,12 @@ async function main(): Promise<void> {
     process.env.PI_STATS_SESSIONS_DIR = values["sessions-dir"];
   }
 
-  // Show which sessions dir we're reading (useful for env-override debugging).
-  process.stderr.write(`Sessions dir: ${resolveSessionsDir()}\n`);
+  // Show the configured source (useful for env-override debugging).
+  process.stderr.write(
+    process.env.PI_STATS_PROFILES_DIR?.trim()
+      ? `Profiles dir: ${process.env.PI_STATS_PROFILES_DIR}\n`
+      : `Sessions dir: ${resolveSessionsDir()}\n`,
+  );
 
   try {
     await runSync();

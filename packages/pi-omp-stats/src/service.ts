@@ -38,6 +38,7 @@ const NODE_BIN = process.execPath;
 const ENV_VARS_TO_FORWARD = [
   "PI_STATS_DIR",
   "PI_STATS_SESSIONS_DIR",
+  "PI_STATS_PROFILES_DIR",
   "PI_CODING_AGENT_SESSION_DIR",
   "PI_CODING_AGENT_DIR",
 ] as const;

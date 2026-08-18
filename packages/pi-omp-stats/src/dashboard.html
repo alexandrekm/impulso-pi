@@ -937,6 +937,7 @@
           <span class="updated" id="updated-at"></span>
           <div class="spacer"></div>
           <span id="status"></span>
+          <select class="btn" id="profile-select" aria-label="Profile" hidden></select>
           <div class="seg" id="range-seg">
             <button data-range="1h">1h</button>
             <button data-range="24h" class="active">24h</button>
@@ -1012,6 +1013,7 @@
         recent = null,
         errorsList = null;
       let costRange = "7d"; // independent window for the "Cost over time" chart
+      let profile = "all";
       let charts = {};
       let chartReady = false;
 
@@ -1070,9 +1072,21 @@
       }
 
       async function api(path) {
-        const r = await fetch(path);
+        const sep = path.includes("?") ? "&" : "?";
+        const r = await fetch(path + sep + "profile=" + encodeURIComponent(profile));
         if (!r.ok) throw new Error(path + " -> " + r.status);
         return r.json();
+      }
+
+      async function loadProfiles() {
+        const profiles = await api("/api/profiles");
+        if (profiles.length <= 1) return;
+        const select = $("#profile-select");
+        select.innerHTML = profiles
+          .map((p) => `<option value="${p}">${p === "all" ? "All profiles" : p}</option>`)
+          .join("");
+        select.value = profile;
+        select.hidden = false;
       }
 
       function range() {
@@ -2269,7 +2283,9 @@
         $("#sync-btn").disabled = true;
         statusEl.textContent = "Syncing…";
         try {
-          const r = await fetch("/api/sync", { method: "POST" });
+          const r = await fetch("/api/sync?profile=" + encodeURIComponent(profile), {
+            method: "POST",
+          });
           const j = await r.json();
           statusEl.textContent = "";
           toast(`Synced ${j.processed} new entries · ${j.totalMessages} total`);
@@ -2310,6 +2326,11 @@
         }),
       );
       $("#sync-btn").addEventListener("click", doSync);
+      $("#profile-select").addEventListener("change", (event) => {
+        profile = event.target.value;
+        stats = behavior = tools = providers = recent = errorsList = null;
+        refreshAll();
+      });
 
       $("#theme-toggle").addEventListener("click", () => {
         const cur =
@@ -2325,6 +2346,7 @@
         refreshAll(); // re-render charts with the new palette
       });
 
+      loadProfiles().catch((e) => (statusEl.textContent = "Error: " + e.message));
       window.addEventListener("chart-ready", () => {
         chartReady = true;
         refreshAll();

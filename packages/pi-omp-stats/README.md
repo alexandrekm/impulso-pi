@@ -126,18 +126,25 @@ locally.
 
 ## Environment variables
 
-The sessions directory is resolved, first match wins:
+Set `PI_STATS_PROFILES_DIR` to a pi-profiles root (normally `~/.pi/profiles`)
+for multi-profile mode. The dashboard then offers **All profiles** plus a
+selector for every profile directory it discovers. Each profile and the
+aggregate have separate SQLite databases under `PI_STATS_DIR` (or
+`~/.pi/agent`), so switching views does not require reparsing sessions.
+
+Without `PI_STATS_PROFILES_DIR`, the sessions directory is resolved, first
+match wins:
 
 1. `PI_STATS_SESSIONS_DIR` — this package's own override
 2. `PI_CODING_AGENT_SESSION_DIR` — pi's own session-dir override
 3. `<PI_CODING_AGENT_DIR>/sessions` — when `PI_CODING_AGENT_DIR` is set
 4. `~/.pi/agent/sessions` — default
 
-A leading `~/` is expanded against `os.homedir()`. Point this at any
-pi-lineage sessions dir and it works.
+A leading `~/` is expanded against `os.homedir()`. `PI_STATS_SESSIONS_DIR`
+continues to support any standalone pi-lineage sessions directory.
 
-The SQLite database lives at `<statsDir>/pi-omp-stats.db`, where `statsDir` is
-`PI_STATS_DIR` or `~/.pi/agent`.
+All stats endpoints accept an optional `profile=all|<profile-name>` query
+parameter. `GET /api/profiles` lists the available selectors.
 
 ## HTTP API
 
@@ -147,6 +154,7 @@ portable.
 
 | Method | Path                       | Returns |
 |--------|---------------------------|---------|
+| GET    | `/api/profiles`           | `all` plus discovered profile names |
 | GET    | `/api/stats`              | full `DashboardStats` |
 | GET    | `/api/stats/overview`      | `{ overall, byAgentType, timeSeries }` |
 | GET    | `/api/stats/models`       | `byModel[]` |

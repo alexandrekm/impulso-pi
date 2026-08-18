@@ -55,10 +55,19 @@ import type { AgentTypeStats } from "./shared-types.js";
 const ZERO_USAGE_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 
 let db: DatabaseSync | null = null;
+let databaseName = "pi-omp-stats.db";
 
-/** Path to the stats SQLite database: `<statsDir>/pi-omp-stats.db`. */
+/** Select the database backing one dashboard profile view. */
+export function setStatsDatabase(profile?: string | null): void {
+  const name = profile && profile !== "all" ? `pi-omp-stats-${profile}.db` : "pi-omp-stats.db";
+  if (name === databaseName) return;
+  closeDb();
+  databaseName = name;
+}
+
+/** Path to the stats SQLite database for the selected dashboard view. */
 export function getStatsDbPath(): string {
-  return path.join(resolveStatsDir(), "pi-omp-stats.db");
+  return path.join(resolveStatsDir(), databaseName);
 }
 
 /**
