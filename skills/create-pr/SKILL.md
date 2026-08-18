@@ -8,15 +8,50 @@ tags: [git, commit, pr, jira, github, motive]
 
 # Create PR
 
-> This is a **command**, not an agent-invocable skill. It is hidden from the
-> system prompt, so the agent will not load it on its own. Run it explicitly
-> with `/skill:create-pr`.
+Commit changes, then create a PR — one continuous workflow. Enforces Jira ticket, Conventional Commit format, branch naming, and the repo PR template.
 
-Commit changes, then create a PR — one continuous workflow. Enforces Jira ticket, Conventional Commit format, branch naming, and the repo PR template, matching the `commitlint.config.js` rules used across Motive repos. No shortcuts.
-
-Full commitlint rule table, format patterns, and the type list: `skill://create-pr/REFERENCE.md` — load it if a message is rejected or you need the exact rule behind a regex. If anything goes wrong (pre-commit failures, diverged push, non-conforming commits): `skill://create-pr/TROUBLESHOOTING.md`.
+If anything goes wrong (pre-commit failures, diverged push, non-conforming commits): `skill://create-pr/TROUBLESHOOTING.md`.
 
 Announce at start: "I'm using the create-pr skill to commit and create your PR."
+
+## 0. Commitlint rules — apply these while composing, not after rejection
+
+The Motive-standard `commitlint.config.js` rules (`@commitlint/config-conventional` + custom rules). Get the message right the first time — do not rely on commit/PR rejection to catch violations.
+
+| Rule | Requirement |
+|------|-------------|
+| `type-enum` | One of: `feat, fix, docs, style, refactor, perf, test, chore, revert, build, ci` |
+| `scope-empty` | Never — scope is **required** |
+| `scope-case` | Upper-case — scope is a Jira key (e.g. `DEVPRD-1234`) |
+| `valid-jira-scope` | Scope must match `^[A-Z][A-Z0-9]*-\d+$` |
+| `subject-case` | Not enforced (avoids false failures on terms like IAM, SQL, HTTP/2) — use lowercase imperative by convention |
+| `subject-full-stop` | Never end the subject with `.` |
+| `subject-empty` / `type-empty` | Never empty |
+| `header-max-length` / `body-max-line-length` / `footer-max-line-length` | 200 chars (room for Jira scope + merge-queue `(#NNNNN)` suffix) |
+| `no-special-chars-in-subject` | Only letters (unicode), numbers (unicode), spaces, and `- _ / ( ) . ,` after the `type(SCOPE): ` prefix. **No colons, backticks, brackets, or `key: value` inline.** A trailing GitHub cherry-pick suffix like ` (#30614)` is stripped before checking. |
+| `ignores` | Skip validation for a commit whose first line (lowercased) is exactly `initial plan` (Copilot cloud-agent placeholder commit) |
+
+If the current repo's `commitlint.config.js` differs from this table, follow the repo's own config and flag the discrepancy to the user.
+
+| Type | Use |
+|------|-----|
+| feat | New feature |
+| fix | Bug fix |
+| docs | Documentation only |
+| style | Formatting, no code change |
+| refactor | Code restructuring |
+| perf | Performance |
+| test | Adding/fixing tests |
+| chore | Maintenance, dependencies, CI config auxiliary tools |
+| revert | Reverts a previous commit |
+| build | Build system / dependencies |
+| ci | CI configuration |
+
+| Item | Pattern | Example |
+|------|---------|---------|
+| Commit message | `type(JIRA-123): description` | `feat(AICPE-107): add xgboost model for sbv cbb` |
+| PR title | `type(JIRA-123): description` | `feat(AICPE-107): add xgboost model for sbv cbb` |
+| Branch name | `type-JIRA-123-description` | `feat-AICPE-107-xgboost-sbv-cbb` |
 
 ## 1. Validate branch name
 
@@ -55,11 +90,7 @@ git diff --staged --stat
 git diff --staged
 ```
 
-Analyze the diff:
-- **type**: feat / fix / docs / style / refactor / perf / test / chore / revert / build / ci
-- **description**: concise lowercase summary, no special characters beyond `- _ / ( ) . ,`
-
-Compose: `type(JIRA_KEY): lowercase description`
+Analyze the diff and pick type + description per the §0 rules above. Compose: `type(JIRA_KEY): lowercase description`.
 
 ## 5. Approve
 
