@@ -45,6 +45,7 @@ import {
   insertUserMessageStats,
   markSessionBackfillsComplete,
   relabelSessionFolder,
+  setStatsDatabase,
   setFileOffset,
   setFolderLabel,
   updateToolResults,
@@ -56,6 +57,8 @@ import {
   parseSessionFile,
   readSessionFolder,
   resolveSessionsDir,
+  resolveSessionsSources,
+  type SessionsSource,
 } from "./parser.js";
 import type {
   BehaviorDashboardStats,
@@ -110,13 +113,13 @@ export interface SyncOptions {
  * each file is parsed only past its stored byte offset, and skipped entirely
  * when its mtime is unchanged. `onProgress` fires once per completed file.
  */
-export async function syncAllSessions(
+async function syncSessionsSource(
+  source: SessionsSource,
   opts?: SyncOptions,
 ): Promise<{ processed: number; files: number }> {
   await initDb();
 
-  const sessionsDir = resolveSessionsDir();
-  const files = await listAllSessionFiles(sessionsDir);
+  const files = await listAllSessionFiles(source.dir);
   let totalProcessed = 0;
   let filesProcessed = 0;
   let completed = 0;
@@ -180,6 +183,52 @@ export async function syncAllSessions(
 
   markSessionBackfillsComplete();
   return { processed: totalProcessed, files: filesProcessed };
+}
+
+/**
+ * Sync every discovered profile to both its own database and the aggregate
+ * database. Without `PI_STATS_PROFILES_DIR`, retain legacy single-directory
+ * behavior and store it in the aggregate database only.
+ */
+export async function syncAllSessions(
+  opts?: SyncOptions,
+): Promise<{ processed: number; files: number }> {
+  const sources = await resolveSessionsSources();
+  if (sources.length === 0) {
+    setStatsDatabase();
+    await initDb();
+    markSessionBackfillsComplete();
+    return { processed: 0, files: 0 };
+  }
+
+  let processed = 0;
+  let files = 0;
+  const profilesMode = Boolean(process.env.PI_STATS_PROFILES_DIR?.trim());
+  for (const source of sources) {
+    if (profilesMode) {
+      setStatsDatabase(source.id);
+      const result = await syncSessionsSource(source, opts);
+      processed += result.processed;
+      files += result.files;
+    }
+    setStatsDatabase();
+    const result = await syncSessionsSource(source, opts);
+    processed += result.processed;
+    files += result.files;
+  }
+  setStatsDatabase();
+  return { processed, files };
+}
+
+/** Profile names available to the dashboard, including the aggregate view. */
+export async function getAvailableProfiles(): Promise<string[]> {
+  const sources = await resolveSessionsSources();
+  return process.env.PI_STATS_PROFILES_DIR?.trim() ? ["all", ...sources.map((s) => s.id)] : ["all"];
+}
+
+/** Select the aggregate database or an individual profile database. */
+export function selectProfile(profile?: string | null): void {
+  setStatsDatabase(profile);
 }
 
 /* -------------------------------------------------------------------------- */

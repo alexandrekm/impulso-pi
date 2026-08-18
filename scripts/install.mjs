@@ -775,7 +775,7 @@ export function installStandaloneTools(profiles) {
 // the dashboard always runs. Skipped in --yes mode (a background daemon is a
 // side effect you don't want auto-enabled in CI); we just print a hint there.
 // Also skipped if the service is already registered.
-export async function maybeOfferStatsService(freshlyInstalled, yes) {
+export async function maybeOfferStatsService(freshlyInstalled, yes, profilesMode) {
   const stats = freshlyInstalled.find(
     (t) => t.binName === "pi-omp-stats" || t.pkgName === "pi-omp-stats",
   );
@@ -785,11 +785,25 @@ export async function maybeOfferStatsService(freshlyInstalled, yes) {
   if (!hasCmd("pi-omp-stats")) return;
 
   // Already registered? `service status` exits 0 when loaded/running.
+  const serviceEnv = profilesMode
+    ? { ...process.env, PI_STATS_PROFILES_DIR: PROFILES_DIR }
+    : process.env;
   const statusRes = spawnSync("pi-omp-stats", ["service", "status"], {
     stdio: "ignore",
+    env: serviceEnv,
   });
   if (statusRes.status === 0) {
-    console.log("  pi-omp-stats service is already registered and running.");
+    if (profilesMode) {
+      console.log("==> pi-omp-stats service install (refresh profile discovery)");
+      const res = spawnSync("pi-omp-stats", ["service", "install"], {
+        stdio: "inherit",
+        env: serviceEnv,
+      });
+      if (res.status !== 0)
+        console.error("  service refresh failed; rerun pi-omp-stats service install");
+    } else {
+      console.log("  pi-omp-stats service is already registered and running.");
+    }
     return;
   }
 
@@ -818,7 +832,10 @@ export async function maybeOfferStatsService(freshlyInstalled, yes) {
   }
 
   console.log("==> pi-omp-stats service install");
-  const res = spawnSync("pi-omp-stats", ["service", "install"], { stdio: "inherit" });
+  const res = spawnSync("pi-omp-stats", ["service", "install"], {
+    stdio: "inherit",
+    env: serviceEnv,
+  });
   if (res.status !== 0) {
     console.error("  service install failed; you can retry with: pi-omp-stats service install");
   }
@@ -919,7 +936,11 @@ async function main() {
     const freshlyInstalledTools = installStandaloneTools(profiles);
     // Offer to register pi-omp-stats as a background service after a fresh
     // install (interactive only; --yes prints a hint instead).
-    await maybeOfferStatsService(freshlyInstalledTools, yes);
+    await maybeOfferStatsService(
+      freshlyInstalledTools,
+      yes,
+      names.some((t) => !t.base),
+    );
     console.log("\nDone. Reload pi (/reload) or start a new session to pick up changes.");
   } else if (cmd === "status") {
     for (const t of names) {

@@ -76,6 +76,36 @@ export function resolveSessionsDir(override?: string): string {
   return path.join(os.homedir(), ".pi", "agent", "sessions");
 }
 
+export interface SessionsSource {
+  id: string;
+  dir: string;
+}
+
+/**
+ * Resolve every configured profile sessions directory. `PI_STATS_PROFILES_DIR`
+ * enables the dashboard's all-profile mode; otherwise retain the legacy single
+ * directory resolution above. Profile names are directory names, so a new ppi
+ * profile becomes visible without changing the service configuration.
+ */
+export async function resolveSessionsSources(): Promise<SessionsSource[]> {
+  const profilesDir = process.env.PI_STATS_PROFILES_DIR?.trim();
+  if (!profilesDir) return [{ id: "default", dir: resolveSessionsDir() }];
+
+  const root = profilesDir.startsWith("~/")
+    ? path.join(os.homedir(), profilesDir.slice(2))
+    : profilesDir;
+  try {
+    const entries = await fs.readdir(root, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => ({ id: entry.name, dir: path.join(root, entry.name, "sessions") }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+  } catch (err) {
+    if (isEnoent(err)) return [];
+    throw err;
+  }
+}
+
 /** Resolve the stats (DB) directory: `PI_STATS_DIR` or `~/.pi/agent`. */
 export function resolveStatsDir(): string {
   const env = process.env;

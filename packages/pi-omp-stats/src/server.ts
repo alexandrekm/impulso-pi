@@ -29,7 +29,9 @@ import {
   getCostSeriesForRange,
   getTimeSeriesForRange,
   getToolDashboardStats,
+  getAvailableProfiles,
   getTotalMessageCount,
+  selectProfile,
   syncAllSessions,
 } from "./aggregator.js";
 import {
@@ -58,6 +60,18 @@ function getDashboardHtml(): string {
 
 const STATS_DASHBOARD_HEADER = "x-omp-stats-dashboard";
 const STATS_DASHBOARD_SECURITY_VERSION = "2";
+// Database selection is process-global so requests must not interleave a
+// profile switch with an aggregate query. SQLite access itself is synchronous;
+// this queue only covers the async filesystem/database initialization around it.
+let apiQueue = Promise.resolve();
+function queueApi<T>(work: () => Promise<T>): Promise<T> {
+  const result = apiQueue.then(work);
+  apiQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
   const json = JSON.stringify(body);
@@ -82,6 +96,15 @@ function sendText(res: http.ServerResponse, status: number, body: string): void 
 async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
   const pathname = url.pathname;
   const range = url.searchParams.get("range");
+
+  if (pathname === "/api/profiles") return sendJson(res, 200, await getAvailableProfiles());
+  if (!pathname.startsWith("/api/payloads")) {
+    const profile = url.searchParams.get("profile") ?? "all";
+    if (!(await getAvailableProfiles()).includes(profile)) {
+      return sendJson(res, 400, { error: `Unknown profile: ${profile}` });
+    }
+    selectProfile(profile);
+  }
 
   if (pathname === "/api/stats") return sendJson(res, 200, await getDashboardStats(range));
   if (pathname === "/api/stats/overview") return sendJson(res, 200, await getOverviewStats(range));
@@ -196,7 +219,7 @@ export function startServer(
 
       try {
         if (url.pathname.startsWith("/api/")) {
-          await handleApi(url, res);
+          await queueApi(() => handleApi(url, res));
         } else if (url.pathname === "/" || url.pathname === "/index.html") {
           sendText(res, 200, getDashboardHtml());
         } else if (url.pathname === "/chart.min.js") {
