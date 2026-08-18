@@ -213,8 +213,27 @@
     // LITELLM_API_KEY env vars. https://pi.dev/packages/pi-provider-litellm
     "npm:pi-provider-litellm": { "tags": ["core"] },
 
+    // jira: resolve/find/create/manage Jira tickets via `acli` (with REST
+    // fallbacks in FALLBACK.md and a full command reference in REFERENCE.md).
+    // jira-authoring: create well-structured tickets under existing epics
+    // with AICPE templates — loaded by jira's ticket-creation step. Ported
+    // from impulso-omp's mtv-jira / mtv-jira-authoring skills, renamed
+    // without the mtv- prefix (not work-exclusive by nature, just tagged
+    // work here since Jira/acli are Motive-specific tools).
+    "skills/jira/": { "tags": ["work"] },
+    "skills/jira-authoring/": { "tags": ["work"] },
+
+    // create-pr: commit + PR workflow enforcing Motive's commitlint rules
+    // (Conventional Commits, uppercase Jira-key scope, 200-char lengths,
+    // no-special-chars subject) verified against folder-inference repos'
+    // commitlint.config.js, plus branch naming and Jira ticket linkage via
+    // the jira skill. disable-model-invocation: true hides it from the
+    // system prompt — invoke explicitly with /skill:create-pr. Ported from
+    // impulso-omp's mtv-commit-and-pr skill, renamed to drop the mtv-
+    // prefix and made command-only like address-pr-comments.
+    "skills/create-pr/": { "tags": ["work"] },
+
     // Future tagged resources, e.g.:
-    // "skills/jira/": { "tags": ["work"] },
     // "skills/home-lab/": { "tags": ["personal"] },
     // "npm:@pi-stef/atlassian": { "tags": ["work"] }
   },
