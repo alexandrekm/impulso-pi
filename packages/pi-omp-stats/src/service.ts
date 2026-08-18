@@ -318,6 +318,13 @@ function systemdInstall(opts: ServiceOptions): void {
     ["--user", "enable", "--now", SYSTEMD_UNIT],
     `systemctl --user enable --now ${SYSTEMD_UNIT}`,
   );
+  // `enable --now` leaves an already-active unit untouched. Restart so a
+  // re-install reliably applies a changed executable or forwarded environment.
+  runOrThrow(
+    "systemctl",
+    ["--user", "restart", SYSTEMD_UNIT],
+    `systemctl --user restart ${SYSTEMD_UNIT}`,
+  );
   console.log(`Installed systemd user unit: ${unitPath}`);
   console.log(`Logs: journalctl --user -u ${SYSTEMD_UNIT} -f`);
   console.log(`Dashboard: http://${opts.host}:${opts.port}`);
