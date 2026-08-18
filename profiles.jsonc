@@ -55,6 +55,12 @@
     "git:github.com/sting8k/pi-droid-styling": { "tags": ["core"] },
     "git:github.com/sting8k/pi-themes": { "tags": ["core"] },
 
+    // Pi 0.84's fullscreen renderer owns terminal painting. Disable
+    // droid-styling's direct physical-row self-heal, which can leave a stale
+    // duplicate bottom zone after an editor reflow. Set
+    // PI_DROID_RENDER_PHYSICAL_SYNC=1 before launching pi to opt back in.
+    "extensions/pi-droid-styling/droid-render-safety-env.ts": { "tags": ["core"] },
+
     // pi-droid-styling's config. The extension reads it from a HARDCODED
     // ~/.pi/agent/pi-droid-styling.json (it ignores PI_CODING_AGENT_DIR), so
     // it's global across profiles. Tagged "base" so it lands only on the
