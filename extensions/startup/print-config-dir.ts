@@ -18,7 +18,10 @@ function configDir(): string {
   return process.env.PI_CODING_AGENT_DIR || dirname(EXT_DIR);
 }
 
+import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+
 export default function (pi: any): void {
+  if (!isFeatureEnabled("print-config-dir")) return;
   pi.on("session_start", (event: any, ctx: any) => {
     if (event.reason !== "startup") return;
     ctx.ui.notify(`pi config: ${configDir()}`, "info");

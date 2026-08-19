@@ -241,7 +241,10 @@ function responseSummary(message: any): AnyRecord {
   return summary;
 }
 
+import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+
 export default function (pi: any): void {
+  if (!isFeatureEnabled("payload-exporter")) return;
   let turnIndex = 0;
   let enabled = readEnabled();
   // Monotonic per-session counter, included in every filename to guarantee

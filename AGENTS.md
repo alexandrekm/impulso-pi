@@ -87,6 +87,20 @@ resource is on P  ⟺  "core" ∈ resource.tags  OR  resource.tags ∩ P.tags �
 1. Add its key to the `resources` object in [`profiles.jsonc`](profiles.jsonc)
    with the right `tags`.
 2. Run `./install.sh <target>` (or `--all` / `--base`) to sync.
+3. **Update the settings page.** Every user-facing feature (npm/git
+   package, local extension, or a pi built-in setting worth surfacing)
+   must be registered in `extensions/impulso-settings/features.ts` so it
+   shows up in `/settings` (the impulso page). Add a `Feature` entry with
+   the right `tab`/`group`/`kind`: `package` for npm/git specs (toggled via
+   `packages[]` autoload), `local` for extensions under `extensions/`
+   (the extension's factory must guard on `isFeatureEnabled(id)` from
+   `feature-flag.ts`), `pi-setting` for a safe settings.json key, or
+   `launch` for a row that opens a package's own config command
+   (`/vision-handoff`, `/obs-settings`, …). Forgetting this step means the
+   feature is installed but has no toggle in the UI — a regression of the
+   settings page's promise that every feature is enable/disable-able from
+   one place. Run `npm run typecheck && npm run lint` after editing
+   `features.ts`.
 
 Resource key forms:
 
@@ -188,6 +202,40 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
   pi providers (default `litellm`, aliases via `litellm.providers` in
   settings.json); supports `/login litellm`, LiteLLM MCP tools, and LiteLLM
   Skills Gateway prompt injection
+
+- `extensions/impulso-settings/` — `/impulso` AND `/settings` settings page:
+  an OMP-style tabbed TUI (built on `@earendil-works/pi-tui`) that lists every
+  feature declared in `extensions/impulso-settings/features.ts` grouped into
+  tabs/sections and toggles them. npm/git packages flip
+  `settings.json` `packages[]` between string and `{source, autoload:false}`;
+  local extensions flip an entry in `<configDir>/impulso-settings.json` and
+  each local extension's factory guards on `isFeatureEnabled(id)` from
+  `feature-flag.ts` (so `/reload` applies); a safe subset of pi built-in
+  settings (compaction/retry/quietStartup/etc., not the profiles.jsonc-
+  managed ones) edit settings.json directly. Add a `Feature` entry in
+  `features.ts` and it appears here automatically. Changes persist
+  immediately; the footer hints `/reload` to apply.
+  - `/settings` override: pi hardcodes `/settings` → its native menu in the
+    editor's onSubmit (runs before extension commands parse) and exposes no
+    API to open that menu, so `editor.ts` installs a `CustomEditor` via
+    `ctx.ui.setEditorComponent` at `session_start`; its `onSubmit` wrapper
+    (an instance accessor that captures pi's assignment) routes bare
+    `/settings` to the impulso page and `/settings pi` (or `/pi-settings`)
+    to pi's original onSubmit → pi's native menu. `/impulso` also works.
+    Trade-off: the custom editor owns the editor factory session-wide.
+  - `launch` features: rows that open a package's own config UI (e.g. the
+    vision-handoff model picker via `/vision-handoff`, footer segments via
+    `/obs-settings`, cache graph via `/cache`). On activate they close the
+    impulso overlay then dispatch the command via
+    `pi.sendUserMessage(cmd, { expandPromptTemplates: true })`, which routes
+    through the extension-command path. The row's value reads the package's
+    own JSON config (e.g. `extensions/pi-vision-handoff.json` → `visionModel`).
+    Only extension commands are launchable this way — pi built-ins like
+    `/settings`/`/login` are hardcoded in the editor's onSubmit and not
+    reachable from inside an overlay; for pi-native settings (theme, thinking
+    level, model, transport, image settings…) use `/settings pi`. Pi-native
+    settings are owned by pi's SettingsManager and aren't duplicated here.
+
 
 ## Prerequisites
 

@@ -24,6 +24,8 @@
 // top-level so it is in place before any other extension's factory runs,
 // regardless of import order. Existing user overrides are preserved.
 
+import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+
 const WIRE_CLIENT_VERSION = "cli-2026.07.23-e383d2b";
 const WIRE_AGENT_URL = "https://api2.cursor.sh";
 
@@ -37,10 +39,11 @@ function applyCursorWireEnv(): void {
 }
 
 // Run at import time: before any extension factory body executes.
-applyCursorWireEnv();
+// Guarded by the impulso /impulso settings page (feature id `cursor-env`).
+if (isFeatureEnabled("cursor-env")) applyCursorWireEnv();
 
 export default function (_pi: any): void {
   // Re-apply in case another extension cleared or reordered env, and as a
   // no-op marker so pi recognises this module as an extension factory.
-  applyCursorWireEnv();
+  if (isFeatureEnabled("cursor-env")) applyCursorWireEnv();
 }

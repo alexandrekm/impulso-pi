@@ -315,7 +315,10 @@ function extractAssistantText(message: unknown): string {
 // preview. Keeps tool-name knowledge centralized on the receiver side.
 // Why: child agents inherit the lead's pane env; only its process may
 // register status hooks. PID identity keeps in-process reloads reporting.
+import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+
 export default function (pi): void {
+  if (!isFeatureEnabled("orca-integration")) return;
   const ownerPid = process.env.ORCA_PI_STATUS_OWNED
   const selfPid = String(process.pid)
   if (ownerPid && ownerPid !== selfPid) return

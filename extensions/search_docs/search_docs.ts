@@ -213,7 +213,10 @@ interface RenderTheme {
 
 // `pi` is pi's ExtensionAPI. Typed as `any` to avoid importing the
 // `@earendil-works/pi-coding-agent` types (not in this repo's node_modules).
+import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+
 export default function searchDocsExtension(pi: any) {
+  if (!isFeatureEnabled("search_docs")) return;
   const year = new Date().getFullYear();
 
   pi.registerTool({

@@ -172,7 +172,10 @@ async function drainStateQueue(): Promise<void> {
   }
 }
 
+import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+
 export default function (pi) {
+  if (!isFeatureEnabled("herdr")) return;
   if (!enabled()) {
     return;
   }

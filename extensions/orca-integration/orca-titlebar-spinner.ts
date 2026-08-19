@@ -18,7 +18,10 @@ function getBaseTitle(pi) {
   return session ? `\u03c0 - ${session} - ${cwd}` : `\u03c0 - ${cwd}`
 }
 
+import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+
 export default function (pi) {
+  if (!isFeatureEnabled("orca-integration")) return;
   if (!process.env.ORCA_PANE_KEY) return
   let timer = null
   let frameIndex = 0
