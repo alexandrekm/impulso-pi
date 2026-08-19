@@ -164,11 +164,14 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
 ## Current core resources
 
 - `extensions/command-guard/` — bash command-guard (default-allow glob policy)
-- `extensions/footer-status-widgets/footer-status-widgets.ts` — custom footer
-  stats (tok/s, cost, cache-hit-rate, PR status) via pi's native `setStatus()`,
-  surfaced by pi-droid-styling's user-zone footer
-- `git:github.com/sting8k/pi-droid-styling` — whole-TUI styling (startup,
-  editor, tool tags, footer); owns the footer + tool styling
+- `npm:@juanbenjumea/pi-dynamic-footer` — dynamic footer with live
+  observability (context gauge, TPS, tokens, cost, cache %, git branch + diff,
+  thinking level, fast-mode indicator, subscription quota bars for 8
+  providers); owns the footer via pi's native `setFooter()`. Commands:
+  `/obs`, `/obs-toggle`, `/obs-settings`. Replaced `pi-droid-styling` (which
+  baked its footer into the BoxEditor with no disable flag) and
+  `footer-status-widgets` (whose toks/cost/cache widgets duplicated this
+  footer's). Persists session summaries under `~/.pi/agent/observability/`
 - `git:github.com/sting8k/pi-themes` — companion themes (incl. catppuccin-mocha)
 - `npm:@juicesharp/rpiv-ask-user-question` — ask-user-question tool
 - `npm:@ff-labs/pi-fff` — FFF file finder; replaces pi's built-in
@@ -179,21 +182,12 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
   reads/concurrent writes can't land an edit on the wrong line. Config
   (`extensions/hashline/hashline.json` → profile-root `hashline.json`) pins
   `grep: false` so it doesn't collide with FFF's `grep` override; it reads
-  via pi's `getAgentDir()`, so the config is per-profile (unlike
-  pi-droid-styling)
+  via pi's `getAgentDir()`, so the config is per-profile
 - `npm:pi-provider-litellm` — LiteLLM proxy native Provider extension;
   discovers models from a self-hosted LiteLLM proxy and registers them under
   pi providers (default `litellm`, aliases via `litellm.providers` in
   settings.json); supports `/login litellm`, LiteLLM MCP tools, and LiteLLM
   Skills Gateway prompt injection
-
-Note: pi-droid-styling's own config file lives at a **hardcoded**
-`~/.pi/agent/pi-droid-styling.json` (it does not follow `PI_CODING_AGENT_DIR`),
-so it is global across profiles. It is sourced in the repo at
-`extensions/pi-droid-styling/config.json` and tagged `"base"`, so it syncs
-**only** to the `--base` target (`~/.pi/agent`), never as a dead copy inside a
-profile. Sync with `./install.sh --base`; promote live edits (it hot-reloads)
-back with `./install.sh pull --base`.
 
 ## Prerequisites
 
