@@ -23,7 +23,6 @@
   "resources": {
     // "core" baseline = everything currently in this repo. Always installed
     // (every profile, and --base).
-    "extensions/footer-status-widgets/footer-status-widgets.ts": { "tags": ["core"] },
     "npm:@juicesharp/rpiv-ask-user-question": { "tags": ["core"] },
     "npm:@alfonzjanfrithz/pi-websearch": { "tags": ["core"] },
 
@@ -44,33 +43,40 @@
     "npm:@ff-labs/pi-fff": { "tags": ["core"] },
     "extensions/fff/fff-env.ts": { "tags": ["core"] },
 
-    // pi-droid-styling (sting8k): whole-TUI styling — compact startup header,
-    // boxed/cli-dock editor, cleaner tool tags + message prefixes, footer
-    // stats, and reload-safe render patches. Owns the footer + tool styling,
-    // so it replaces pi-footer and pi-toolbox. Config (global, hardcoded to
-    // ~/.pi/agent/pi-droid-styling.json): presentationStyle/userZoneStyle/
-    // inputBox/dimToolOutput/...; it hot-reloads. Companion themes via
-    // pi-themes. Git-only (not on npm), so it uses the git: resource kind.
-    // https://github.com/sting8k/pi-droid-styling
-    "git:github.com/sting8k/pi-droid-styling": { "tags": ["core"] },
+    // pi-themes (sting8k): companion themes for pi, incl. catppuccin-mocha
+    // (pinned as the shared "theme" in the settings object above). Core so
+    // every profile gets it. Git-only (not on npm), so it uses the git:
+    // resource kind. https://github.com/sting8k/pi-themes
     "git:github.com/sting8k/pi-themes": { "tags": ["core"] },
 
-    // Pi 0.84's fullscreen renderer owns terminal painting. Disable
-    // droid-styling's direct physical-row self-heal, which can leave a stale
-    // duplicate bottom zone after an editor reflow. Set
-    // PI_DROID_RENDER_PHYSICAL_SYNC=1 before launching pi to opt back in.
-    "extensions/pi-droid-styling/droid-render-safety-env.ts": { "tags": ["core"] },
-
-    // pi-droid-styling's config. The extension reads it from a HARDCODED
-    // ~/.pi/agent/pi-droid-styling.json (it ignores PI_CODING_AGENT_DIR), so
-    // it's global across profiles. Tagged "base" so it lands only on the
-    // --base target (~/.pi/agent) — never as a dead copy inside a profile.
-    // Sync with `./install.sh --base`; promote live edits back with
-    // `./install.sh pull --base`. It hot-reloads in pi.
-    "extensions/pi-droid-styling/config.json": {
-      "tags": ["base"],
-      "dest": "pi-droid-styling.json",
-    },
+    // pi-dynamic-footer (vendored from @juanbenjumea/pi-dynamic-footer v0.1.7
+    // by Juan Benjumea): dynamic footer with live observability — context
+    // gauge + %, live/last-turn TPS, per-turn ↑input/↓output tokens, session
+    // cost, cache hit %, git branch + ±diff lines, thinking level, fast-mode
+    // indicator, turn count, and rolling-window subscription quota bars for 8
+    // provider types (Claude/Codex/OpenCode Go/ClinePass/Umans/Copilot/
+    // Gemini/Kimi). Owns the footer via ctx.ui.setFooter(). Commands: /obs
+    // (dashboard + last 10 sessions), /obs-toggle, /obs-settings (segment
+    // toggles, context zones, presets). Persists last 10 session summaries
+    // under ~/.pi/agent/observability/.
+    //
+    // Vendored (not `npm:`) so we can edit the segment renderers + layout
+    // directly for the emoji-icon / old-footer color theme — the npm package
+    // ships fixed styling and pi's jiti loader isolates the module cache, so a
+    // runtime monkey-patch can't reach the package's `builtinRenderers` (and
+    // Node refuses to strip types under node_modules, blocking native import).
+    // Trade-off: no upstream auto-updates — re-sync from the package manually
+    // (bump the vendored tree + re-apply theme edits in
+    // lib/footer-engine/segments.ts and layout.ts). Its @juanbenjumea/
+    // opencode-go-usage dep is vendored under vendor/opencode-go-usage/ with
+    // imports rewritten to relative paths; the rest is relative or
+    // @earendil-works/* (resolved by pi's jiti aliases). Core so every profile
+    // gets it. Replaced pi-droid-styling (which baked its footer into BoxEditor
+    // with no disable flag) and footer-status-widgets (duplicate metrics).
+    // Quota bars read credentials from ~/.pi/agent/auth.json (populated by
+    // /login) — inert without them.
+    // https://www.npmjs.com/package/@juanbenjumea/pi-dynamic-footer
+    "extensions/pi-dynamic-footer/": { "tags": ["core"] },
 
     // Save every LLM provider request payload to <configDir>/payloads/ for
     // inspecting system prompts, messages, tool definitions, etc. Defaults
@@ -131,7 +137,8 @@
     //
     // Chosen over the YuGiMob `pi-hashline-edit-pro` fork: the fork's config
     // path is hardcoded to XDG (~/.config/...), which would fight the
-    // profile machinery like pi-droid-styling does; this original reads its
+    // profile machinery (the way pi-droid-styling's hardcoded config path
+    // did); this original reads its
     // config via pi's `getAgentDir()` (see extensions/hashline/hashline.json
     // below), so it lands per-profile. It also keeps the `edits[]` array
     // (multi-op per call) and the opt-in `grep` override, which the fork
