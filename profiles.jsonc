@@ -49,40 +49,34 @@
     // resource kind. https://github.com/sting8k/pi-themes
     "git:github.com/sting8k/pi-themes": { "tags": ["core"] },
 
-    // @juanbenjumea/pi-dynamic-footer: dynamic footer with live observability
-    // — context gauge + %, live/last-turn TPS, per-turn ↑input/↓output
-    // tokens, session cost, cache hit %, git branch + ±diff lines, thinking
-    // level, fast-mode indicator, turn count, and rolling-window subscription
-    // quota bars for 8 provider types (Claude/Codex/OpenCode Go/ClinePass/
-    // Umans/Copilot/Gemini/Kimi). Replaces pi's default footer entirely via
-    // ctx.ui.setFooter(). Commands: /obs (dashboard + last 10 sessions),
-    // /obs-toggle, /obs-settings (segment toggles, context zones, presets).
-    // Persists last 10 session summaries under ~/.pi/agent/observability/.
+    // pi-dynamic-footer (vendored from @juanbenjumea/pi-dynamic-footer v0.1.7
+    // by Juan Benjumea): dynamic footer with live observability — context
+    // gauge + %, live/last-turn TPS, per-turn ↑input/↓output tokens, session
+    // cost, cache hit %, git branch + ±diff lines, thinking level, fast-mode
+    // indicator, turn count, and rolling-window subscription quota bars for 8
+    // provider types (Claude/Codex/OpenCode Go/ClinePass/Umans/Copilot/
+    // Gemini/Kimi). Owns the footer via ctx.ui.setFooter(). Commands: /obs
+    // (dashboard + last 10 sessions), /obs-toggle, /obs-settings (segment
+    // toggles, context zones, presets). Persists last 10 session summaries
+    // under ~/.pi/agent/observability/.
     //
-    // Replaced pi-droid-styling as the footer owner: droid-styling baked its
-    // footer into the BoxEditor editor component with no "disable footer"
-    // config flag (userZoneStyle only offers droid/gemini/cli-dock, all render
-    // a footer), so the two couldn't coexist on the single setFooter slot.
-    // droid-styling's editor dock / tool tags / startup header are dropped in
-    // favor of pi's native editor + this footer. footer-status-widgets.ts was
-    // removed too: its toks/cost/cache widgets duplicated this footer's, and
-    // its only unique signal (gh pr view PR status) is not worth the overlap.
-    // pi-themes is kept so catppuccin-mocha stays. Quota bars read credentials
-    // from ~/.pi/agent/auth.json (populated by /login) — inert without them.
+    // Vendored (not `npm:`) so we can edit the segment renderers + layout
+    // directly for the emoji-icon / old-footer color theme — the npm package
+    // ships fixed styling and pi's jiti loader isolates the module cache, so a
+    // runtime monkey-patch can't reach the package's `builtinRenderers` (and
+    // Node refuses to strip types under node_modules, blocking native import).
+    // Trade-off: no upstream auto-updates — re-sync from the package manually
+    // (bump the vendored tree + re-apply theme edits in
+    // lib/footer-engine/segments.ts and layout.ts). Its @juanbenjumea/
+    // opencode-go-usage dep is vendored under vendor/opencode-go-usage/ with
+    // imports rewritten to relative paths; the rest is relative or
+    // @earendil-works/* (resolved by pi's jiti aliases). Core so every profile
+    // gets it. Replaced pi-droid-styling (which baked its footer into BoxEditor
+    // with no disable flag) and footer-status-widgets (duplicate metrics).
+    // Quota bars read credentials from ~/.pi/agent/auth.json (populated by
+    // /login) — inert without them.
     // https://www.npmjs.com/package/@juanbenjumea/pi-dynamic-footer
-    "npm:@juanbenjumea/pi-dynamic-footer": { "tags": ["core"] },
-
-    // dynamic-footer-theme: local companion that re-themes pi-dynamic-footer's
-    // segment renderers with emoji icons (🤖 ⏱ 📁 🌿 📊 ⚡ ⬆ ⬇ 🗃 💰) and the
-    // old pi-droid-styling / footer-status-widgets color accents. Monkey-patches
-    // the installed package's `builtinRenderers` in place (local extensions load
-    // before npm ones; jiti's module cache is keyed by resolved path, so the
-    // absolute-path import yields the same module instance the package uses).
-    // Only swaps segment content — layout/separator stay upstream. No-op if the
-    // package isn't installed. Currently being iterated on from the personal
-    // profile; once the styling settles it stays core (both profiles). See
-    // extensions/dynamic-footer-theme/dynamic-footer-theme.ts.
-    "extensions/dynamic-footer-theme/dynamic-footer-theme.ts": { "tags": ["core"] },
+    "extensions/pi-dynamic-footer/": { "tags": ["core"] },
 
     // Save every LLM provider request payload to <configDir>/payloads/ for
     // inspecting system prompts, messages, tool definitions, etc. Defaults

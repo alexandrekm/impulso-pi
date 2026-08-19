@@ -15,5 +15,14 @@
   // ~/.pi/agent copies on integration updates) — excluded from strict
   // typecheck so re-vendoring stays a clean diff against upstream. herdr's
   // file already opts out per-file via `@ts-nocheck` and needs no exclude.
-  "exclude": ["extensions/orca-integration/**"]
+  "exclude": [
+    "extensions/orca-integration/**",
+    // Vendored fork of @juanbenjumea/pi-dynamic-footer (v0.1.7) + its
+    // opencode-go-usage dep. Excluded from strict typecheck for the same
+    // reason as orca-integration: it's upstream code we re-sync, and its
+    // loose `as any` casts / @earendil-works/pi-ai peer-dep imports don't
+    // fit this repo's strict tsconfig. Lint + prettier still apply. Re-apply
+    // theme edits in lib/footer-engine/{segments,layout}.ts after a re-sync.
+    "extensions/pi-dynamic-footer/**"
+  ]
 }

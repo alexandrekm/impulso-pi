@@ -111,8 +111,12 @@ function writeEnabled(enabled: boolean): void {
   }
 }
 
-function updateStatus(ui: any, enabled: boolean): void {
-  ui.setStatus("payload-exporter", `payload export: ${enabled ? "on" : "off"}`);
+/** Status display intentionally suppressed: pi-dynamic-footer appends every
+ * extension status as a footer line, which crowds the bar. The extension
+ * still works (dumps payloads when enabled); just no footer indicator. Use
+ * `/payload-exporter status` to check. */
+function updateStatus(_ui: any, _enabled: boolean): void {
+  // no-op — see comment above
 }
 
 function sanitizeModel(id: string): string {

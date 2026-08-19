@@ -7,3 +7,7 @@ results.sarif
 # re-vendoring should stay a clean diff against upstream).
 extensions/orca-integration/
 extensions/herdr/
+# Vendored fork of @juanbenjumea/pi-dynamic-footer (v0.1.7) + its
+# opencode-go-usage dep — keep upstream formatting so re-syncs stay clean;
+# theme edits are localized to lib/footer-engine/{segments,layout}.ts.
+extensions/pi-dynamic-footer/
