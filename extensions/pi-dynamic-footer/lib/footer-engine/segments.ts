@@ -181,9 +181,13 @@ export const builtinRenderers: Record<string, SegmentRenderer> = {
   },
 
   cache(input) {
-    const { totalCacheRead, totalOutputTokens, theme } = input;
+    const { totalCacheRead, totalInputTokens, theme } = input;
+    // Prompt-cache hit rate: of all prompt tokens the model received, the
+    // fraction served from cache. Denominator = cacheRead + input (the
+    // non-cached prompt tokens); output tokens are a different quantity and
+    // must not be in the denominator.
     if (totalCacheRead <= 0) return theme.fg("dim", "🗃 --");
-    const total = totalCacheRead + totalOutputTokens;
+    const total = totalCacheRead + totalInputTokens;
     if (total <= 0) return theme.fg("dim", "🗃 --");
     const pct = Math.round((totalCacheRead / total) * 100);
     const color = pct >= 70 ? "success" : pct >= 40 ? "dim" : "warning";
