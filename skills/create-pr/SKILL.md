@@ -20,7 +20,7 @@ The Motive-standard `commitlint.config.js` rules (`@commitlint/config-convention
 
 | Rule | Requirement |
 |------|-------------|
-| `type-enum` | One of: `feat, fix, docs, style, refactor, perf, test, chore, revert, build, ci` |
+| `type-enum` | One of: `feat, fix, docs, style, refactor, perf, test, revert, build, ci` — **never `chore`** (see semver mapping below) |
 | `scope-empty` | Never — scope is **required** |
 | `scope-case` | Upper-case — scope is a Jira key (e.g. `DEVPRD-1234`) |
 | `valid-jira-scope` | Scope must match `^[A-Z][A-Z0-9]*-\d+$` |
@@ -33,6 +33,15 @@ The Motive-standard `commitlint.config.js` rules (`@commitlint/config-convention
 
 If the current repo's `commitlint.config.js` differs from this table, follow the repo's own config and flag the discrepancy to the user.
 
+Only these trigger a semver release; the rest describe work but produce no version bump:
+
+| Type | Semver bump |
+|------|-------------|
+| `feat` | MINOR |
+| `fix`, `perf` | PATCH |
+| `BREAKING CHANGE` footer (any type) | MAJOR |
+| `docs`, `style`, `refactor`, `test`, `build`, `ci`, `revert` | none (no release) |
+
 | Type | Use |
 |------|-----|
 | feat | New feature |
@@ -42,7 +51,6 @@ If the current repo's `commitlint.config.js` differs from this table, follow the
 | refactor | Code restructuring |
 | perf | Performance |
 | test | Adding/fixing tests |
-| chore | Maintenance, dependencies, CI config auxiliary tools |
 | revert | Reverts a previous commit |
 | build | Build system / dependencies |
 | ci | CI configuration |
@@ -57,7 +65,7 @@ If the current repo's `commitlint.config.js` differs from this table, follow the
 
 Required: `type-JIRA_KEY-short-description`
 ```
-^(feat|fix|docs|style|refactor|perf|test|chore|revert|build|ci)-[A-Z]+-\d+-.+$
+^(feat|fix|docs|style|refactor|perf|test|revert|build|ci)-[A-Z]+-\d+-.+$
 ```
 
 - On `main`/`master`/`develop` → ask for type + description, create: `git checkout -b type-JIRA_KEY-short-description` before staging anything.
@@ -118,7 +126,7 @@ Pre-commit hooks fire automatically. Failure → `skill://create-pr/TROUBLESHOOT
 
 Required: `type(JIRA_KEY): description` (lowercase by convention)
 ```
-^(feat|fix|docs|style|refactor|perf|test|chore|revert|build|ci)\([A-Z][A-Z0-9]*-\d+\): .+$
+^(feat|fix|docs|style|refactor|perf|test|revert|build|ci)\([A-Z][A-Z0-9]*-\d+\): .+$
 ```
 
 Subject: only letters, numbers, spaces, and `- _ / ( ) . ,` after the `type(SCOPE): ` prefix. **No colons, backticks, brackets, or `key: value` inline.** Skip any commit whose first line, lowercased, is exactly `initial plan` (Copilot cloud-agent placeholder).
