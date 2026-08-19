@@ -44,11 +44,9 @@
     "extensions/fff/fff-env.ts": { "tags": ["core"] },
 
     // pi-themes (sting8k): companion themes for pi, incl. catppuccin-mocha
-    // (pinned as the shared "theme" in the settings object above). Was the
-    // companion to pi-droid-styling; kept after droid-styling was replaced by
-    // @juanbenjumea/pi-dynamic-footer (which owns the footer but ships no
-    // themes). Git-only (not on npm), so it uses the git: resource kind.
-    // https://github.com/sting8k/pi-themes
+    // (pinned as the shared "theme" in the settings object above). Core so
+    // every profile gets it. Git-only (not on npm), so it uses the git:
+    // resource kind. https://github.com/sting8k/pi-themes
     "git:github.com/sting8k/pi-themes": { "tags": ["core"] },
 
     // @juanbenjumea/pi-dynamic-footer: dynamic footer with live observability
@@ -81,7 +79,8 @@
     // before npm ones; jiti's module cache is keyed by resolved path, so the
     // absolute-path import yields the same module instance the package uses).
     // Only swaps segment content — layout/separator stay upstream. No-op if the
-    // package isn't installed. See
+    // package isn't installed. Currently being iterated on from the personal
+    // profile; once the styling settles it stays core (both profiles). See
     // extensions/dynamic-footer-theme/dynamic-footer-theme.ts.
     "extensions/dynamic-footer-theme/dynamic-footer-theme.ts": { "tags": ["core"] },
 
