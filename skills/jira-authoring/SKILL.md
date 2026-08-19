@@ -83,9 +83,23 @@ Epics already exist — search for one to attach the ticket to:
 acli jira workitem search --jql "project = AICPE AND type = Epic AND status != Done" --json --limit 20
 ```
 
-Present epics using the `ask_user_question` tool, let user pick → `EPIC_KEY`.
+Present epics using the `ask_user_question` tool — one option per epic, each with key, summary, and status. Include a "None of these" option:
 
-If no suitable epic exists, ask the user which epic to use. Do not create epics — that's a human decision.
+```
+ask_user_question(questions=[{
+  question: "Which epic should this ticket go under?",
+  header: "Parent epic",
+  options: [
+    { label: "AICPE-42", description: "Model inference platform [In Progress]" },
+    { label: "AICPE-77", description: "CollisionFM data pipeline [To Do]" },
+    { label: "None of these", description: "I'll specify a different epic" }
+  ]
+}])
+```
+
+**REQUIRED: Use `ask_user_question` for explicit selection. Never silently pick an epic — choosing the wrong parent misroutes the ticket and is hard to detect after creation.**
+
+If no suitable epic exists (or the user picks "None of these"), ask the user which epic to use. Do not create epics — that's a human decision.
 
 ### 3. Create the ticket under the epic
 

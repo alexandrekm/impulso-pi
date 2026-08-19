@@ -20,7 +20,7 @@ The Motive-standard `commitlint.config.js` rules (`@commitlint/config-convention
 
 | Rule | Requirement |
 |------|-------------|
-| `type-enum` | One of: `feat, fix, docs, style, refactor, perf, test, chore, revert, build, ci` |
+| `type-enum` | One of: `feat, fix, docs, style, refactor, perf, test, revert, build, ci` — **never `chore`** (see semver mapping below) |
 | `scope-empty` | Never — scope is **required** |
 | `scope-case` | Upper-case — scope is a Jira key (e.g. `DEVPRD-1234`) |
 | `valid-jira-scope` | Scope must match `^[A-Z][A-Z0-9]*-\d+$` |
@@ -33,6 +33,15 @@ The Motive-standard `commitlint.config.js` rules (`@commitlint/config-convention
 
 If the current repo's `commitlint.config.js` differs from this table, follow the repo's own config and flag the discrepancy to the user.
 
+Only these trigger a semver release; the rest describe work but produce no version bump:
+
+| Type | Semver bump |
+|------|-------------|
+| `feat` | MINOR |
+| `fix`, `perf` | PATCH |
+| `BREAKING CHANGE` footer (any type) | MAJOR |
+| `docs`, `style`, `refactor`, `test`, `build`, `ci`, `revert` | none (no release) |
+
 | Type | Use |
 |------|-----|
 | feat | New feature |
@@ -42,7 +51,6 @@ If the current repo's `commitlint.config.js` differs from this table, follow the
 | refactor | Code restructuring |
 | perf | Performance |
 | test | Adding/fixing tests |
-| chore | Maintenance, dependencies, CI config auxiliary tools |
 | revert | Reverts a previous commit |
 | build | Build system / dependencies |
 | ci | CI configuration |
@@ -57,7 +65,7 @@ If the current repo's `commitlint.config.js` differs from this table, follow the
 
 Required: `type-JIRA_KEY-short-description`
 ```
-^(feat|fix|docs|style|refactor|perf|test|chore|revert|build|ci)-[A-Z]+-\d+-.+$
+^(feat|fix|docs|style|refactor|perf|test|revert|build|ci)-[A-Z]+-\d+-.+$
 ```
 
 - On `main`/`master`/`develop` → ask for type + description, create: `git checkout -b type-JIRA_KEY-short-description` before staging anything.
@@ -92,19 +100,9 @@ git diff --staged
 
 Analyze the diff and pick type + description per the §0 rules above. Compose: `type(JIRA_KEY): lowercase description`.
 
-## 5. Approve
+## 5. Proposed commit message
 
-Use the `ask_user_question` tool:
-```
-ask_user_question(questions=[{
-  question: "Proposed commit message: type(KEY): description. Approve or edit?",
-  header: "Commit message",
-  options: [
-    { label: "Approve (Recommended)", description: "Commit with this message" },
-    { label: "Edit", description: "I'll provide a different message" }
-  ]
-}])
-```
+Show the proposed commit message `type(KEY): lowercase description` in your response, then proceed to commit (§6). No approval gate — do not call `ask_user_question` here.
 
 ## 6. Commit
 
@@ -118,7 +116,7 @@ Pre-commit hooks fire automatically. Failure → `skill://create-pr/TROUBLESHOOT
 
 Required: `type(JIRA_KEY): description` (lowercase by convention)
 ```
-^(feat|fix|docs|style|refactor|perf|test|chore|revert|build|ci)\([A-Z][A-Z0-9]*-\d+\): .+$
+^(feat|fix|docs|style|refactor|perf|test|revert|build|ci)\([A-Z][A-Z0-9]*-\d+\): .+$
 ```
 
 Subject: only letters, numbers, spaces, and `- _ / ( ) . ,` after the `type(SCOPE): ` prefix. **No colons, backticks, brackets, or `key: value` inline.** Skip any commit whose first line, lowercased, is exactly `initial plan` (Copilot cloud-agent placeholder).
@@ -153,17 +151,7 @@ cat .github/pull_request_template.md
 - **Title:** `type(JIRA_KEY): lowercase description` (type + key from steps 2 and 4; summarize the change)
 - **Body:** fill the repo template from diff + commit history. Append `Jira: https://k2labs.atlassian.net/browse/JIRA_KEY` if not already present.
 
-Use the `ask_user_question` tool to present title + body for approval:
-```
-ask_user_question(questions=[{
-  question: "PR title and body generated. Approve or edit?",
-  header: "PR content",
-  options: [
-    { label: "Approve (Recommended)", description: "Create PR with this title and body" },
-    { label: "Edit", description: "I'll provide changes" }
-  ]
-}])
-```
+Proceed directly to create the PR (§11) with the generated title and body — no approval gate. Show the title and body in your response.
 
 ## 10. Update Jira ticket
 
@@ -175,7 +163,7 @@ acli jira workitem edit --key "<JIRA_KEY>" --description "<updated description s
 
 If `acli` is unavailable, load `skill://jira/FALLBACK.md` for the REST fallback. For other Jira operations (transition, story points, sprint), load `skill://jira`.
 
-If it deviates significantly, use the `ask_user_question` tool to confirm before updating.
+If it deviates significantly, note the deviation in the update body rather than blocking with a prompt.
 
 ## 11. Create PR
 
