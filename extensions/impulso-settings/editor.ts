@@ -18,6 +18,7 @@
 
 import { CustomEditor, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
+import type { Feature } from "./features.ts";
 
 type Theme = { fg(color: string, text: string): string; bold(text: string): string };
 
@@ -40,6 +41,7 @@ export type ImpulsoViewCtor = new (
   theme: Theme,
   done: () => void,
   launch?: (command: string) => void,
+  pick?: (f: Feature, current: string) => Promise<string | undefined>,
 ) => unknown;
 
 /** Build the editor factory passed to ctx.ui.setEditorComponent. */
@@ -47,9 +49,10 @@ export function makeImpulsoEditorFactory(
   ui: UiLike,
   View: ImpulsoViewCtor,
   launch?: (cmd: string) => void,
+  pick?: (f: Feature, current: string) => Promise<string | undefined>,
 ) {
   return (tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager): ImpulsoEditor =>
-    new ImpulsoEditor(tui, theme, keybindings, ui, View, launch);
+    new ImpulsoEditor(tui, theme, keybindings, ui, View, launch, pick);
 }
 
 export class ImpulsoEditor extends CustomEditor {
@@ -57,6 +60,7 @@ export class ImpulsoEditor extends CustomEditor {
   private readonly ui: UiLike;
   private readonly View: ImpulsoViewCtor;
   private readonly launch: ((cmd: string) => void) | undefined;
+  private readonly pick: ((f: Feature, current: string) => Promise<string | undefined>) | undefined;
   /** Stable wrapper returned via the onSubmit getter. */
   private wrappedSubmit?: (text: string) => void;
 
@@ -67,11 +71,13 @@ export class ImpulsoEditor extends CustomEditor {
     ui: UiLike,
     View: ImpulsoViewCtor,
     launch?: (cmd: string) => void,
+    pick?: (f: Feature, current: string) => Promise<string | undefined>,
   ) {
     super(tui, theme, keybindings);
     this.ui = ui;
     this.View = View;
     this.launch = launch;
+    this.pick = pick;
 
     // Intercept onSubmit assignments from pi (setCustomEditorComponent does
     // `newEditor.onSubmit = this.defaultEditor.onSubmit`). The getter hands
@@ -109,7 +115,7 @@ export class ImpulsoEditor extends CustomEditor {
     try {
       await this.ui.custom<void>(
         (_tui: TUI, theme: Theme, _kb: KeybindingsManager, done: () => void) =>
-          new this.View(theme, done, this.launch),
+          new this.View(theme, done, this.launch, this.pick),
         {
           overlay: true,
           overlayOptions: {

@@ -26,6 +26,7 @@ import {
   type Feature,
 } from "./features.ts";
 import { makeImpulsoEditorFactory } from "./editor.ts";
+import { openConfigPicker } from "./picker.ts";
 
 type Theme = { fg(color: string, text: string): string; bold(text: string): string };
 
@@ -43,16 +44,23 @@ export class ImpulsoSettingsView implements Component {
   private readonly theme: Theme;
   private readonly onDone: () => void;
   private readonly launch: ((command: string) => void) | undefined;
+  private readonly pick: ((f: Feature, current: string) => Promise<string | undefined>) | undefined;
   private tabIndex = 0;
   private cursor = 0;
   private scrollOffset = 0;
   private dirty = false;
   private rows: Row[] = [];
 
-  constructor(theme: Theme, onDone: () => void, launch?: (command: string) => void) {
+  constructor(
+    theme: Theme,
+    onDone: () => void,
+    launch?: (command: string) => void,
+    pick?: (f: Feature, current: string) => Promise<string | undefined>,
+  ) {
     this.theme = theme;
     this.onDone = onDone;
     this.launch = launch;
+    this.pick = pick;
     this.rebuildRows();
   }
 
@@ -150,6 +158,23 @@ export class ImpulsoSettingsView implements Component {
       if (cmd) this.launch?.(cmd);
       return;
     }
+    if (f.kind === "config" && f.picker) {
+      // Open a searchable nested overlay (e.g. the pi-btw model picker,
+      // sourced from the live model registry) without closing this page.
+      // Resolves to the chosen value, "" (clear key / use default), or
+      // undefined (cancelled — leave the row unchanged).
+      const current = getFeatureState(f);
+      void this.pick?.(f, current).then((v) => {
+        if (v === undefined) return;
+        try {
+          setFeatureState(f, v);
+          this.dirty = true;
+        } catch {
+          this.dirty = true;
+        }
+      });
+      return;
+    }
     const values = featureValues(f);
     const current = getFeatureState(f);
     const idx = values.indexOf(current);
@@ -219,7 +244,7 @@ export class ImpulsoSettingsView implements Component {
       const labelText = selected ? this.theme.fg("accent", label) : label;
       const gap = " ".repeat(Math.max(1, labelCol - visibleWidth(label)));
       const value = getFeatureState(f);
-      const valueText = this.renderValue(value, selected);
+      const valueText = this.renderValue(f, value, selected);
       lines.push(truncateToWidth(`${prefix}${labelText}${gap}${valueText}`, inner, ""));
     }
     // Description for the selected feature.
@@ -233,7 +258,22 @@ export class ImpulsoSettingsView implements Component {
     return lines;
   }
 
-  private renderValue(value: string, selected: boolean): string {
+  private renderValue(f: Feature, value: string, selected: boolean): string {
+    if (f.kind === "config") {
+      const isBool =
+        !f.values ||
+        f.values.length === 0 ||
+        (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
+      if (isBool) {
+        const tag = value === "on" ? "● on" : "○ off";
+        return selected
+          ? this.theme.fg("accent", tag)
+          : this.theme.fg(value === "on" ? "muted" : "dim", tag);
+      }
+      // enum with "" = "same as main / use default" sentinel.
+      const text = value === "" ? "same as main" : value;
+      return selected ? this.theme.fg("accent", text) : this.theme.fg("muted", text);
+    }
     const isOn = value === "on" || (value !== "off" && value !== "");
     const tag = isOn ? "● on" : "○ off";
     // For enum values other than on/off, show the value plainly.
@@ -314,7 +354,12 @@ export default function (pi: any): void {
     if (editorInstalled || !ctx.hasUI || !ctx.ui?.setEditorComponent) return;
     try {
       ctx.ui.setEditorComponent(
-        makeImpulsoEditorFactory(ctx.ui, ImpulsoSettingsView, launchCommand),
+        makeImpulsoEditorFactory(
+          ctx.ui,
+          ImpulsoSettingsView,
+          launchCommand,
+          makePick(ctx.modelRegistry, ctx.ui),
+        ),
       );
       editorInstalled = true;
     } catch {
@@ -332,7 +377,12 @@ export default function (pi: any): void {
       }
       await ctx.ui.custom(
         (_tui: unknown, theme: Theme, _keybindings: unknown, done: () => void) => {
-          return new ImpulsoSettingsView(theme, done, launchCommand);
+          return new ImpulsoSettingsView(
+            theme,
+            done,
+            launchCommand,
+            makePick(ctx.modelRegistry, ctx.ui),
+          );
         },
         {
           overlay: true,
@@ -348,4 +398,29 @@ export default function (pi: any): void {
       );
     },
   });
+}
+
+/** Build a `pick` callback for `config`+`picker` features. The model
+ *  picker is sourced from the live model registry (`provider/model-id` for
+ *  every registered model) and opens as a nested searchable overlay via
+ *  ctx.ui.custom. Other picker features can be added by feature id here. */
+function makePick(
+  modelRegistry: any,
+  ui: any,
+): (f: Feature, current: string) => Promise<string | undefined> {
+  return (f, current) => {
+    if (f.id === "pi-btw-model") {
+      const models = (modelRegistry?.getAll?.() ?? []).map((m: any) => ({
+        value: `${m.provider}/${m.id}`,
+        label: `${m.provider}/${m.id}`,
+      }));
+      return openConfigPicker(ui, {
+        title: "Side-thread model",
+        items: models,
+        current,
+        blankLabel: "Same as main thread",
+      });
+    }
+    return Promise.resolve(undefined);
+  };
 }

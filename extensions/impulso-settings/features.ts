@@ -29,7 +29,7 @@ const SETTINGS_PATH = join(CONFIG_DIR, "settings.json");
 // Tabs & feature schema
 // ─────────────────────────────────────────────────────────────────────────
 
-export type FeatureKind = "package" | "local" | "pi-setting" | "launch";
+export type FeatureKind = "package" | "local" | "pi-setting" | "launch" | "config";
 
 export interface Feature {
   id: string;
@@ -52,6 +52,12 @@ export interface Feature {
   command?: string;
   /** For `launch`: returns the display value shown on the row (e.g. the configured model ref). */
   display?: () => string;
+  /** For `config`: a JSON file name relative to <configDir> (e.g. "pi-btw.json").
+   *  The feature reads/writes a top-level key in that file. */
+  configFile?: string;
+  /** For `config`: whether the value is picked via a searchable overlay
+   *  (large/dynamic lists like models) rather than cycled in-row. */
+  picker?: boolean;
 }
 
 export interface Tab {
@@ -237,12 +243,48 @@ export const FEATURES: Feature[] = [
   {
     id: "pi-btw",
     tab: "tools",
-    group: "Tools",
+    group: "pi-btw",
     label: "pi-btw side thread",
     description:
-      "Ask side questions in a separate thread without derailing the main task. /btw <question> or /btw menu; bring context back with Ctrl+R. npm:@narumitw/pi-btw.",
+      "Ask side questions in a separate thread without derailing the main task. /btw <question> or /btw menu; Ctrl+R brings selected context back to the main editor. npm:@narumitw/pi-btw.",
     kind: "package",
     spec: "npm:@narumitw/pi-btw",
+  },
+  {
+    id: "pi-btw-model",
+    tab: "tools",
+    group: "pi-btw",
+    label: "Side-thread model",
+    description:
+      "Model that answers /btw side questions. 'Same as main thread' uses the session's current model+creds; pick a cheaper model (Haiku/Flash/mini) to keep side questions off the main budget. Written to <configDir>/pi-btw.json (read fresh each /btw, no /reload needed).",
+    kind: "config",
+    configFile: "pi-btw.json",
+    key: "model",
+    picker: true,
+  },
+  {
+    id: "pi-btw-thinking",
+    tab: "tools",
+    group: "pi-btw",
+    label: "Side thinking level",
+    description:
+      "Starting reasoning level for /btw side threads. 'Same as main thread' tracks the session level; a fixed level is clamped to the side model's capabilities. <configDir>/pi-btw.json.",
+    kind: "config",
+    configFile: "pi-btw.json",
+    key: "thinkingLevel",
+    values: ["", "off", "minimal", "low", "medium", "high", "xhigh", "max"],
+  },
+  {
+    id: "pi-btw-remember",
+    tab: "tools",
+    group: "pi-btw",
+    label: "Remember thinking level",
+    description:
+      "When the side thinking level is fixed, persist in-thread Shift+Tab changes to pi-btw.json for next time. Defaults to on. No effect while 'Same as main thread' is selected.",
+    kind: "config",
+    configFile: "pi-btw.json",
+    key: "rememberThinkingLevelChanges",
+    defaultValue: "on",
   },
   {
     id: "command-guard",
@@ -398,6 +440,7 @@ export function featuresForTab(tabId: string): Feature[] {
 /** Effective toggle values for a feature (the SettingsList `values` column). */
 export function featureValues(f: Feature): string[] {
   if (f.kind === "pi-setting" && f.values) return f.values;
+  if (f.kind === "config" && f.values) return f.values;
   return ["on", "off"];
 }
 
@@ -415,6 +458,26 @@ function readPackageConfig(filename: string): Json {
     return JSON.parse(readFileSync(join(CONFIG_DIR, "extensions", filename), "utf8")) as Json;
   } catch {
     return {};
+  }
+}
+
+/** Read a package's top-level JSON config from <configDir>/<filename> (e.g.
+ * pi-btw.json, pi-vision-handoff.json) for `config` features. Missing/
+ * unreadable → empty object (all keys unset). */
+function readConfigFile(filename: string): Json {
+  try {
+    return JSON.parse(readFileSync(join(CONFIG_DIR, filename), "utf8")) as Json;
+  } catch {
+    return {};
+  }
+}
+
+function writeConfigFile(filename: string, data: Json): void {
+  try {
+    mkdirSync(CONFIG_DIR, { recursive: true });
+    writeFileSync(join(CONFIG_DIR, filename), JSON.stringify(data, null, 2) + "\n", "utf8");
+  } catch (e) {
+    throw new Error(`Could not write ${filename}: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
@@ -490,6 +553,22 @@ export function getFeatureState(f: Feature): string {
     return isFeatureEnabled(f.id) ? "on" : "off";
   }
 
+  if (f.kind === "config") {
+    const raw = readConfigFile(f.configFile!)[f.key!];
+    const isBool =
+      !f.values ||
+      f.values.length === 0 ||
+      (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
+    if (isBool) {
+      const def = f.defaultValue === "on";
+      return raw === undefined ? (def ? "on" : "off") : raw === true ? "on" : "off";
+    }
+    // enum: "" (first value) means the key is absent / "same as main".
+    const fallback = f.defaultValue ?? f.values![0] ?? "";
+    const str = raw === undefined ? "" : String(raw);
+    return f.values!.includes(str) ? str : fallback;
+  }
+
   // pi-setting
   const raw = getByPath(readSettings(), f.key!);
   const isBool =
@@ -525,6 +604,24 @@ export function setFeatureState(f: Feature, value: string): void {
 
   if (f.kind === "local") {
     setFeatureEnabled(f.id, value === "on");
+    return;
+  }
+
+  if (f.kind === "config") {
+    const data = readConfigFile(f.configFile!);
+    const isBool =
+      !f.values ||
+      f.values.length === 0 ||
+      (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
+    if (isBool) {
+      data[f.key!] = value === "on";
+    } else if (value === "") {
+      // "" is the "same as main / use default" sentinel: remove the key.
+      delete data[f.key!];
+    } else {
+      data[f.key!] = value;
+    }
+    writeConfigFile(f.configFile!, data);
     return;
   }
 

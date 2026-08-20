@@ -91,16 +91,33 @@ resource is on P  ⟺  "core" ∈ resource.tags  OR  resource.tags ∩ P.tags �
    package, local extension, or a pi built-in setting worth surfacing)
    must be registered in `extensions/impulso-settings/features.ts` so it
    shows up in `/settings` (the impulso page). Add a `Feature` entry with
-   the right `tab`/`group`/`kind`: `package` for npm/git specs (toggled via
-   `packages[]` autoload), `local` for extensions under `extensions/`
-   (the extension's factory must guard on `isFeatureEnabled(id)` from
-   `feature-flag.ts`), `pi-setting` for a safe settings.json key, or
-   `launch` for a row that opens a package's own config command
-   (`/vision-handoff`, `/obs-settings`, …). Forgetting this step means the
-   feature is installed but has no toggle in the UI — a regression of the
-   settings page's promise that every feature is enable/disable-able from
-   one place. Run `npm run typecheck && npm run lint` after editing
-   `features.ts`.
+   the right `tab`/`group`/`kind`:
+   - `package` — npm/git spec, toggled via `packages[]` autoload.
+   - `local` — a local extension under `extensions/`; the extension's
+     factory must guard on `isFeatureEnabled(id)` from `feature-flag.ts`.
+   - `pi-setting` — a safe `settings.json` key (booleans cycle on/off;
+     enums cycle `values[]`). Only keys NOT managed by `profiles.jsonc`
+     `settings` are safe here (install.sh would reset managed keys).
+   - `config` — a top-level key in a *package's own* JSON config file under
+     `<configDir>` (e.g. `pi-btw.json`, `pi-vision-handoff.json`), set via
+     `configFile` + `key`. Use this when a package reads its own config file
+     and exposes no config command to `launch`. Booleans cycle on/off;
+     enums cycle `values[]` (include `""` as the first value to mean
+     "key absent / use default", rendered as "same as main"); set `picker:
+     true` for large/dynamic lists (e.g. a model drawn from the registry) so
+     the row opens a searchable nested overlay instead of cycling. The
+     overlay is built in `index.ts`'s `makePick(modelRegistry, ui)` keyed by
+     feature id — add a branch there for a new picker feature.
+   - `launch` — a row that opens a package's *own* config command
+     (`/vision-handoff`, `/obs-settings`, …) via `pi.sendUserMessage` with
+     `expandPromptTemplates`. Only extension commands are launchable — pi
+     built-ins (`/settings`, `/login`) are hardcoded in the editor's
+     onSubmit and unreachable from inside the overlay. If the package has a
+     config file but no command, use `config` instead.
+   Forgetting this step means the feature is installed but has no toggle in
+   the UI — a regression of the settings page's promise that every feature
+   is enable/disable-able from one place. Run `npm run typecheck && npm run
+   lint` after editing `features.ts`.
 
 Resource key forms:
 
@@ -202,6 +219,17 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
   pi providers (default `litellm`, aliases via `litellm.providers` in
   settings.json); supports `/login litellm`, LiteLLM MCP tools, and LiteLLM
   Skills Gateway prompt injection
+- `npm:@narumitw/pi-btw` — `/btw` side-thread command: ask context-aware
+  questions in a separate thread without derailing the main conversation
+  (`/btw <question>` starts one; `/btw` opens a manager; `Ctrl+R` brings
+  selected context back to the main editor). Side Q&A stays out of the main
+  transcript by default. Uses the session's current model+creds, or an
+  independent choice stored in `<configDir>/pi-btw.json` (`model` in
+  `provider/model-id` form, `thinkingLevel`, `rememberThinkingLevelChanges`).
+  That file is managed from `/settings` → Tools → **pi-btw** group: a
+  searchable model picker (`config`+`picker`, sourced from the registry),
+  a thinking-level enum, and a remember toggle — all write to `pi-btw.json`,
+  read fresh each `/btw` so no `/reload` is needed for model changes
 
 - `extensions/impulso-settings/` — `/impulso` AND `/settings` settings page:
   an OMP-style tabbed TUI (built on `@earendil-works/pi-tui`) that lists every
