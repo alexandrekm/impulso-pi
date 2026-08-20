@@ -153,17 +153,23 @@ cat .github/pull_request_template.md
 
 Proceed directly to create the PR (§11) with the generated title and body — no approval gate. Show the title and body in your response.
 
-## 10. Update Jira ticket
+## 10. Ensure the Jira ticket reflects the PR
 
-Update the Jira description to reflect the work done in the PR:
+The ticket description is often a placeholder (unfilled template) or stale relative to what the PR actually does. Fetch and check it before creating the PR:
 
 ```bash
-acli jira workitem edit --key "<JIRA_KEY>" --description "<updated description summarizing the PR work>" --yes
+acli jira workitem view <JIRA_KEY> --fields "key,summary,description" --json
 ```
 
-If `acli` is unavailable, load `skill://jira/FALLBACK.md` for the REST fallback. For other Jira operations (transition, story points, sprint), load `skill://jira`.
+If the description is a placeholder (contains `<...>`, `TODO`, `TBD`, `placeholder`, empty `## What`/`## Why`/`## Acceptance Criteria` sections) or is materially out of sync with the PR diff, rewrite it from the diff + commit history using the `jira-authoring` templates and update:
 
-If it deviates significantly, note the deviation in the update body rather than blocking with a prompt.
+```bash
+acli jira workitem edit --key "<JIRA_KEY>" --description "<real description reflecting the PR work>" --yes
+```
+
+This is the `jira` skill's B3.c procedure (`read skill://jira`) — load it for the full placeholder checklist and the REST fallback. If it deviates only slightly, note the deviation in the update body rather than blocking with a prompt.
+
+Also ensure the rest of B3 is satisfied for the ticket: B3.a (In Progress), B3.b (active sprint), and B3.d (story points — ask the user with suggested Fibonacci values if missing). Load `skill://jira` for those procedures.
 
 ## 11. Create PR
 
@@ -173,6 +179,17 @@ gh pr create --title "type(JIRA_KEY): lowercase description" --body "<filled-in 
 
 Never use `gh pr create --fill` — always the company template.
 
-## 12. Report
+## 12. Comment on the Jira ticket
 
-Output the PR URL.
+Post a comment on the ticket with the PR title and link so the review is visible from Jira. `JIRA_KEY` = the key from §2; `PR_TITLE` = the exact title from §9/§11; `PR_URL` = the URL `gh pr create` printed.
+
+```bash
+acli jira workitem comment create --key "<JIRA_KEY>" --body "PR: <PR_TITLE>
+<PR_URL>"
+```
+
+If `acli` is unavailable, load `skill://jira/FALLBACK.md` and use the REST comment endpoint (`POST /rest/api/2/issue/<KEY>/comment`). Skip if the ticket already has a comment containing this PR URL — don't duplicate on re-runs. Full procedure: `skill://jira` section C.
+
+## 13. Report
+
+Output the PR URL and the Jira comment confirmation.
