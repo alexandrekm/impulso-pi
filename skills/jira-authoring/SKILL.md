@@ -131,13 +131,9 @@ acli jira workitem create \
   --label "mlp"
 ```
 
-### 4. Transition + add to sprint
+### 4. Make the ticket ready for work (transition + sprint + description + points)
 
-```bash
-acli jira workitem transition --key "<JIRA_KEY>" --status "In Progress" --yes
-```
-
-For sprint assignment, load `skill://jira` (section B3) — it has the REST sprint-add procedure.
+After creation, hand off to the `jira` skill's **B3. Ensure the ticket is ready for work** (`read skill://jira`). It runs all four checks: transition to In Progress, add to the active sprint, verify the description isn't a placeholder (rewrite from context if it is), and set story points (asking the user with Fibonacci suggestions if missing). The description you wrote from the §3 template is the input to B3.c — fill every `<...>` marker before creating, or B3.c will rewrite it.
 
 ### 5. Report
 
@@ -146,5 +142,6 @@ Ticket created: AICPE-XXX
   Type: Story
   Epic: AICPE-YYY — "<epic name>"
   Sprint: AICPE Sprint N
+  Story points: <N>  (or "not set — asked user")
   URL: https://k2labs.atlassian.net/browse/AICPE-XXX
 ```
