@@ -251,6 +251,15 @@ export const FEATURES: Feature[] = [
     kind: "package",
     spec: "git:github.com/sting8k/pi-themes",
   },
+  {
+    id: "border-on-user-messages",
+    tab: "tools",
+    group: "Appearance",
+    label: "Border on user messages",
+    description:
+      "Draw a `┌─ You ─┐` box around every user message in the TUI transcript so your own messages stand out. TUI-only.",
+    kind: "local",
+  },
 
   // ── Orca & Misc ────────────────────────────────────────────────────────
   {
