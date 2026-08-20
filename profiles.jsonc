@@ -260,10 +260,20 @@
     // impulso-omp's mtv-commit-and-pr skill, renamed to drop the mtv-
     // prefix and made command-only like address-pr-comments.
     "skills/create-pr/": { "tags": ["work"] },
+    // border-on-user-messages: draws a `┌─ You ─┐` / `│ … │` / `└───┘`
+    // box around every user message in the TUI transcript so your own
+    // messages are easy to spot amid assistant/tool output. Patches
+    // UserMessageComponent.prototype.render at session_start (same
+    // mechanism pi-droid-styling used for its user-prefix/core-message
+    // blocks). TUI-only; toggleable from /impulso. Core so every profile
+    // gets it.
+    "extensions/borderonusermessages/borderonusermessages.ts": {
+      "tags": ["core"],
+      "dest": "extensions/borderonusermessages/index.ts",
+    },
 
     // Future tagged resources, e.g.:
     // "skills/home-lab/": { "tags": ["personal"] },
-    // "npm:@pi-stef/atlassian": { "tags": ["work"] }
   },
 
   // Standalone global CLI tools (NOT pi resources). These are regular npm

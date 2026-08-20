@@ -243,6 +243,14 @@ export const FEATURES: Feature[] = [
     kind: "local",
   },
   {
+    id: "command-guard",
+    tab: "tools",
+    group: "Safety",
+    label: "Command guard",
+    description: "Default-allow bash command-guard (ask/deny globs in command-guard.json).",
+    kind: "local",
+  },
+  {
     id: "pi-themes",
     tab: "tools",
     group: "Appearance",
@@ -250,6 +258,15 @@ export const FEATURES: Feature[] = [
     description: "Companion themes incl. catppuccin-mocha. git:github.com/sting8k/pi-themes.",
     kind: "package",
     spec: "git:github.com/sting8k/pi-themes",
+  },
+  {
+    id: "border-on-user-messages",
+    tab: "tools",
+    group: "Appearance",
+    label: "Border on user messages",
+    description:
+      "Draw a `┌─ You ─┐` box around every user message in the TUI transcript so your own messages stand out. TUI-only.",
+    kind: "local",
   },
 
   // ── Orca & Misc ────────────────────────────────────────────────────────
