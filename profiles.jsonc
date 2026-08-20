@@ -292,6 +292,13 @@
     // impulso-omp's mtv-commit-and-pr skill, renamed to drop the mtv-
     // prefix and made command-only like address-pr-comments.
     "skills/create-pr/": { "tags": ["work"] },
+    // create-pr-personal: lightweight commit + PR workflow for personal
+    // repos. Same shape as create-pr but stripped down — Conventional
+    // Commits for the message + PR title, a short what/why PR body, no Jira,
+    // no strict commitlint, no enforced branch naming beyond "get off the
+    // protected branch". disable-model-invocation: true hides it from the
+    // system prompt — invoke explicitly with /skill:create-pr-personal.
+    "skills/create-pr-personal/": { "tags": ["personal"] },
     // border-on-user-messages: draws a `┌─ You ─┐` / `│ … │` / `└───┘`
     // box around every user message in the TUI transcript so your own
     // messages are easy to spot amid assistant/tool output. Patches
