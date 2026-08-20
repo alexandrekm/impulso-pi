@@ -243,14 +243,6 @@ export const FEATURES: Feature[] = [
     kind: "local",
   },
   {
-    id: "command-guard",
-    tab: "tools",
-    group: "Safety",
-    label: "Command guard",
-    description: "Default-allow bash command-guard (ask/deny globs in command-guard.json).",
-    kind: "local",
-  },
-  {
     id: "pi-themes",
     tab: "tools",
     group: "Appearance",
