@@ -303,11 +303,19 @@
       "tags": ["core"],
       "dest": "extensions/borderonusermessages/index.ts",
     },
+    // pi-btw (narumitw): ask side questions in a separate side thread without
+    // derailing the main Pi conversation/coding task. `/btw <question>` starts a
+    // fresh side thread immediately; `/btw` opens a manager (start from main
+    // thread tree, resume, settings). Side Q&A stays out of the main transcript
+    // unless you explicitly `Ctrl+R` bring selected context back to the editor.
+    // Uses the current session model+thinking level, or an independent choice
+    // stored in <configDir>/pi-btw.json. Core so every profile gets it.
+    // https://www.npmjs.com/package/@narumitw/pi-btw
+    "npm:@narumitw/pi-btw": { "tags": ["core"] },
 
     // Future tagged resources, e.g.:
     // "skills/home-lab/": { "tags": ["personal"] },
   },
-
   // Standalone global CLI tools (NOT pi resources). These are regular npm
   // packages that live in this repo and are installed globally (npm i -g) by
   // ./install.sh, separate from the profile resource sync above. They are not
