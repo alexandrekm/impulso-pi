@@ -10,6 +10,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:json": "node scripts/check-json.mjs",
+    "check:upstream-prompt": "node scripts/check-upstream-prompt.mjs",
     "test": "node --test --experimental-strip-types extensions/command-guard/*.test.ts"
   },
   "devDependencies": {
