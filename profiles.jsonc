@@ -273,6 +273,16 @@
     // troubleshooting are progressive-disclosure files loaded on demand.
     // Auth via `pup auth login` (OAuth2) or DD_API_KEY/DD_APP_KEY env.
     "skills/datadog/": { "tags": ["work"] },
+    // glean: search company knowledge, chat with Glean Assistant, look
+    // up people, and manage collections/shortcuts/pins/agents via the
+    // `glean` CLI (Glean's agent-first CLI — structured JSON output,
+    // --dry-run previews, `glean schema` introspection). SKILL.md keeps
+    // only search + chat in context; documents/entities/glean-agents/collections/
+    // shortcuts/curation/platform/api/reference/troubleshooting are
+    // progressive-disclosure files loaded on demand. Auth via
+    // `glean auth login` (OAuth/device-code/token auto-detected) or
+    // GLEAN_API_TOKEN + GLEAN_SERVER_URL env.
+    "skills/glean/": { "tags": ["work"] },
     // create-pr: commit + PR workflow enforcing Motive's commitlint rules
     // (Conventional Commits, uppercase Jira-key scope, 200-char lengths,
     // no-special-chars subject) verified against folder-inference repos'
