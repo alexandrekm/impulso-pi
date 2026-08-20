@@ -331,7 +331,10 @@ function buildDashboard(
 
 /* ───── Extension ───── */
 
+import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+
 export default function (pi: ExtensionAPI) {
+  if (!isFeatureEnabled("dynamic-footer")) return;
   const storage: Storage = createFileStorage({
     dir: join(homedir(), ".pi", "agent", "observability"),
   });

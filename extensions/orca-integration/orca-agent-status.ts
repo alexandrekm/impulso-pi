@@ -315,7 +315,22 @@ function extractAssistantText(message: unknown): string {
 // preview. Keeps tool-name knowledge centralized on the receiver side.
 // Why: child agents inherit the lead's pane env; only its process may
 // register status hooks. PID identity keeps in-process reloads reporting.
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+function isFeatureEnabled(id) {
+  try {
+    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)))
+    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8")
+    return !((JSON.parse(raw).disabled ?? [])).includes(id)
+  } catch {
+    return true
+  }
+}
+
 export default function (pi): void {
+  if (!isFeatureEnabled("orca-integration")) return;
   const ownerPid = process.env.ORCA_PI_STATUS_OWNED
   const selfPid = String(process.pid)
   if (ownerPid && ownerPid !== selfPid) return

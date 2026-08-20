@@ -92,7 +92,10 @@ export function isSensitiveDotenv(path: string): boolean {
   return SENSITIVE_PATH.test(path);
 }
 
+import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+
 export default function (pi: any): void {
+  if (!isFeatureEnabled("command-guard")) return;
   const cfg = loadConfig();
   const sessionAllows: string[] = [];
 

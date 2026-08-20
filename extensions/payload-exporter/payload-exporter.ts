@@ -241,7 +241,18 @@ function responseSummary(message: any): AnyRecord {
   return summary;
 }
 
+function isFeatureEnabled(id: string): boolean {
+  try {
+    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8");
+    return !((JSON.parse(raw).disabled ?? []) as string[]).includes(id);
+  } catch {
+    return true;
+  }
+}
+
 export default function (pi: any): void {
+  if (!isFeatureEnabled("payload-exporter")) return;
   let turnIndex = 0;
   let enabled = readEnabled();
   // Monotonic per-session counter, included in every filename to guarantee

@@ -24,6 +24,20 @@
 // the env is in place before its factory reads it. The same trick is used by
 // extensions/cursor/cursor-env.ts. Existing user overrides are preserved.
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+function isFeatureEnabled(id: string): boolean {
+  try {
+    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8");
+    return !((JSON.parse(raw).disabled ?? []) as string[]).includes(id);
+  } catch {
+    return true;
+  }
+}
+
 const FFF_MODE = "override";
 const FFF_ENABLE_HOME_SCAN = "0";
 
@@ -37,10 +51,11 @@ function applyFffEnv(): void {
 }
 
 // Run at import time: before any extension factory body executes.
-applyFffEnv();
+// Guarded by the impulso /impulso settings page (feature id `fff-env`).
+if (isFeatureEnabled("fff-env")) applyFffEnv();
 
 export default function (_pi: any): void {
   // Re-apply in case another extension cleared or reordered env, and as a
   // no-op marker so pi recognises this module as an extension factory.
-  applyFffEnv();
+  if (isFeatureEnabled("fff-env")) applyFffEnv();
 }

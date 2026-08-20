@@ -29,6 +29,27 @@
     // Notify the active pi config dir at startup (which profile loaded).
     "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
 
+    // /impulso AND /settings — impulso-pi feature settings page. An OMP-
+    // style tabbed TUI (built on @earendil-works/pi-tui) listing every
+    // feature declared in extensions/impulso-settings/features.ts grouped
+    // into tabs/sections, toggling them: npm/git packages via settings.json
+    // packages[] autoload, local extensions via the <configDir>/impulso-
+    // settings.json manifest (each local extension guards its factory with
+    // isFeatureEnabled() from feature-flag.ts), and a safe subset of pi
+    // built-in settings via settings.json keys. Changes persist
+    // immediately; the footer hints /reload to apply. Add a Feature entry
+    // in features.ts and it shows up here automatically.
+    //
+    // `/settings` override: pi hardcodes /settings → its native menu in the
+    // editor's onSubmit (before extension commands parse), and exposes no
+    // API to open that menu. So editor.ts installs a CustomEditor (via
+    // ctx.ui.setEditorComponent at session_start) whose onSubmit wrapper
+    // intercepts: bare `/settings` opens the impulso page; `/settings pi`
+    // (or `/pi-settings`) falls through to pi's original onSubmit, opening
+    // pi's native menu. `/impulso` also works. Trade-off: the custom editor
+    // owns the editor factory session-wide. Core so every profile gets it.
+    "extensions/impulso-settings/": { "tags": ["core"] },
+
     // FFF (dmtrKovalenko/fff): Rust-native, SIMD-accelerated file finder
     // that replaces pi's built-in `find`/`grep` (which spawn `fd`/`rg` per
     // call) with an in-process, frecency-ranked, git-aware search. Core so

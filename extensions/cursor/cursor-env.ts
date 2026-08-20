@@ -24,6 +24,20 @@
 // top-level so it is in place before any other extension's factory runs,
 // regardless of import order. Existing user overrides are preserved.
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+function isFeatureEnabled(id: string): boolean {
+  try {
+    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8");
+    return !((JSON.parse(raw).disabled ?? []) as string[]).includes(id);
+  } catch {
+    return true;
+  }
+}
+
 const WIRE_CLIENT_VERSION = "cli-2026.07.23-e383d2b";
 const WIRE_AGENT_URL = "https://api2.cursor.sh";
 
@@ -37,10 +51,11 @@ function applyCursorWireEnv(): void {
 }
 
 // Run at import time: before any extension factory body executes.
-applyCursorWireEnv();
+// Guarded by the impulso /impulso settings page (feature id `cursor-env`).
+if (isFeatureEnabled("cursor-env")) applyCursorWireEnv();
 
 export default function (_pi: any): void {
   // Re-apply in case another extension cleared or reordered env, and as a
   // no-op marker so pi recognises this module as an extension factory.
-  applyCursorWireEnv();
+  if (isFeatureEnabled("cursor-env")) applyCursorWireEnv();
 }
