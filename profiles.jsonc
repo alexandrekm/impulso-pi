@@ -265,6 +265,14 @@
     "skills/jira/": { "tags": ["work"] },
     "skills/jira-authoring/": { "tags": ["work"] },
 
+    // datadog: fetch metrics and edit dashboards via the `pup` CLI
+    // (DataDog's AI-agent-ready CLI — exposes the full Datadog API surface
+    // with structured JSON output; auto-detects PI_CODING_AGENT for agent
+    // mode). SKILL.md keeps only the dashboards + metrics use cases in
+    // context; monitors/logs/events/SLOs/synthetics/APM/reference/
+    // troubleshooting are progressive-disclosure files loaded on demand.
+    // Auth via `pup auth login` (OAuth2) or DD_API_KEY/DD_APP_KEY env.
+    "skills/datadog/": { "tags": ["work"] },
     // create-pr: commit + PR workflow enforcing Motive's commitlint rules
     // (Conventional Commits, uppercase Jira-key scope, 200-char lengths,
     // no-special-chars subject) verified against folder-inference repos'
