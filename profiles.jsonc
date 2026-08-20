@@ -29,6 +29,20 @@
     // Notify the active pi config dir at startup (which profile loaded).
     "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
 
+    // system-prompt: owns the FIXED parts of pi's system prompt (intro,
+    // tools-footer line, always-on guidelines, Pi-docs block) while keeping
+    // the DYNAMIC parts (active tools, tool-contributed guidelines,
+    // --append-system-prompt, <project_context>, skills, cwd) flowing from
+    // pi. Reassembles the prompt in before_agent_start from
+    // event.systemPromptOptions, extracting pi's resolved readme/docs/
+    // examples paths from the prompt pi already built. Constants are
+    // currently byte-identical to pi defaults, so behaviour is unchanged
+    // until you edit them in extensions/system-prompt/system-prompt.ts.
+    // Respects user overrides (SYSTEM.md / --system-prompt): if customPrompt
+    // is set, it leaves pi's prompt alone. Toggled via /settings id
+    // `system-prompt`. Core so every profile gets it.
+    "extensions/system-prompt/system-prompt.ts": { "tags": ["core"] },
+
     // /impulso AND /settings — impulso-pi feature settings page. An OMP-
     // style tabbed TUI (built on @earendil-works/pi-tui) listing every
     // feature declared in extensions/impulso-settings/features.ts grouped

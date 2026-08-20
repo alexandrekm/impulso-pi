@@ -290,6 +290,17 @@ export const FEATURES: Feature[] = [
     kind: "local",
   },
 
+  // ── System prompt ──────────────────────────────────────────────────────
+  {
+    id: "system-prompt",
+    tab: "pi",
+    group: "System prompt",
+    label: "Custom fixed prompt",
+    description:
+      "Owns the fixed parts of pi's system prompt (intro, Pi-docs block) while keeping dynamic parts (tools, guidelines, context, skills, cwd). Edit extensions/system-prompt/system-prompt.ts.",
+    kind: "local",
+  },
+
   // ── Pi built-in settings (safe subset — NOT managed by profiles.jsonc) ──
   {
     id: "pi-compaction",

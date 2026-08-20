@@ -2,6 +2,10 @@
 # No trailing slash so both a real directory AND a worktree symlink are ignored.
 /reference-impl
 
+# Drift detector: generated snapshot of pi's current default prompt,
+# written next to the golden baseline on mismatch for `git diff --no-index`.
+extensions/system-prompt/.upstream-prompt.generated
+
 # gitleaks-action output (left in the working directory by the CI job)
 results.sarif
 
