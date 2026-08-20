@@ -24,7 +24,19 @@
 // the env is in place before its factory reads it. The same trick is used by
 // extensions/cursor/cursor-env.ts. Existing user overrides are preserved.
 
-import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+function isFeatureEnabled(id: string): boolean {
+  try {
+    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8");
+    return !((JSON.parse(raw).disabled ?? []) as string[]).includes(id);
+  } catch {
+    return true;
+  }
+}
 
 const FFF_MODE = "override";
 const FFF_ENABLE_HOME_SCAN = "0";

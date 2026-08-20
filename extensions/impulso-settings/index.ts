@@ -327,7 +327,7 @@ export default function (pi: any): void {
     description: "Open the impulso-pi feature settings menu",
     handler: async (_args: string, ctx: any) => {
       if (!ctx.hasUI) {
-        ctx.ui.notify("The impulso settings menu needs the TUI.", "error");
+        ctx.ui?.notify?.("The impulso settings menu needs the TUI.", "error");
         return;
       }
       await ctx.ui.custom(

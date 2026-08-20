@@ -1,5 +1,17 @@
 // @orca-managed-pi-extension
-import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+function isFeatureEnabled(id) {
+  try {
+    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)))
+    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8")
+    return !((JSON.parse(raw).disabled ?? [])).includes(id)
+  } catch {
+    return true
+  }
+}
 
 export default function (pi) {
   if (!isFeatureEnabled("orca-integration")) return;

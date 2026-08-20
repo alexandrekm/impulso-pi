@@ -241,7 +241,15 @@ function responseSummary(message: any): AnyRecord {
   return summary;
 }
 
-import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+function isFeatureEnabled(id: string): boolean {
+  try {
+    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8");
+    return !((JSON.parse(raw).disabled ?? []) as string[]).includes(id);
+  } catch {
+    return true;
+  }
+}
 
 export default function (pi: any): void {
   if (!isFeatureEnabled("payload-exporter")) return;

@@ -24,7 +24,19 @@
 // top-level so it is in place before any other extension's factory runs,
 // regardless of import order. Existing user overrides are preserved.
 
-import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+function isFeatureEnabled(id: string): boolean {
+  try {
+    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8");
+    return !((JSON.parse(raw).disabled ?? []) as string[]).includes(id);
+  } catch {
+    return true;
+  }
+}
 
 const WIRE_CLIENT_VERSION = "cli-2026.07.23-e383d2b";
 const WIRE_AGENT_URL = "https://api2.cursor.sh";
