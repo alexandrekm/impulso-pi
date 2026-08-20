@@ -235,6 +235,16 @@ export const FEATURES: Feature[] = [
     spec: "npm:pi-hashline-edit",
   },
   {
+    id: "pi-btw",
+    tab: "tools",
+    group: "Tools",
+    label: "pi-btw side thread",
+    description:
+      "Ask side questions in a separate thread without derailing the main task. /btw <question> or /btw menu; bring context back with Ctrl+R. npm:@narumitw/pi-btw.",
+    kind: "package",
+    spec: "npm:@narumitw/pi-btw",
+  },
+  {
     id: "command-guard",
     tab: "tools",
     group: "Safety",
