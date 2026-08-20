@@ -555,6 +555,12 @@ export function getFeatureState(f: Feature): string {
 
   if (f.kind === "config") {
     const raw = readConfigFile(f.configFile!)[f.key!];
+    // `picker` features are free-form strings drawn from a dynamic list
+    // (e.g. a model id); "" means the key is absent / "same as main".
+    // They must NOT be treated as booleans even though they have no `values`.
+    if (f.picker) {
+      return raw === undefined ? "" : String(raw);
+    }
     const isBool =
       !f.values ||
       f.values.length === 0 ||
@@ -609,6 +615,14 @@ export function setFeatureState(f: Feature, value: string): void {
 
   if (f.kind === "config") {
     const data = readConfigFile(f.configFile!);
+    // `picker` features are free-form strings (e.g. a model id); "" removes
+    // the key ("same as main / use default"). Not boolean despite no `values`.
+    if (f.picker) {
+      if (value === "") delete data[f.key!];
+      else data[f.key!] = value;
+      writeConfigFile(f.configFile!, data);
+      return;
+    }
     const isBool =
       !f.values ||
       f.values.length === 0 ||

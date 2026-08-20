@@ -260,6 +260,12 @@ export class ImpulsoSettingsView implements Component {
 
   private renderValue(f: Feature, value: string, selected: boolean): string {
     if (f.kind === "config") {
+      // `picker` features are free-form strings (e.g. a model id); render
+      // them like an enum, where "" means "same as main / use default".
+      if (f.picker) {
+        const text = value === "" ? "same as main" : value;
+        return selected ? this.theme.fg("accent", text) : this.theme.fg("muted", text);
+      }
       const isBool =
         !f.values ||
         f.values.length === 0 ||
