@@ -650,11 +650,43 @@ function deployPpiAuto() {
   const destDir = join(homedir(), ".local", "bin");
   const dest = join(destDir, "ppi-auto");
 
-  // Copy wrapper script.
+  // Copy wrapper script — non-clobber, same logic as the profile file
+  // sync: track the last-installed hash in a manifest next to the dest so
+  // manual edits to the installed copy survive install runs. Use
+  // 'install.sh pull' (or re-copy from scripts/ppi-auto) to promote a local
+  // edit back into the repo.
   mkdirSync(destDir, { recursive: true });
-  copyFileSync(src, dest);
+  const key = "ppi-auto";
+  const repoHash = hashFile(src);
+  const map = manifestRead(destDir);
+  if (!existsSync(dest)) {
+    copyFileSync(src, dest);
+    manifestSet(map, repoHash, key, dest);
+    console.log(`  [new]         ppi-auto -> ${dest}`);
+  } else {
+    const localHash = hashFile(dest);
+    const lastHash = manifestGet(map, key);
+    if (localHash === repoHash) {
+      manifestSet(map, repoHash, key, dest);
+      console.log(`  [in sync]     ppi-auto -> ${dest}`);
+    } else if (!lastHash) {
+      // No manifest baseline yet (e.g. adopted from a pre-guard install):
+      // copy and start tracking rather than spuriously conflicting.
+      copyFileSync(src, dest);
+      manifestSet(map, repoHash, key, dest);
+      console.log(`  [adopted]     ppi-auto -> ${dest}`);
+    } else if (lastHash === localHash) {
+      copyFileSync(src, dest);
+      manifestSet(map, repoHash, key, dest);
+      console.log(`  [updated]     ppi-auto -> ${dest}`);
+    } else if (lastHash === repoHash) {
+      console.log(`  [skipped]     ppi-auto (locally modified — run 'install.sh pull')`);
+    } else {
+      console.log(`  [CONFLICT]    ppi-auto (both changed — resolve manually)`);
+    }
+  }
+  manifestWrite(destDir, map);
   spawnSync("chmod", ["+x", dest]);
-  console.log(`  ppi-auto -> ${dest}`);
 
   // Ensure global gitignore includes ppi-auto.
   const excludesFile = (() => {

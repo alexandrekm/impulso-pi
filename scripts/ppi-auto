@@ -1,9 +1,26 @@
 #!/bin/sh
-# ppi-auto — wrapper for Orca that picks work/personal profile based on cwd.
+# ppi-auto — wrapper for Orca that picks work/personal profile based on the
+# current git repository, so worktrees resolve to the same profile as their
+# main repo regardless of where the worktree is checked out.
 # Installed by impulso-pi install.sh to ~/.local/bin/ppi-auto.
 # Default: work. Exception paths route to personal.
+#
+# Detection: resolve the worktree's common repo root via
+# `git rev-parse --git-common-dir` (the main repo's .git dir for linked
+# worktrees, the worktree's own .git for a plain checkout) and apply the
+# path rules to that root. Falls back to $PWD when not inside a git repo.
 
-case "$PWD" in
+root=
+if common=$(git rev-parse --git-common-dir 2>/dev/null) && [ -n "$common" ]; then
+  # Resolve to an absolute path (git may print a relative one).
+  case "$common" in
+    /*) ;;
+    *) common="$PWD/$common" ;;
+  esac
+  root=$(cd "$common/.." 2>/dev/null && pwd) || root=
+fi
+
+case "${root:-$PWD}" in
   "$HOME"/code/agents/*|"$HOME"/code/personal/*)
     exec ppi use personal -- "$@"
     ;;
