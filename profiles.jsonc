@@ -206,6 +206,17 @@
     // verify it actually helps in your workload. Core so every profile gets it.
     // https://pi.dev/packages/pi-cache-graph
     "npm:pi-cache-graph": { "tags": ["core"] },
+    // pi-observational-memory (elpapi42): keeps long sessions coherent across
+    // compactions by capturing observations + distilling reflections in the
+    // background as you work, so compaction becomes a fast render of prepared
+    // memory instead of a slow re-summarization. Less coherence loss + faster
+    // compaction. Commands: /om:status, /om:view, /om:view full; `recall`
+    // agent tool recovers source evidence by id. Config under the
+    // `observational-memory` namespace in settings.json (tuned from /settings
+    // → Pi → Observational memory: worker model + thinking, passive mode,
+    // worker notices, compaction trigger mode). Core so every profile gets it.
+    // https://pi.dev/packages/pi-observational-memory
+    "npm:pi-observational-memory": { "tags": ["core"] },
 
     // Orca Dev integration: Orca hardcodes ~/.pi/agent for its managed pi
     // extensions (it sets ORCA_PI_SOURCE_AGENT_DIR unconditionally), so under
