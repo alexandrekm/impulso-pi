@@ -158,7 +158,7 @@ export class ImpulsoSettingsView implements Component {
       if (cmd) this.launch?.(cmd);
       return;
     }
-    if (f.kind === "config" && f.picker) {
+    if (f.picker) {
       // Open a searchable nested overlay (e.g. the pi-btw model picker,
       // sourced from the live model registry) without closing this page.
       // Resolves to the chosen value, "" (clear key / use default), or
@@ -259,13 +259,11 @@ export class ImpulsoSettingsView implements Component {
   }
 
   private renderValue(f: Feature, value: string, selected: boolean): string {
+    if (f.picker) {
+      const text = value === "" ? "same as main" : value;
+      return selected ? this.theme.fg("accent", text) : this.theme.fg("muted", text);
+    }
     if (f.kind === "config") {
-      // `picker` features are free-form strings (e.g. a model id); render
-      // them like an enum, where "" means "same as main / use default".
-      if (f.picker) {
-        const text = value === "" ? "same as main" : value;
-        return selected ? this.theme.fg("accent", text) : this.theme.fg("muted", text);
-      }
       const isBool =
         !f.values ||
         f.values.length === 0 ||
@@ -415,13 +413,14 @@ function makePick(
   ui: any,
 ): (f: Feature, current: string) => Promise<string | undefined> {
   return (f, current) => {
-    if (f.id === "pi-btw-model") {
+    if (f.id === "pi-btw-model" || f.id === "observational-memory-model") {
       const models = (modelRegistry?.getAll?.() ?? []).map((m: any) => ({
         value: `${m.provider}/${m.id}`,
         label: `${m.provider}/${m.id}`,
       }));
+      const title = f.id === "pi-btw-model" ? "Side-thread model" : "Memory worker model";
       return openConfigPicker(ui, {
-        title: "Side-thread model",
+        title,
         items: models,
         current,
         blankLabel: "Same as main thread",

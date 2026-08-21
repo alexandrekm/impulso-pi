@@ -58,6 +58,11 @@ export interface Feature {
   /** For `config`: whether the value is picked via a searchable overlay
    *  (large/dynamic lists like models) rather than cycled in-row. */
   picker?: boolean;
+  /** For `pi-setting` + `picker`: base dotted path of a composite
+   *  `{ provider, id[, thinking] }` model object in settings.json. The picker
+   *  yields a `provider/id` string that is split into the two sub-keys
+   *  (and `""` clears provider/id while preserving `thinking`). */
+  modelKey?: string;
 }
 
 export interface Tab {
@@ -384,6 +389,75 @@ export const FEATURES: Feature[] = [
     key: "showCacheMissNotices",
     defaultValue: "off",
   },
+
+  // ── Observational memory ───────────────────────────────────────────────
+  {
+    id: "observational-memory",
+    tab: "pi",
+    group: "Observational memory",
+    label: "Observational memory",
+    description:
+      "Continuously captures observations + distills reflections so long sessions survive compactions with less drift and faster compaction. /om:status, /om:view, recall tool. npm:pi-observational-memory.",
+    kind: "package",
+    spec: "npm:pi-observational-memory",
+  },
+  {
+    id: "observational-memory-model",
+    tab: "pi",
+    group: "Observational memory",
+    label: "Memory worker model…",
+    description:
+      "Model used for background observation/reflection work. 'Same as main thread' uses the session model; pick a cheaper/faster model (Haiku/Flash/mini/gemma) to keep memory work off the main budget. Written to settings.json observational-memory.model.{provider,id}.",
+    kind: "pi-setting",
+    key: "observational-memory.model",
+    modelKey: "observational-memory.model",
+    picker: true,
+  },
+  {
+    id: "observational-memory-thinking",
+    tab: "pi",
+    group: "Observational memory",
+    label: "Memory worker thinking",
+    description:
+      "Reasoning level for the memory worker model. 'Same as main thread' (key absent) uses the model's default. settings.json observational-memory.model.thinking.",
+    kind: "pi-setting",
+    key: "observational-memory.model.thinking",
+    values: ["", "off", "minimal", "low", "medium", "high", "xhigh", "max"],
+  },
+  {
+    id: "observational-memory-passive",
+    tab: "pi",
+    group: "Observational memory",
+    label: "Passive mode",
+    description:
+      "Disable proactive background observation/reflection/maintenance and the auto-compaction trigger. Memory work only happens on explicit /om:* commands. settings.json observational-memory.passive.",
+    kind: "pi-setting",
+    key: "observational-memory.passive",
+    defaultValue: "off",
+  },
+  {
+    id: "observational-memory-notices",
+    tab: "pi",
+    group: "Observational memory",
+    label: "Worker notifications",
+    description:
+      "Show routine observer/reflector/dropper progress messages. Warnings/errors stay visible either way. settings.json observational-memory.showWorkerNotifications.",
+    kind: "pi-setting",
+    key: "observational-memory.showWorkerNotifications",
+    defaultValue: "on",
+  },
+  {
+    id: "observational-memory-compact-mode",
+    tab: "pi",
+    group: "Observational memory",
+    label: "Compaction trigger mode",
+    description:
+      "calibrated: use compactAfterTokens (81k) directly. ratio: scale the threshold by the active model's context window (compactAfterTokensRatio, default 0.68) — better for large-context models. settings.json observational-memory.compactAfterTokensMode.",
+    kind: "pi-setting",
+    key: "observational-memory.compactAfterTokensMode",
+    values: ["calibrated", "ratio"],
+    defaultValue: "calibrated",
+  },
   {
     id: "pi-skill-commands",
     tab: "pi",
@@ -576,6 +650,14 @@ export function getFeatureState(f: Feature): string {
   }
 
   // pi-setting
+  if (f.picker && f.modelKey) {
+    const model = getByPath(readSettings(), f.modelKey) as
+      { provider?: string; id?: string } | undefined;
+    if (model && typeof model === "object" && model.provider && model.id) {
+      return `${model.provider}/${model.id}`;
+    }
+    return "";
+  }
   const raw = getByPath(readSettings(), f.key!);
   const isBool =
     !f.values ||
@@ -641,6 +723,25 @@ export function setFeatureState(f: Feature, value: string): void {
 
   // pi-setting
   const data = readSettings();
+  if (f.picker && f.modelKey) {
+    if (value === "") {
+      // Clear: drop provider/id, keep thinking if set.
+      const model = getByPath(data, f.modelKey);
+      if (model && typeof model === "object" && !Array.isArray(model)) {
+        const m = model as Record<string, unknown>;
+        delete m.provider;
+        delete m.id;
+      }
+    } else {
+      const slash = value.indexOf("/");
+      if (slash > 0) {
+        setByPath(data, `${f.modelKey}.provider`, value.slice(0, slash));
+        setByPath(data, `${f.modelKey}.id`, value.slice(slash + 1));
+      }
+    }
+    writeSettings(data);
+    return;
+  }
   const isBool =
     !f.values ||
     f.values.length === 0 ||
