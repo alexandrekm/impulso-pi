@@ -483,12 +483,32 @@ const LEGACY_PERMISSION_MANIFEST_KEYS = [
   "extensions/pi-permission-system/config.personal.json",
 ];
 
+// pi-dynamic-footer replaced pi-droid-styling and footer-status-widgets.
+// Both former extensions own or patch the bottom TUI zone, so leaving them in
+// an existing profile alongside the dynamic footer produces duplicate/stale
+// status rows. These resources predate the manifest's current declarations,
+// so they must be explicitly migrated rather than relying on normal sync.
+const LEGACY_DROID_PKG = "git:github.com/sting8k/pi-droid-styling";
+const LEGACY_DROID_DIR = join("git", "github.com", "sting8k", "pi-droid-styling");
+const LEGACY_DROID_FILES = [
+  "extensions/footer-status-widgets.ts",
+  "extensions/droid-render-safety-env.ts",
+];
+const LEGACY_DROID_MANIFEST_KEYS = [
+  LEGACY_DROID_PKG,
+  "extensions/footer-status-widgets/footer-status-widgets.ts",
+  "extensions/pi-droid-styling/droid-render-safety-env.ts",
+];
+
 function settingsHasPackage(dir, spec) {
   const p = join(dir, "settings.json");
   if (!existsSync(p)) return false;
   try {
     const current = JSON.parse(readFileSync(p, "utf8"));
-    return Array.isArray(current.packages) && current.packages.includes(spec);
+    return (
+      Array.isArray(current.packages) &&
+      current.packages.some((entry) => entry === spec || entry?.source === spec)
+    );
   } catch {
     return false;
   }
@@ -511,6 +531,27 @@ function migrateLegacyPermissionSystem(t) {
   for (const key of LEGACY_PERMISSION_MANIFEST_KEYS) map.delete(key);
   manifestWrite(t.dir, map);
   console.log(`  [migrated]    removed @gotgenes/pi-permission-system`);
+}
+
+function migrateLegacyDroidStyling(t) {
+  const map = manifestRead(t.dir);
+  const pkgDir = join(t.dir, LEGACY_DROID_DIR);
+  const hasPkg =
+    Boolean(manifestGet(map, LEGACY_DROID_PKG)) ||
+    existsSync(pkgDir) ||
+    settingsHasPackage(t.dir, LEGACY_DROID_PKG);
+  const existingFiles = LEGACY_DROID_FILES.filter((path) => existsSync(join(t.dir, path)));
+  const hasManifest = LEGACY_DROID_MANIFEST_KEYS.some((key) => map.has(key));
+  if (!hasPkg && existingFiles.length === 0 && !hasManifest) return;
+
+  if (hasPkg) piUninstall(LEGACY_DROID_PKG, t.dir);
+  // Remove only the two retired files; no general stale-file pruning, which
+  // would violate the syncer's non-clobber promise for user-owned files.
+  for (const path of existingFiles) rmSync(join(t.dir, path), { force: true });
+  if (existsSync(pkgDir)) rmSync(pkgDir, { recursive: true, force: true });
+  for (const key of LEGACY_DROID_MANIFEST_KEYS) map.delete(key);
+  manifestWrite(t.dir, map);
+  console.log(`  [migrated]    removed pi-droid-styling and footer-status-widgets`);
 }
 
 // Merge the top-level "settings" object from profiles.jsonc into a target's
@@ -956,6 +997,7 @@ async function main() {
     for (const t of names) {
       console.log(`==> install -> ${t.base ? "base" : t.name} (${t.dir})`);
       migrateLegacyPermissionSystem(t);
+      migrateLegacyDroidStyling(t);
       doInstallFiles(t, profiles);
       doInstallSettings(t, profiles);
       migrateLegacyPayloads(t);
