@@ -208,6 +208,19 @@ export function validateProfiles(profiles, repoDir) {
     }
   }
 
+  const settingsDefaults = profiles.settingsDefaults;
+  if (settingsDefaults !== undefined) {
+    if (
+      typeof settingsDefaults !== "object" ||
+      settingsDefaults === null ||
+      Array.isArray(settingsDefaults)
+    ) {
+      errors.push('"settingsDefaults" must be an object');
+    } else if ("packages" in settingsDefaults) {
+      errors.push('"settingsDefaults" must not contain "packages" (use npm: resources instead)');
+    }
+  }
+
   if (typeof resources !== "object" || Array.isArray(resources)) {
     errors.push('"resources" must be an object');
   } else {
