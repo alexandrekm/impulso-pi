@@ -64,6 +64,20 @@ const STATE_FILE = ".exporter-state.json";
 const ERRORS_FILE = "errors.jsonl";
 const COMMANDS = new Set(["install", "status", "pull"]);
 
+// Whether any profile subdirectory exists under ~/.pi/profiles. The
+// pi-omp-stats dashboard is a machine-global service that aggregates every
+// profile, so its service mode depends on whether profiles exist on disk —
+// not on which target the current invocation happens to sync (a `--base`
+// run must still refresh the service into profiles mode).
+function profilesExistOnDisk() {
+  if (!existsSync(PROFILES_DIR)) return false;
+  try {
+    return readdirSync(PROFILES_DIR, { withFileTypes: true }).some((e) => e.isDirectory());
+  } catch {
+    return false;
+  }
+}
+
 // ---- hashing -------------------------------------------------------------
 
 function sha256(buf) {
@@ -1079,11 +1093,7 @@ async function main() {
     const freshlyInstalledTools = installStandaloneTools(profiles);
     // Offer to register pi-omp-stats as a background service after a fresh
     // install (interactive only; --yes prints a hint instead).
-    await maybeOfferStatsService(
-      freshlyInstalledTools,
-      yes,
-      names.some((t) => !t.base),
-    );
+    await maybeOfferStatsService(freshlyInstalledTools, yes, profilesExistOnDisk());
     console.log("\nDone. Reload pi (/reload) or start a new session to pick up changes.");
   } else if (cmd === "status") {
     for (const t of names) {
