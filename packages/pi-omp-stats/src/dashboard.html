@@ -769,6 +769,147 @@
         color: var(--muted);
         font-size: 12px;
       }
+
+      /* ---------------- Observational memory + compaction ---------------- */
+      .mem-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+        padding: 2px 0 14px;
+      }
+      .mem-filters select,
+      .mem-filters input {
+        background: var(--surface0);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 9px;
+        font-size: 13px;
+        font-family: inherit;
+      }
+      .mem-filters input[type="text"] {
+        min-width: 220px;
+        flex: 1 1 220px;
+      }
+      .mem-filters .lbl {
+        color: var(--dim);
+        font-size: 12px;
+      }
+      .mem-filters .pages {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .mem-filters .pages button {
+        background: var(--surface0);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 3px 9px;
+        cursor: pointer;
+      }
+      .mem-filters .pages button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .mem-content {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      .mem-content > .mem-list-wrap {
+        flex: 1 1 420px;
+        min-width: 0;
+      }
+      .mem-detail {
+        flex: 1 1 320px;
+        max-width: 460px;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .mem-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 9px 14px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+      }
+      .mem-row:last-child {
+        border-bottom: none;
+      }
+      .mem-row:hover {
+        background: var(--accent-soft);
+      }
+      .mem-row.active {
+        background: var(--accent-soft);
+      }
+      .mem-row .m-kind {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: var(--surface0);
+        color: var(--subtext0);
+        flex: 0 0 auto;
+        margin-top: 2px;
+      }
+      .mem-row .m-body {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .mem-row .m-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        color: var(--subtext0);
+      }
+      .mem-row .m-meta {
+        color: var(--dim);
+        font-size: 11px;
+        margin-top: 3px;
+        font-variant-numeric: tabular-nums;
+      }
+      .badge.rel-low {
+        background: rgba(166, 227, 161, 0.16);
+        color: var(--green);
+      }
+      .badge.rel-medium {
+        background: rgba(249, 226, 175, 0.18);
+        color: var(--yellow);
+      }
+      .badge.rel-high {
+        background: rgba(137, 180, 250, 0.18);
+        color: var(--blue);
+      }
+      .badge.rel-critical {
+        background: rgba(243, 139, 168, 0.18);
+        color: var(--red);
+      }
+      .mem-detail .pl-kv {
+        grid-template-columns: 120px 1fr;
+      }
+      .mem-detail .content-box {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        background: var(--mantle);
+        color: var(--subtext0);
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .kpi-note {
+        color: var(--dim);
+        font-size: 12px;
+      }
     </style>
   </head>
   <body>
@@ -925,6 +1066,36 @@
               <path d="M8 14h8" /></svg
             >Payloads
           </button>
+          <div class="nav-label">Memory</div>
+          <button data-tab="compaction">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9a9 9 0 0 0 9-9m-9 9c-2.5 0-4.5-4-4.5-9s2-9 4.5-9 4.5 4 4.5 9-2 9-4.5 9z"
+              /></svg
+            >Compaction
+          </button>
+          <button data-tab="memories">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V18a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-3.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7z"
+              />
+              <line x1="9" y1="21" x2="15" y2="21" /></svg
+            >Memories
+          </button>
         </nav>
         <div class="sidebar-footer">
           local-only · no telemetry<br />source: <code>~/.pi/agent/sessions</code>
@@ -1011,7 +1182,9 @@
         tools = null,
         providers = null,
         recent = null,
-        errorsList = null;
+        errorsList = null,
+        compaction = null,
+        memories = null;
       let costRange = "7d"; // independent window for the "Cost over time" chart
       let profile = "all";
       let charts = {};
@@ -1031,6 +1204,8 @@
         requests: "Recent Requests",
         errors: "Errors",
         payloads: "Payloads",
+        compaction: "Compaction",
+        memories: "Observational Memory",
       };
 
       function fmtNum(n) {
@@ -1661,6 +1836,11 @@
             renderRecent(errorsList, true);
           } else if (tab === "payloads") {
             await loadPayloads();
+          } else if (tab === "compaction") {
+            compaction = await api("/api/stats/compaction?range=" + range());
+            renderCompaction();
+          } else if (tab === "memories") {
+            await loadMemories();
           }
         } catch (e) {
           main.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
@@ -1776,6 +1956,422 @@
           ]),
           ["", "num", "num", "num", "num"],
         );
+      }
+
+      /* ---------------- Compaction panel ---------------- */
+
+      function renderCompaction() {
+        const s = compaction.summary;
+        const pctHook = s.totalCompactions > 0 ? s.fromHook / s.totalCompactions : 0;
+        const cards = `
+    ${card("Compactions", fmtNum(s.totalCompactions), fmtPct(pctHook) + " obs-memory-driven", "var(--blue)")}
+    ${card("Context at compaction", fmtNum(s.medianTokensBefore), "median tokensBefore", "var(--mauve)")}
+    ${card("P90 context", fmtNum(s.p90TokensBefore), "90th pct tokensBefore", "var(--peach)")}
+    ${card("Compaction cost", fmtCost(s.totalCost), "summary generation", "var(--green)")}
+    ${card("Obs-memory-driven", fmtNum(s.fromHook), "vs " + fmtNum(s.piNative) + " pi-native", "var(--teal)")}
+  `;
+        main.innerHTML = `<div class="cards">${cards}</div>
+    <div class="chart-wrap"><h3>Compactions per day</h3><canvas id="compaction-freq-chart"></canvas></div>
+    <div class="chart-wrap"><h3>Context size at compaction (tokensBefore)</h3><canvas id="compaction-tb-chart"></canvas></div>
+    <div class="section-title">By trigger reason</div>
+    <div id="compaction-reason-table"></div>
+    <div class="section-title">By model</div>
+    <div id="compaction-model-table"></div>
+    <div class="kpi-note" style="padding:2px 0 0">reason is null on compactions written before the upstream pi Phase 2 patch — grouped as <code>unknown</code>.</div>
+  `;
+        // By-reason table (Phase 2).
+        main.querySelector("#compaction-reason-table").innerHTML = table(
+          [
+            "Reason",
+            "Compactions",
+            "Obs-memory-driven",
+            "Retried",
+            "Avg tokensBefore",
+            "Avg tokensAfter",
+          ],
+          compaction.byReason.map((r) => [
+            `<span class="model" style="color:var(--accent)">${r.reason}</span>`,
+            fmtNum(r.compactions),
+            fmtNum(r.fromHook),
+            fmtNum(r.willRetry),
+            r.meanTokensBefore != null ? fmtNum(Math.round(r.meanTokensBefore)) : "—",
+            r.meanTokensAfter != null ? fmtNum(Math.round(r.meanTokensAfter)) : "—",
+          ]),
+          ["", "num", "num", "num", "num", "num"],
+        );
+        // By-model table.
+        main.querySelector("#compaction-model-table").innerHTML = table(
+          ["Model", "Compactions", "Obs-memory-driven", "Avg tokensBefore", "Cost"],
+          compaction.byModel.map((m) => [
+            `<span class="model" style="color:var(--accent)">${m.model}</span>`,
+            fmtNum(m.compactions),
+            fmtNum(m.fromHook),
+            m.meanTokensBefore != null ? fmtNum(Math.round(m.meanTokensBefore)) : "—",
+            fmtCost(m.totalCost),
+          ]),
+          ["", "num", "num", "num", "num"],
+        );
+        drawCompactionFreq(compaction.timeseries);
+        drawCompactionTokensBefore(compaction.tokensBeforeDistribution);
+      }
+
+      function drawCompactionFreq(series) {
+        if (!chartReady || typeof Chart === "undefined" || !series || series.length === 0) return;
+        const labels = series.map((p) => fmtDay(p.timestamp));
+        const ctx = ensureChart("compaction-freq-chart");
+        if (!ctx) return;
+        const blue = cssVar("--blue"),
+          teal = cssVar("--teal");
+        charts["compaction-freq-chart"] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Obs-memory-driven",
+                data: series.map((p) => p.fromHook),
+                backgroundColor: teal + "a6",
+                stack: "c",
+                borderRadius: 3,
+              },
+              {
+                label: "Pi-native",
+                data: series.map((p) => p.compactions - p.fromHook),
+                backgroundColor: blue + "a6",
+                stack: "c",
+                borderRadius: 3,
+              },
+            ],
+          },
+          options: stacked(yTitle(baseChartOpts(), "Compactions")),
+        });
+      }
+
+      function drawCompactionTokensBefore(buckets) {
+        if (!chartReady || typeof Chart === "undefined" || !buckets || buckets.length === 0) return;
+        const labels = buckets.map((b) => fmtNum(b.bucket));
+        const ctx = ensureChart("compaction-tb-chart");
+        if (!ctx) return;
+        const blue = cssVar("--blue"),
+          teal = cssVar("--teal");
+        charts["compaction-tb-chart"] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Obs-memory-driven",
+                data: buckets.map((b) => b.fromHook),
+                backgroundColor: teal + "a6",
+                stack: "t",
+                borderRadius: 3,
+              },
+              {
+                label: "Pi-native",
+                data: buckets.map((b) => b.count - b.fromHook),
+                backgroundColor: blue + "a6",
+                stack: "t",
+                borderRadius: 3,
+              },
+            ],
+          },
+          options: (() => {
+            const o = stacked(yTitle(baseChartOpts(), "Compactions"));
+            o.scales.x.title = {
+              display: true,
+              text: "tokensBefore bucket",
+              color: cssVar("--dim"),
+            };
+            return o;
+          })(),
+        });
+      }
+
+      /* ---------------- Memories panel + browser ---------------- */
+
+      let memFilters = {
+        kind: "all",
+        relevance: "all",
+        session: "all",
+        q: "",
+        offset: 0,
+        limit: 50,
+      };
+      let memList = { items: [], total: 0 };
+      let memSessions = [];
+      let memSelectedId = null;
+
+      async function loadMemories() {
+        // Summary + charts first so the panel paints, then the browser list.
+        memories = await api("/api/stats/memory?range=" + range());
+        try {
+          const r = await api("/api/stats/memory/sessions");
+          memSessions = r.sessions || [];
+        } catch (e) {
+          memSessions = [];
+        }
+        await memLoadList();
+        renderMemories();
+      }
+
+      function memQuery() {
+        const p = new URLSearchParams();
+        p.set("kind", memFilters.kind);
+        p.set("relevance", memFilters.relevance);
+        p.set("session", memFilters.session);
+        if (memFilters.q.trim()) p.set("q", memFilters.q.trim());
+        p.set("limit", String(memFilters.limit));
+        p.set("offset", String(memFilters.offset));
+        return p.toString();
+      }
+
+      async function memLoadList() {
+        memList = await api("/api/stats/memory/list?" + memQuery());
+      }
+
+      function renderMemories() {
+        const s = memories.summary;
+        const poolMax = 20000; // observationsPoolMaxTokens default
+        const poolPct = poolMax > 0 ? s.poolTokens / poolMax : 0;
+        const cards = `
+    ${card("Observations", fmtNum(s.observations), fmtNum(s.meanObservationTokens != null ? Math.round(s.meanObservationTokens) : 0) + " avg tok", "var(--blue)")}
+    ${card("Reflections", fmtNum(s.reflections), "stable facts", "var(--mauve)")}
+    ${card("Drops", fmtNum(s.drops), fmtPct(s.dropRate) + " drop rate", "var(--red)")}
+    ${card("Pool tokens", fmtNum(s.poolTokens), fmtPct(poolPct) + " of " + fmtNum(poolMax) + " max", "var(--teal)")}
+    ${card("Critical", fmtNum(s.relevanceCritical), "high-value obs", "var(--red)")}
+    ${card("High relevance", fmtNum(s.relevanceHigh), "observations", "var(--blue)")}
+  `;
+        main.innerHTML = `<div class="cards">${cards}</div>
+    <div class="chart-wrap"><h3>Memory production per day</h3><canvas id="mem-prod-chart"></canvas></div>
+    <div class="chart-wrap"><h3>Relevance distribution</h3><canvas id="mem-rel-chart"></canvas></div>
+    <div class="chart-wrap tall"><h3>Live memory pool (tokens)</h3><canvas id="mem-pool-chart"></canvas></div>
+    <div class="section-title">Memory browser</div>
+    <div id="mem-filters"></div>
+    <div class="mem-content"><div class="mem-list-wrap"><div id="mem-list"></div></div><div id="mem-detail"></div></div>
+  `;
+        drawMemProduction(memories.timeseries);
+        drawMemRelevance(memories.relevance);
+        drawMemPool(memories.poolGrowth);
+        memRenderFilters();
+        memRenderList();
+      }
+
+      function drawMemProduction(series) {
+        if (!chartReady || typeof Chart === "undefined" || !series || series.length === 0) return;
+        const labels = series.map((p) => fmtDay(p.timestamp));
+        const ctx = ensureChart("mem-prod-chart");
+        if (!ctx) return;
+        const blue = cssVar("--blue"),
+          mauve = cssVar("--mauve");
+        charts["mem-prod-chart"] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Observations",
+                data: series.map((p) => p.observations),
+                backgroundColor: blue + "a6",
+                stack: "m",
+                borderRadius: 3,
+              },
+              {
+                label: "Reflections",
+                data: series.map((p) => p.reflections),
+                backgroundColor: mauve + "a6",
+                stack: "m",
+                borderRadius: 3,
+              },
+            ],
+          },
+          options: stacked(yTitle(baseChartOpts(), "Memories recorded")),
+        });
+      }
+
+      function drawMemRelevance(buckets) {
+        if (!chartReady || typeof Chart === "undefined" || !buckets || buckets.length === 0) return;
+        const colors = {
+          low: cssVar("--green"),
+          medium: cssVar("--yellow"),
+          high: cssVar("--blue"),
+          critical: cssVar("--red"),
+        };
+        const ctx = ensureChart("mem-rel-chart");
+        if (!ctx) return;
+        charts["mem-rel-chart"] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: buckets.map((b) => b.relevance),
+            datasets: [
+              {
+                label: "Observations",
+                data: buckets.map((b) => b.count),
+                backgroundColor: buckets.map(
+                  (b) => (colors[b.relevance] || cssVar("--blue")) + "a6",
+                ),
+                borderRadius: 3,
+              },
+            ],
+          },
+          options: (() => {
+            const o = yTitle(baseChartOpts(), "Observations");
+            o.plugins.legend.display = false;
+            return o;
+          })(),
+        });
+      }
+
+      function drawMemPool(series) {
+        if (!chartReady || typeof Chart === "undefined" || !series || series.length === 0) return;
+        const labels = series.map((p) => fmtDay(p.timestamp));
+        const ctx = ensureChart("mem-pool-chart");
+        if (!ctx) return;
+        const teal = cssVar("--teal");
+        charts["mem-pool-chart"] = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Live pool tokens",
+                data: series.map((p) => p.poolTokens),
+                borderColor: teal,
+                backgroundColor: teal + "26",
+                fill: true,
+                tension: 0.3,
+                pointRadius: 0,
+                borderWidth: 2,
+              },
+              {
+                label: "Pool max (20k)",
+                data: series.map(() => 20000),
+                borderColor: cssVar("--red"),
+                borderDash: [6, 4],
+                fill: false,
+                pointRadius: 0,
+                borderWidth: 1.5,
+              },
+            ],
+          },
+          options: yTitle(baseChartOpts(), "Tokens"),
+        });
+      }
+
+      function memRenderFilters() {
+        const wrap = main.querySelector("#mem-filters");
+        if (!wrap) return;
+        const pages = Math.max(1, Math.ceil(memList.total / memFilters.limit));
+        const page = Math.floor(memFilters.offset / memFilters.limit) + 1;
+        const sel = (cur, opts) =>
+          opts
+            .map((o) => `<option value="${o.v}"${o.v === cur ? " selected" : ""}>${o.l}</option>`)
+            .join("");
+        wrap.className = "mem-filters";
+        wrap.innerHTML = `
+          <span class="lbl">Kind</span><select id="mem-kind">${sel(memFilters.kind, [
+            { v: "all", l: "all" },
+            { v: "observation", l: "observation" },
+            { v: "reflection", l: "reflection" },
+            { v: "drop", l: "drop" },
+          ])}</select>
+          <span class="lbl">Relevance</span><select id="mem-rel">${sel(memFilters.relevance, [
+            { v: "all", l: "all" },
+            { v: "low", l: "low" },
+            { v: "medium", l: "medium" },
+            { v: "high", l: "high" },
+            { v: "critical", l: "critical" },
+          ])}</select>
+          <span class="lbl">Session</span><select id="mem-session">${sel(memFilters.session, [{ v: "all", l: "all" }, ...memSessions.map((s) => ({ v: s, l: s.split("/sessions/").pop() || s }))])}</select>
+          <input type="text" id="mem-q" placeholder="search content…" value="${esc(memFilters.q)}">
+          <button class="btn" id="mem-search-btn">Search</button>
+          <span class="pages"><button id="mem-prev" ${memFilters.offset === 0 ? "disabled" : ""}>‹ prev</button><span>${memList.total ? page + "/" + pages : "0"} · ${fmtNum(memList.total)} rows</span><button id="mem-next" ${memFilters.offset + memFilters.limit >= memList.total ? "disabled" : ""}>next ›</button></span>
+        `;
+        const apply = () => {
+          memFilters.kind = $("#mem-kind").value;
+          memFilters.relevance = $("#mem-rel").value;
+          memFilters.session = $("#mem-session").value;
+          memFilters.q = $("#mem-q").value;
+          memFilters.offset = 0;
+          memLoadList().then(renderMemories);
+        };
+        $("#mem-search-btn").addEventListener("click", apply);
+        $("#mem-q").addEventListener("keydown", (e) => {
+          if (e.key === "Enter") apply();
+        });
+        $("#mem-kind").addEventListener("change", apply);
+        $("#mem-rel").addEventListener("change", apply);
+        $("#mem-session").addEventListener("change", apply);
+        $("#mem-prev").addEventListener("click", () => {
+          memFilters.offset = Math.max(0, memFilters.offset - memFilters.limit);
+          memLoadList().then(renderMemories);
+        });
+        $("#mem-next").addEventListener("click", () => {
+          if (memFilters.offset + memFilters.limit < memList.total) {
+            memFilters.offset += memFilters.limit;
+            memLoadList().then(renderMemories);
+          }
+        });
+      }
+
+      function memRenderList() {
+        const wrap = main.querySelector("#mem-list");
+        if (!wrap) return;
+        if (!memList.items || memList.items.length === 0) {
+          wrap.innerHTML = `<div class="pl-empty">No memories match these filters.</div>`;
+          return;
+        }
+        const rows = memList.items
+          .map((m) => {
+            const rel = m.relevance
+              ? `<span class="badge rel-${m.relevance}">${m.relevance}</span>`
+              : "";
+            const kind = m.kind === "drop" ? "drop" : m.kind;
+            const active = m.id === memSelectedId ? " active" : "";
+            const text = m.content
+              ? esc(m.content)
+              : `<i style="color:var(--dim)">(dropped memory ${m.memoryId})</i>`;
+            return `<div class="mem-row${active}" data-id="${m.id}"><span class="m-kind">${kind}</span><div class="m-body"><div class="m-text">${text}</div><div class="m-meta">${esc(m.memoryId)} · ${m.tokenCount} tok · ${m.sourceCount != null ? m.sourceCount + " sources" : "—"} · ${fmtDateShort(m.timestamp)}${rel ? " · " + rel : ""}</div></div></div>`;
+          })
+          .join("");
+        wrap.innerHTML = `<div class="pl-list">${rows}</div>`;
+        wrap
+          .querySelectorAll(".mem-row")
+          .forEach((r) => r.addEventListener("click", () => memOpenDetail(Number(r.dataset.id))));
+        if (memSelectedId != null) memRenderDetail();
+      }
+
+      async function memOpenDetail(id) {
+        memSelectedId = id;
+        main
+          .querySelectorAll(".mem-row")
+          .forEach((r) => r.classList.toggle("active", Number(r.dataset.id) === id));
+        const detail = await api("/api/stats/memory/" + id);
+        memRenderDetail(detail);
+      }
+
+      function memRenderDetail(d) {
+        const wrap = main.querySelector("#mem-detail");
+        if (!wrap) return;
+        if (!d) {
+          wrap.innerHTML = `<div class="empty">Select a memory to inspect it.</div>`;
+          return;
+        }
+        const rel = d.relevance
+          ? `<span class="badge rel-${d.relevance}">${d.relevance}</span>`
+          : "—";
+        wrap.innerHTML = `<div class="mem-detail">
+          <div class="pl-section"><h3>${esc(d.memoryId)}</h3></div>
+          <div class="pl-kv"><span class="k">Kind</span><span class="v">${d.kind}</span>
+            <span class="k">Relevance</span><span class="v">${rel}</span>
+            <span class="k">Tokens</span><span class="v num">${fmtNum(d.tokenCount)}</span>
+            <span class="k">Sources</span><span class="v num">${d.sourceCount != null ? d.sourceCount : "—"}</span>
+            <span class="k">Folded</span><span class="v bool">${d.folded}</span>
+            <span class="k">Recorded</span><span class="v">${fmtDate(d.timestamp)}</span>
+            <span class="k">Covers up to</span><span class="v str">${esc(d.coversUpToId || "—")}</span>
+          </div>
+          <div class="pl-section" style="margin-top:14px"><h3>Content</h3><div class="content-box">${esc(d.content || "")}</div></div>
+          <div class="kpi-note" style="margin-top:10px">session: <code>${esc(d.sessionFile.split("/sessions/").pop() || d.sessionFile)}</code></div>
+        </div>`;
       }
 
       function renderRecent(rows, isErrors) {
@@ -2295,6 +2891,9 @@
           providers = null;
           recent = null;
           errorsList = null;
+          compaction = null;
+          memories = null;
+          memSelectedId = null;
           await renderTab(currentTab);
         } catch (e) {
           statusEl.textContent = "Sync error: " + e.message;
@@ -2322,6 +2921,9 @@
           tools = null;
           providers = null;
           errorsList = null;
+          compaction = null;
+          memories = null;
+          memSelectedId = null;
           refreshAll();
         }),
       );
@@ -2329,6 +2931,8 @@
       $("#profile-select").addEventListener("change", (event) => {
         profile = event.target.value;
         stats = behavior = tools = providers = recent = errorsList = null;
+        compaction = memories = null;
+        memSelectedId = null;
         refreshAll();
       });
 

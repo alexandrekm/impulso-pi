@@ -202,6 +202,14 @@ version-string comparison can't detect a `git pull`/merge that changed the
 source without bumping `version`; both npm commands are cheap/idempotent when
 nothing changed, so always rebuilding is what keeps the global bin in sync.
 Currently the only tool is `pi-omp-stats` (see `packages/pi-omp-stats/`).
+Besides usage/cost/tool stats, it now also tracks **compaction** events and
+**observational-memory** events (observations/reflections/drops + the
+`om.folded` snapshot carried through compactions), parsed from session JSONL
+with no upstream pi change. New `compaction_stats` + `memory_events` tables
+and `/api/stats/compaction*` + `/api/stats/memory*` routes feed a Compaction
+panel and an Observational Memory panel (with a searchable memory browser) in
+the dashboard. A schema-version sentinel in `meta` resets file offsets once on
+upgrade so the new tables backfill from existing sessions.
 
 ## Non-clobber sync
 

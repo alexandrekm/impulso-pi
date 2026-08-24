@@ -263,12 +263,92 @@ export interface ToolResultLink {
   isError: boolean;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Compaction + observational-memory stats (impulso-pi addition)              */
+/* -------------------------------------------------------------------------- */
+
+/** Stats extracted from a `compaction` session entry.
+ *
+ * pi persists a `compaction` entry every time the transcript is folded. The
+ * entry carries `tokensBefore` (context size at trigger), the optional
+ * `usage` of the LLM call that generated the summary, and `fromHook` (true
+ * when an extension — notably observational-memory — produced this compaction
+ * rather than pi's own window-pressure path). `model`/`provider` are not on
+ * the entry itself; the parser inherits them from the last assistant message
+ * seen earlier in the same file walk (null when the parse chunk starts mid-
+ * stream, e.g. an incremental sync past the last assistant turn).
+ *
+ * Phase 2 fields (`reason`, `willRetry`, `tokensAfter`) are persisted only
+ * once the upstream pi patch lands (see COMPACTION-STATS-PLAN.md Phase 2).
+ * They are null on entries written before that, so every consumer treats them
+ * as nullable.
+ */
+export interface CompactionStats {
+  id?: number;
+  sessionFile: string;
+  entryId: string;
+  folder: string;
+  timestamp: number;
+  model: string | null;
+  provider: string | null;
+  tokensBefore: number;
+  fromHook: boolean;
+  // Compaction-summary generation cost (from entry.usage); null when absent.
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  cost: number | null;
+  /** What triggered the compaction: manual / threshold / overflow. Null on
+   *  entries written before the upstream pi Phase 2 patch. */
+  reason: string | null;
+  /** True when the aborted turn is retried after this compaction (overflow). */
+  willRetry: boolean | null;
+  /** Estimated context size (tokens) after compaction. Null when not persisted. */
+  tokensAfter: number | null;
+}
+
+/** Kind of observational-memory event recorded as a session `custom` entry. */
+export type MemoryKind = "observation" | "reflection" | "drop";
+
+/** Stats extracted from an `om.*` custom entry (or an `om.folded` snapshot
+ *  carried inside a compaction entry's `details`).
+ *
+ * `om.observations.recorded` / `om.reflections.recorded` entries carry no
+ * top-level `id` or `timestamp` — only `data` — so `entryId` is null for
+ * those and `timestamp` is taken from the memory's own `timestamp` field.
+ * `om.observations.dropped` entries do carry a top-level `id`/`timestamp`.
+ * `folded` marks rows re-emitted from an `om.folded` snapshot so totals can
+ * avoid double-counting a memory that was both freshly recorded and then
+ * carried across a later compaction.
+ */
+export interface MemoryEventStats {
+  id?: number;
+  sessionFile: string;
+  entryId: string | null;
+  folder: string;
+  timestamp: number;
+  kind: MemoryKind;
+  memoryId: string;
+  relevance: string | null;
+  tokenCount: number;
+  coversUpToId: string | null;
+  content: string | null;
+  sourceCount: number | null;
+  folded: boolean;
+}
+
 export interface ParseSessionResult {
   stats: MessageStats[];
   userStats: UserMessageStats[];
   userLinks: UserMessageLink[];
   toolCalls: ToolCallStats[];
   toolResults: ToolResultLink[];
+  /** Compaction entries extracted from the session JSONL. */
+  compactions: CompactionStats[];
+  /** Observations / reflections / drops extracted from `om.*` custom entries,
+   * plus memories carried through a compaction via `om.folded`. */
+  memoryEvents: MemoryEventStats[];
   /** Best-known folder/cwd for this session (header cwd, else lossy path decode). */
   folder?: string;
   newOffset: number;

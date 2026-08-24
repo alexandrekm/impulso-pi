@@ -29,7 +29,10 @@ import type {
   AgentMessage,
   AgentType,
   AssistantMessage,
+  CompactionStats,
   ContentBlock,
+  MemoryEventStats,
+  MemoryKind,
   MessageStats,
   ParseSessionResult,
   SessionEntry,
@@ -42,6 +45,16 @@ import type {
   UserMessageLink,
   UserMessageStats,
 } from "./types.js";
+
+/* -------------------------------------------------------------------------- */
+/* observational-memory custom-entry discriminators (impulso-pi addition)      */
+/* -------------------------------------------------------------------------- */
+
+/** `customType` values pi-observational-memory writes to session JSONL. */
+const OM_OBSERVATIONS_RECORDED = "om.observations.recorded";
+const OM_REFLECTIONS_RECORDED = "om.reflections.recorded";
+const OM_OBSERVATIONS_DROPPED = "om.observations.dropped";
+const OM_FOLDED = "om.folded";
 
 /* -------------------------------------------------------------------------- */
 /* Sessions dir resolution (Diff 2 — no pi imports)                            */
@@ -448,6 +461,230 @@ function isEnoent(err: unknown): boolean {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Compaction + observational-memory extraction (impulso-pi addition)          */
+/* -------------------------------------------------------------------------- */
+
+/** Parse a timestamp that may be Unix ms (number) or an ISO string. */
+function coerceAnyTimestamp(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const ts = Date.parse(value);
+    if (Number.isFinite(ts)) return ts;
+  }
+  return null;
+}
+
+/** Coerce a numeric field, returning null when absent/non-finite. */
+function coerceNum(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return null;
+}
+
+/** True for a plain non-null object (a tight check the extractors reuse). */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object";
+}
+
+/** Stats from a `compaction` entry, plus any memories carried via `om.folded`. */
+function extractCompaction(
+  sessionFile: string,
+  folder: string,
+  entry: SessionEntry,
+  lastModel: string | null,
+  lastProvider: string | null,
+): { compaction: CompactionStats | null; folded: MemoryEventStats[] } {
+  const e = entry as SessionEntry & {
+    id?: string;
+    timestamp?: unknown;
+    tokensBefore?: unknown;
+    fromHook?: unknown;
+    usage?: Partial<Usage>;
+    details?: unknown;
+    reason?: unknown;
+    willRetry?: unknown;
+    tokensAfter?: unknown;
+  };
+  // `entry_id` is NOT NULL in the DB; a compaction entry persisted without an
+  // id can't be linked, so skip it.
+  if (typeof e.id !== "string" || e.id.length === 0) return { compaction: null, folded: [] };
+  const tokensBefore = coerceNum(e.tokensBefore);
+  if (tokensBefore === null) return { compaction: null, folded: [] };
+  const ts = coerceAnyTimestamp(e.timestamp) ?? 0;
+  const usage = isPlainRecord(e.usage) ? e.usage : null;
+  const cost = isPlainRecord(usage?.cost) ? (usage!.cost as { total?: unknown }) : null;
+
+  const compaction: CompactionStats = {
+    sessionFile,
+    entryId: e.id,
+    folder,
+    timestamp: ts,
+    model: lastModel,
+    provider: lastProvider,
+    tokensBefore,
+    fromHook: e.fromHook === true,
+    inputTokens: coerceNum(usage?.input) ?? null,
+    outputTokens: coerceNum(usage?.output) ?? null,
+    cacheReadTokens: coerceNum(usage?.cacheRead) ?? null,
+    cacheWriteTokens: coerceNum(usage?.cacheWrite) ?? null,
+    cost: coerceNum(cost?.total) ?? null,
+    // Phase 2 fields — null on entries written before the upstream pi patch.
+    reason: typeof e.reason === "string" ? e.reason : null,
+    willRetry: typeof e.willRetry === "boolean" ? e.willRetry : null,
+    tokensAfter: coerceNum(e.tokensAfter) ?? null,
+  };
+
+  // An `om.folded` snapshot may live in the compaction entry's `details`,
+  // carrying the memory ledger across the fold. Re-emit those memories as
+  // `folded: true` rows so they remain visible in per-session rollups.
+  const folded: MemoryEventStats[] = [];
+  const details = e.details;
+  if (isPlainRecord(details) && details.type === OM_FOLDED) {
+    const foldTs = ts;
+    const obs = Array.isArray(details.observations) ? details.observations : [];
+    for (const o of obs) {
+      if (!isPlainRecord(o)) continue;
+      const id = typeof o.id === "string" ? o.id : null;
+      if (!id) continue;
+      folded.push({
+        sessionFile,
+        entryId: e.id,
+        folder,
+        timestamp: coerceAnyTimestamp(o.timestamp) ?? foldTs,
+        kind: "observation",
+        memoryId: id,
+        relevance: typeof o.relevance === "string" ? o.relevance : null,
+        tokenCount: coerceNum(o.tokenCount) ?? 0,
+        coversUpToId: null,
+        content: typeof o.content === "string" ? o.content : null,
+        sourceCount: Array.isArray(o.sourceEntryIds) ? o.sourceEntryIds.length : null,
+        folded: true,
+      });
+    }
+    const refs = Array.isArray(details.reflections) ? details.reflections : [];
+    for (const r of refs) {
+      if (!isPlainRecord(r)) continue;
+      const id = typeof r.id === "string" ? r.id : null;
+      if (!id) continue;
+      folded.push({
+        sessionFile,
+        entryId: e.id,
+        folder,
+        timestamp: foldTs,
+        kind: "reflection",
+        memoryId: id,
+        relevance: null,
+        tokenCount: coerceNum(r.tokenCount) ?? 0,
+        coversUpToId: null,
+        content: typeof r.content === "string" ? r.content : null,
+        sourceCount: Array.isArray(r.supportingObservationIds)
+          ? r.supportingObservationIds.length
+          : null,
+        folded: true,
+      });
+    }
+  }
+  return { compaction, folded };
+}
+
+/** Memory events from an `om.*` custom entry (observations / reflections / drops).
+ *  Returns one row per memory in the batch. */
+function extractMemoryEvents(
+  sessionFile: string,
+  folder: string,
+  entry: SessionEntry,
+): MemoryEventStats[] {
+  const e = entry as SessionEntry & {
+    id?: string;
+    timestamp?: unknown;
+    customType?: string;
+    data?: unknown;
+  };
+  if (e.type !== "custom") return [];
+  const customType = e.customType;
+  if (
+    customType !== OM_OBSERVATIONS_RECORDED &&
+    customType !== OM_REFLECTIONS_RECORDED &&
+    customType !== OM_OBSERVATIONS_DROPPED
+  )
+    return [];
+  const data = isPlainRecord(e.data) ? e.data : null;
+  if (!data) return [];
+  const coversUpToId = typeof data.coversUpToId === "string" ? data.coversUpToId : null;
+  // `dropped` entries carry a top-level id/timestamp; `recorded`/`reflections`
+  // do not, so entryId is null and per-memory timestamps come from the memory.
+  const entryId = typeof e.id === "string" && e.id.length > 0 ? e.id : null;
+  const entryTs = coerceAnyTimestamp(e.timestamp);
+  const out: MemoryEventStats[] = [];
+
+  if (customType === OM_OBSERVATIONS_RECORDED) {
+    const observations = Array.isArray(data.observations) ? data.observations : [];
+    for (const o of observations) {
+      if (!isPlainRecord(o)) continue;
+      const id = typeof o.id === "string" ? o.id : null;
+      if (!id) continue;
+      out.push({
+        sessionFile,
+        entryId,
+        folder,
+        timestamp: coerceAnyTimestamp(o.timestamp) ?? entryTs ?? 0,
+        kind: "observation",
+        memoryId: id,
+        relevance: typeof o.relevance === "string" ? o.relevance : null,
+        tokenCount: coerceNum(o.tokenCount) ?? 0,
+        coversUpToId,
+        content: typeof o.content === "string" ? o.content : null,
+        sourceCount: Array.isArray(o.sourceEntryIds) ? o.sourceEntryIds.length : null,
+        folded: false,
+      });
+    }
+  } else if (customType === OM_REFLECTIONS_RECORDED) {
+    const reflections = Array.isArray(data.reflections) ? data.reflections : [];
+    for (const r of reflections) {
+      if (!isPlainRecord(r)) continue;
+      const id = typeof r.id === "string" ? r.id : null;
+      if (!id) continue;
+      out.push({
+        sessionFile,
+        entryId,
+        folder,
+        timestamp: entryTs ?? 0,
+        kind: "reflection",
+        memoryId: id,
+        relevance: null,
+        tokenCount: coerceNum(r.tokenCount) ?? 0,
+        coversUpToId,
+        content: typeof r.content === "string" ? r.content : null,
+        sourceCount: Array.isArray(r.supportingObservationIds)
+          ? r.supportingObservationIds.length
+          : null,
+        folded: false,
+      });
+    }
+  } else {
+    // OM_OBSERVATIONS_DROPPED: one row per dropped id.
+    const ids = Array.isArray(data.observationIds) ? data.observationIds : [];
+    for (const id of ids) {
+      if (typeof id !== "string" || id.length === 0) continue;
+      out.push({
+        sessionFile,
+        entryId,
+        folder,
+        timestamp: entryTs ?? 0,
+        kind: "drop",
+        memoryId: id,
+        relevance: null,
+        tokenCount: 0,
+        coversUpToId,
+        content: null,
+        sourceCount: null,
+        folded: false,
+      });
+    }
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Public API                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -470,6 +707,8 @@ export async function parseSessionFile(
     userLinks: [],
     toolCalls: [],
     toolResults: [],
+    compactions: [],
+    memoryEvents: [],
     newOffset: fromOffset,
   };
 
@@ -492,6 +731,15 @@ export async function parseSessionFile(
   const userLinks: UserMessageLink[] = [];
   const toolCalls: ToolCallStats[] = [];
   const toolResults: ToolResultLink[] = [];
+  const compactions: CompactionStats[] = [];
+  const memoryEvents: MemoryEventStats[] = [];
+  // Running last-seen assistant model/provider. `compaction` entries do not
+  // carry a model; the compaction extractor inherits these so compaction
+  // stats can be attributed to the model that was active at trigger time.
+  // null when the parse chunk starts mid-stream (incremental sync past the
+  // last assistant turn) — the aggregator groups nulls into `unknown`.
+  let lastModel: string | null = null;
+  let lastProvider: string | null = null;
   const userByEntryId = new Map<string, UserMessageStats>();
   const start = Math.max(0, Math.min(fromOffset, bytes.length));
   const unprocessed = bytes.subarray(start);
@@ -520,7 +768,11 @@ export async function parseSessionFile(
     }
     if (isAssistantMessage(entry)) {
       const msgStats = extractStats(sessionPath, folder, entry, agentType);
-      if (msgStats) stats.push(msgStats);
+      if (msgStats) {
+        stats.push(msgStats);
+        lastModel = msgStats.model;
+        lastProvider = msgStats.provider;
+      }
       toolCalls.push(...extractToolCalls(sessionPath, folder, entry, agentType));
       // Link assistant's responding model back to the user message it answered.
       const parentId = entry.parentId;
@@ -541,10 +793,43 @@ export async function parseSessionFile(
           });
         }
       }
+      continue;
+    }
+    // `compaction` entry: pi-native fold (window-pressure/overflow) or an
+    // obs-memory hook-produced fold (`fromHook: true`). May carry a memory
+    // snapshot (`om.folded`) in `details`.
+    if (entry.type === "compaction") {
+      const { compaction, folded } = extractCompaction(
+        sessionPath,
+        folder,
+        entry,
+        lastModel,
+        lastProvider,
+      );
+      if (compaction) compactions.push(compaction);
+      if (folded.length > 0) memoryEvents.push(...folded);
+      continue;
+    }
+    // `custom` entry: observational-memory records its observations /
+    // reflections / drops here. Other custom types are ignored.
+    if (entry.type === "custom") {
+      const events = extractMemoryEvents(sessionPath, folder, entry);
+      if (events.length > 0) memoryEvents.push(...events);
+      continue;
     }
   }
 
-  return { stats, userStats, userLinks, toolCalls, toolResults, folder, newOffset: start + read };
+  return {
+    stats,
+    userStats,
+    userLinks,
+    toolCalls,
+    toolResults,
+    compactions,
+    memoryEvents,
+    folder,
+    newOffset: start + read,
+  };
 }
 
 /**

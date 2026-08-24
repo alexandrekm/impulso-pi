@@ -165,10 +165,39 @@ portable.
 | GET    | `/api/stats/tools`         | `ToolDashboardStats` |
 | GET    | `/api/stats/behavior`      | `BehaviorDashboardStats` |
 | GET    | `/api/stats/providers`     | `ProviderDashboardStats` (portable subset) |
+| GET    | `/api/stats/compaction`    | `{ summary, byModel, timeseries, tokensBeforeDistribution }` |
+| GET    | `/api/stats/compaction/timeseries` | `{ series }` (compactions per day) |
+| GET    | `/api/stats/compaction/tokens-before` | `{ buckets }` (`?model=` filter) |
+| GET    | `/api/stats/memory`        | `{ summary, timeseries, relevance, poolGrowth }` |
+| GET    | `/api/stats/memory/timeseries` | `{ series }` (memory production per day) |
+| GET    | `/api/stats/memory/relevance` | `{ buckets }` (relevance distribution) |
+| GET    | `/api/stats/memory/pool`   | `{ series }` (live pool token growth) |
+| GET    | `/api/stats/memory/sessions` | `{ sessions }` (sessions with memory events) |
+| GET    | `/api/stats/memory/list`   | `{ items, total }` (`?kind=&relevance=&session=&q=&limit=&offset=`) |
+| GET    | `/api/stats/memory/:id`    | single memory detail |
 | GET    | `/api/stats/recent`        | recent `MessageStats[]` (`?limit=`) |
 | GET    | `/api/stats/errors`        | error `MessageStats[]` (`?limit=`) |
 | GET    | `/api/request/:id`         | `RequestDetails` |
 | POST   | `/api/sync`               | incremental resync → `{ processed, files, totalMessages }` |
+
+The **compaction** and **observational-memory** endpoints surface what pi
+usually drops on the floor: `compaction` session entries (frequency, context
+size at trigger via `tokensBefore`, the summary-generation `usage`/cost, the
+`fromHook` split between obs-memory-driven and pi-native compactions, and the
+Phase 2 trigger `reason` / `willRetry` / `tokensAfter` when present) and the
+`om.observations.recorded` / `om.reflections.recorded` /
+`om.observations.dropped` custom entries plus the `om.folded` snapshot
+carried through each compaction. No upstream change is needed for the core
+stats — it all reads the session JSONL already on disk.
+
+The Phase 2 fields (`reason` = `manual` / `threshold` / `overflow`, `willRetry`,
+`tokensAfter`) are persisted only once the upstream pi patch lands (a small
+additive change to `CompactionEntry` + `appendCompaction` in
+`session-manager.ts`/`agent-session.ts`; see `COMPACTION-STATS-PLAN.md` Phase 2).
+Until then they read as `null` and the by-reason table groups them as
+`unknown`. A schema-version sentinel resets file offsets once after each
+upgrade so the new tables/columns backfill from existing sessions on the next
+sync.
 
 Not implemented (omp-specific): `/api/stats/gain` (snapcompact) and the
 provider usage-window/subscription analytics (auth-broker).
@@ -184,7 +213,13 @@ render even when Chart.js is unavailable.
 
 Sections: **Overview** (metric cards + time-series), **Models**, **Folders**,
 **Tools**, **Behavior** (port of omp's "rage" analytics), **Costs**,
-**Providers**, **Requests**, **Errors**.
+**Providers**, **Requests**, **Errors**, **Compaction** (compaction frequency,
+context-size-at-trigger histogram, fromHook split, by-trigger-reason table,
+summary-generation cost),
+**Observational Memory** (memory production, relevance distribution, live
+pool-token growth vs the 20k default, and a searchable/filterable memory
+browser listing individual observations/reflections with their 12-hex
+`memoryId` — the same id `recall()` takes — and a detail pane).
 
 > **Note on latency/TTFT:** as of this port, earendil-works pi does not record
 > `duration` / `ttft` on assistant messages, so the Avg Latency, Avg TTFT, and
