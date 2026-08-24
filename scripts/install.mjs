@@ -554,13 +554,54 @@ function migrateLegacyDroidStyling(t) {
   console.log(`  [migrated]    removed pi-droid-styling and footer-status-widgets`);
 }
 
-// Merge the top-level "settings" object from profiles.jsonc into a target's
-// settings.json. Only declared keys are written; everything else (including
-// the packages[] managed by pi install) is preserved. Keys removed from
-// profiles.jsonc are left as-is in settings.json (non-clobber).
-function doInstallSettings(t, profiles) {
+// Merge settings from profiles.jsonc into a target's settings.json. Two
+// sources, with deliberately different semantics:
+//
+//   profiles.settings         — MANAGED keys. Overwrite on every sync (the
+//                              repo owns these: theme, hideThinkingBlock, …).
+//                              Shallow merge; declared scalars/arrays replace
+//                              whatever is there. `packages` is rejected here.
+//
+//   profiles.settingsDefaults — DEFAULTS. Deep fill-only: a key (and its
+//                              nested sub-keys) is written ONLY when absent
+//                              in settings.json, so user overrides made via
+//                              /settings survive sync. Used to seed safe
+//                              initial values for extension-managed namespaces
+//                              (e.g. observational-memory compaction
+//                              thresholds) on fresh machines without clobbering
+//                              per-user tuning. Keys removed from profiles.jsonc
+//                              are left as-is (non-clobber).
+export function isPlainObject(v) {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+// Recursively fill `defaults` into `current`: for each key, write it only
+// when absent. Plain-object sub-keys recurse so a nested default can fill
+// individual missing leaves while preserving the user's existing ones.
+export function fillSettingsDefaults(current, defaults) {
+  const out = { ...current };
+  for (const [k, val] of Object.entries(defaults)) {
+    if (isPlainObject(val)) {
+      const cur = current[k];
+      if (cur === undefined) {
+        out[k] = val;
+      } else if (isPlainObject(cur)) {
+        out[k] = fillSettingsDefaults(cur, val);
+      }
+      // else: user has a scalar where a default object lives — keep it.
+    } else if (current[k] === undefined) {
+      out[k] = val;
+    }
+  }
+  return out;
+}
+
+export function doInstallSettings(t, profiles) {
   const settings = profiles.settings;
-  if (!settings || Object.keys(settings).length === 0) return;
+  const defaults = profiles.settingsDefaults;
+  const hasManaged = settings && Object.keys(settings).length > 0;
+  const hasDefaults = defaults && Object.keys(defaults).length > 0;
+  if (!hasManaged && !hasDefaults) return;
   const p = join(t.dir, "settings.json");
   let current = {};
   if (existsSync(p)) {
@@ -571,8 +612,23 @@ function doInstallSettings(t, profiles) {
       return;
     }
   }
-  const merged = { ...current, ...settings };
-  const changed = Object.keys(settings).filter((k) => current[k] !== settings[k]);
+  let merged = current;
+  const changed = [];
+  // Managed keys: overwrite (repo-owned).
+  if (hasManaged) {
+    for (const [k, val] of Object.entries(settings)) {
+      if (current[k] !== val) changed.push(k);
+      merged = { ...merged, [k]: val };
+    }
+  }
+  // Defaults: deep fill-only (user overrides preserved).
+  if (hasDefaults) {
+    const before = merged;
+    merged = fillSettingsDefaults(before, defaults);
+    for (const k of Object.keys(defaults)) {
+      if (JSON.stringify(before[k]) !== JSON.stringify(merged[k])) changed.push(k);
+    }
+  }
   if (changed.length === 0) {
     console.log(`  [in sync]     settings.json`);
     return;

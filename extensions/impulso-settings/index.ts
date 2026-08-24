@@ -13,6 +13,7 @@
 import {
   type Component,
   getKeybindings,
+  matchesKey,
   stripTerminalSequences,
   truncateToWidth,
   visibleWidth,
@@ -134,9 +135,12 @@ export class ImpulsoSettingsView implements Component {
       this.activate();
       return;
     }
-    // ←/→ switch tabs; Tab cycles to the next tab.
-    if (data === "\x1b[D" || data === "\x1b[C" || data === "\t") {
-      const dir = data === "\x1b[D" ? -1 : 1;
+    // ←/→ switch tabs; Tab cycles to the next tab. Use matchesKey so every
+    // terminal encoding is recognized (legacy \x1b[D, application-cursor
+    // \x1bOD, Kitty CSI-u, modifyOtherKeys) — raw byte comparison only catches
+    // the plain legacy form and silently breaks in app-cursor / Kitty mode.
+    if (matchesKey(data, "left") || matchesKey(data, "right") || matchesKey(data, "tab")) {
+      const dir = matchesKey(data, "left") ? -1 : 1;
       this.tabIndex = (this.tabIndex + dir + TABS.length) % TABS.length;
       this.cursor = 0;
       this.scrollOffset = 0;

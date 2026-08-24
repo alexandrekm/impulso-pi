@@ -6,13 +6,34 @@
   // (the raw ~/.pi/agent dir), used for machine-global files.
   "tags": ["core", "work", "personal", "base"],
 
-  // Settings merged into every target's settings.json on install (all
-  // profiles and --base). Only the declared keys are touched; everything
-  // else (including packages[]) is left alone.
+  // MANAGED settings — merged into every target's settings.json on install
+  // (all profiles and --base) and OVERWRITTEN on every sync. The repo owns
+  // these keys. Only the declared keys are touched; everything else
+  // (including packages[]) is left alone.
   "settings": {
     "hideThinkingBlock": true,
     // Catppuccin Mocha, from the pi-themes package (git: below).
     "theme": "catppuccin-mocha",
+  },
+
+  // DEFAULT settings — deep fill-only: a key (and nested sub-keys) is
+  // written ONLY when absent in settings.json, so user overrides made via
+  // /settings survive sync. Use this to seed safe initial values for
+  // extension-managed namespaces on fresh machines without clobbering
+  // per-user tuning. Keys removed here are left as-is (non-clobber).
+  "settingsDefaults": {
+    // pi-observational-memory: by default the proactive compaction trigger
+    // fires at a fixed 81k-token threshold (calibrated mode), which compacts
+    // far too often on large-context models. Ratio mode + 0.9 makes it fire
+    // at ~90% of the active model's context window instead, so the auto-
+    // trigger rarely fires while observation/reflection work continues; pi's
+    // native window-pressure compaction remains the safety net. The
+    // /settings "Compaction trigger mode" toggle can still flip this back
+    // to `calibrated` — install only fills these when absent, never resets.
+    "observational-memory": {
+      "compactAfterTokensMode": "ratio",
+      "compactAfterTokensRatio": 0.9,
+    },
   },
 
   "profiles": {
@@ -219,11 +240,14 @@
     // compactions by capturing observations + distilling reflections in the
     // background as you work, so compaction becomes a fast render of prepared
     // memory instead of a slow re-summarization. Less coherence loss + faster
-    // compaction. Commands: /om:status, /om:view, /om:view full; `recall`
-    // agent tool recovers source evidence by id. Config under the
-    // `observational-memory` namespace in settings.json (tuned from /settings
-    // → Pi → Observational memory: worker model + thinking, passive mode,
-    // worker notices, compaction trigger mode). Core so every profile gets it.
+    // compaction. Commands: /om:status, /om:view, /om:view full; the `recall`
+    // agent tool recovers source evidence by id. Config lives under the
+    // `observational-memory` namespace in settings.json. Safe defaults for the
+    // compaction trigger are seeded by `settingsDefaults` above (ratio mode,
+    // 0.9) so the proactive auto-trigger rarely fires on large-context
+    // models; everything else is tuned from /settings → Pi → Observational
+    // memory (worker model + thinking, passive mode, worker notices, compaction
+    // trigger mode) and persists across installs (fill-only, never reset).
     // https://pi.dev/packages/pi-observational-memory
     "npm:pi-observational-memory": { "tags": ["core"] },
 

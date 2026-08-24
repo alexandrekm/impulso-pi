@@ -144,12 +144,30 @@ and never collide because no profile has both tags.
 
 ### Shared settings
 
-The optional top-level `"settings"` object in `profiles.jsonc` is merged
-into every target's `settings.json` on install (all profiles and `--base`).
-Only declared keys are written; `packages[]` and any other existing keys are
-preserved. `"packages"` is rejected there — use `npm:`/`git:` resources
-instead. Currently used for `"hideThinkingBlock": true` and the shared
-`"theme": "catppuccin-mocha"` (from the pi-themes package).
+Two optional top-level objects in `profiles.jsonc` are merged into every
+target's `settings.json` on install (all profiles and `--base`), with
+deliberately different semantics:
+
+- **`"settings"` (MANAGED):** repo-owned keys that are **overwritten** on every
+  sync. `packages[]` and any other existing keys are preserved; `"packages"`
+  is rejected here — use `npm:`/`git:` resources instead. Currently used for
+  `"hideThinkingBlock": true` and the shared `"theme": "catppuccin-mocha"`
+  (from the pi-themes package).
+- **`"settingsDefaults"` (DEFAULTS):** deep **fill-only** — a key (and its
+  nested sub-keys) is written **only when absent** in `settings.json`, so
+  user overrides made via `/settings` survive sync. Use this to seed safe
+  initial values for extension-managed namespaces on fresh machines without
+  clobbering per-user tuning. Currently used for `observational-memory`
+  compaction thresholds (`compactAfterTokensMode: "ratio"`,
+  `compactAfterTokensRatio: 0.9`) so the proactive auto-compaction trigger
+  doesn't fire at the default 81k-token threshold on large-context models.
+  The `/settings` "Compaction trigger mode" toggle can still flip it back to
+  `calibrated` — install only fills these when absent, never resets them.
+
+  This is why `observational-memory.*` keys are safe to expose as `pi-setting`
+  features in `features.ts`: install.sh never resets them (it only fills the
+  two compaction defaults when absent), so `/settings` toggles persist across
+  syncs. Keys removed from `settingsDefaults` are left as-is (non-clobber).
 
 ### Global vs. per-profile
 
