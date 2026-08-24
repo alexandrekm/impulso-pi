@@ -318,6 +318,17 @@ export const FEATURES: Feature[] = [
     kind: "local",
   },
 
+  // ── Google Workspace ──────────────────────────────────────────────────
+  {
+    id: "gws",
+    tab: "tools",
+    group: "Google Workspace",
+    label: "gws skills (Docs/Sheets/Drive/Gmail)",
+    description:
+      "Google Workspace CLI skills (docs, sheets, drive, gmail + shared) vendored from github.com/googleworkspace/cli. Mode-gated: /gws on enables them for the session. Off by default — no context cost when unused.",
+    kind: "local",
+  },
+
   // ── Orca & Misc ────────────────────────────────────────────────────────
   {
     id: "orca-integration",

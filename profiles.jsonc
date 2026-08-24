@@ -120,6 +120,15 @@
     // profile dir (ppi) or ~/.pi/agent for --base.
     "extensions/payload-exporter/payload-exporter.ts": { "tags": ["core"] },
 
+    // Google Workspace CLI skills (docs, sheets, drive, gmail + shared +
+    // granular helper sub-skills) vendored from
+    // https://github.com/googleworkspace/cli under extensions/gws/skills/.
+    // Mode-gated: the skills stay out of context until `/gws on` is run,
+    // then this extension injects them into the system prompt for the
+    // session. Off by default. State persists in <configDir>/gws.json.
+    // Toggled in /settings → Tools & Safety → Google Workspace.
+    "extensions/gws/": { "tags": ["core"] },
+
     // Vision handoff for text-only models (https://pi.dev/packages/pi-vision-handoff).
     // Transparent swap: describes images via a chosen vision model and swaps
     // the image block for text before the request leaves — no tool, no extra
