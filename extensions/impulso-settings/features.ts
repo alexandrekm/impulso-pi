@@ -371,10 +371,10 @@ export const FEATURES: Feature[] = [
   {
     id: "on-demand-skills",
     tab: "pi",
-    group: "System prompt",
+    group: "Input",
     label: "On-demand skills (keyword)",
     description:
-      "Injects a pointer to a skill only when your message mentions its keywords, so skills stay out of the always-on system prompt. Set disable-model-invocation: true on the skill + list it in extensions/on-demand-skills/config.json.",
+      "Appends a skill pointer to your message only when it mentions configured keywords, so skills stay out of the always-on system prompt. Set disable-model-invocation: true on the skill + list it in extensions/on-demand-skills/config.json.",
     kind: "local",
   },
 
