@@ -368,6 +368,15 @@ export const FEATURES: Feature[] = [
       "Owns the fixed parts of pi's system prompt (intro, Pi-docs block) while keeping dynamic parts (tools, guidelines, context, skills, cwd). Edit extensions/system-prompt/system-prompt.ts.",
     kind: "local",
   },
+  {
+    id: "on-demand-skills",
+    tab: "pi",
+    group: "Input",
+    label: "On-demand skills (keyword)",
+    description:
+      "Appends a skill pointer to your message only when it mentions configured keywords, so skills stay out of the always-on system prompt. Set disable-model-invocation: true on the skill + list it in extensions/on-demand-skills/config.json.",
+    kind: "local",
+  },
 
   // ── Pi built-in settings (safe subset — NOT managed by profiles.jsonc) ──
   {

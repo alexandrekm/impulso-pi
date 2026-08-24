@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "//": "On-demand skill triggers. Each entry is a skill name → { keywords, hint }. When the user's message matches any keyword (case-insensitive word boundary), the hint (with {path} replaced by the skill's SKILL.md path under <configDir>/skills/<name>/) is appended to the user's own message as a <skill_hint> block, so the model reads it as part of the user's turn — the system prompt is never touched. Requires `disable-model-invocation: true` in the skill's SKILL.md frontmatter so it's kept out of the always-on <available_skills> block. A trigger no-ops if the skill isn't installed on the current profile.",
+  "triggers": {
+    "datadog": {
+      "keywords": ["datadog", "dashboard", "metric", "monitor", "pup", "slo", "synthetics", "apm"],
+      "hint": "Use the Datadog skill at {path} — load it with the `read` tool for how to interact with Datadog via the `pup` CLI (dashboards, metrics, monitors, logs, SLOs, synthetics, APM)."
+    }
+  }
+}

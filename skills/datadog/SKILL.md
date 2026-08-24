@@ -3,6 +3,7 @@ name: datadog
 description: Use Datadog via the pup CLI — dashboards, metrics, monitors, logs, SLOs, synthetics, APM.
 author: alexandre.mendonca
 tags: [datadog, observability, metrics, dashboards, pup]
+disable-model-invocation: true
 ---
 
 # Datadog (pup CLI)

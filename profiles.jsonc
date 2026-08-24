@@ -150,6 +150,16 @@
     // Toggled in /settings → Tools & Safety → Google Workspace.
     "extensions/gws/": { "tags": ["core"] },
 
+    // On-demand skill injection (keyword-triggered). Keeps skills out of
+    // the always-on system prompt (via `disable-model-invocation: true` in
+    // their SKILL.md) and instead appends a tiny pointer to the user's own
+    // message — not the system prompt — when it matches configured keywords,
+    // so the model reads it as part of the user's turn. Config:
+    // extensions/on-demand-skills/config.json. Triggers datadog on
+    // `datadog`/`dashboard`/`metrics`/etc. Toggled in /settings → Pi → Input.
+    // Generic — add more skills to the config anytime.
+    "extensions/on-demand-skills/": { "tags": ["core"] },
+
     // Vision handoff for text-only models (https://pi.dev/packages/pi-vision-handoff).
     // Transparent swap: describes images via a chosen vision model and swaps
     // the image block for text before the request leaves — no tool, no extra
