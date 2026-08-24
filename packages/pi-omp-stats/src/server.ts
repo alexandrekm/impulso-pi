@@ -45,9 +45,10 @@ import {
   listPayloadFiles,
   listPayloadSessions,
   payloadsExist,
+  payloadRootLabel,
   readPayloadFile,
   readPayloadErrors,
-  resolvePayloadsDir,
+  resolvePayloadRoots,
 } from "./payloads.js";
 
 const DASHBOARD_HTML_PATH = fileURLToPath(new URL("./dashboard.html", import.meta.url));
@@ -104,11 +105,14 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
   const range = url.searchParams.get("range");
 
   if (pathname === "/api/profiles") return sendJson(res, 200, await getAvailableProfiles());
-  if (!pathname.startsWith("/api/payloads")) {
-    const profile = url.searchParams.get("profile") ?? "all";
-    if (!(await getAvailableProfiles()).includes(profile)) {
-      return sendJson(res, 400, { error: `Unknown profile: ${profile}` });
-    }
+
+  const profile = url.searchParams.get("profile") ?? "all";
+  if (!(await getAvailableProfiles()).includes(profile)) {
+    return sendJson(res, 400, { error: `Unknown profile: ${profile}` });
+  }
+  const isPayloads = pathname.startsWith("/api/payloads");
+  if (!isPayloads) {
+    // Stats routes read from a per-profile DB.
     selectProfile(profile);
   }
 
@@ -209,29 +213,35 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
 
   if (pathname === "/api/payloads") {
     // Existence probe used by the dashboard to show/hide the Payloads tab.
+    const roots = await resolvePayloadRoots(profile);
     return sendJson(res, 200, {
-      exists: await payloadsExist(),
-      root: resolvePayloadsDir(),
+      exists: await payloadsExist(roots),
+      root: payloadRootLabel(roots),
     });
   }
   if (pathname === "/api/payloads/dates") {
-    return sendJson(res, 200, await listPayloadDates());
+    const roots = await resolvePayloadRoots(profile);
+    return sendJson(res, 200, await listPayloadDates(roots));
   }
   if (pathname === "/api/payloads/sessions") {
+    const roots = await resolvePayloadRoots(profile);
     const date = url.searchParams.get("date") ?? "";
-    return sendJson(res, 200, await listPayloadSessions(date));
+    return sendJson(res, 200, await listPayloadSessions(roots, date));
   }
   if (pathname === "/api/payloads/files") {
+    const roots = await resolvePayloadRoots(profile);
     const dir = url.searchParams.get("dir") ?? "";
-    return sendJson(res, 200, await listPayloadFiles(dir));
+    return sendJson(res, 200, await listPayloadFiles(roots, dir));
   }
   if (pathname === "/api/payloads/errors") {
+    const roots = await resolvePayloadRoots(profile);
     const dir = url.searchParams.get("dir") ?? "";
-    return sendJson(res, 200, { dir, errors: await readPayloadErrors(dir) });
+    return sendJson(res, 200, { dir, errors: await readPayloadErrors(roots, dir) });
   }
   if (pathname === "/api/payloads/file") {
+    const roots = await resolvePayloadRoots(profile);
     const rel = url.searchParams.get("path") ?? "";
-    const result = await readPayloadFile(rel);
+    const result = await readPayloadFile(roots, rel);
     if (!result) return sendJson(res, 404, { error: "Not Found" });
     return sendJson(res, 200, result);
   }

@@ -2450,6 +2450,13 @@
           .trim();
         return s.length > n ? s.slice(0, n - 1) + "…" : s;
       }
+      // Extract the date segment from a session rel. In single-root mode a
+      // session rel is `date/session`; in the multi-profile "All" view it is
+      // `profile/date/session`. The date is always the second-to-last segment.
+      function plDateOf(rel) {
+        const segs = String(rel || "").split("/");
+        return segs.length >= 2 ? segs[segs.length - 2] : "";
+      }
 
       function plCrumb(parts) {
         // parts: [{label, go?}] — last is current (no go).
@@ -2545,8 +2552,8 @@
         pl.errors = d.errors || [];
         const crumbs = plCrumb([
           { label: "Payloads", go: "dates" },
-          ...(dir && dir.includes("/")
-            ? [{ label: dir.split("/")[0], go: "date:" + dir.split("/")[0] }]
+          ...(dir && dir.includes("/") && plDateOf(dir)
+            ? [{ label: plDateOf(dir), go: "date:" + plDateOf(dir) }]
             : []),
           { label: label || "flat" },
         ]);
@@ -2586,8 +2593,8 @@
         pl.errors = d.errors || [];
         const crumbs = plCrumb([
           { label: "Payloads", go: "dates" },
-          ...(dir && dir.includes("/")
-            ? [{ label: dir.split("/")[0], go: "date:" + dir.split("/")[0] }]
+          ...(dir && dir.includes("/") && plDateOf(dir)
+            ? [{ label: plDateOf(dir), go: "date:" + plDateOf(dir) }]
             : []),
           { label: label || "flat", go: "session:" + dir + ":" + (label || "flat") },
           { label: "errors.jsonl" },
@@ -2632,8 +2639,8 @@
         const sessionLabel = sessionRel ? sessionRel.split("/").pop() : "flat";
         const crumbs = plCrumb([
           { label: "Payloads", go: "dates" },
-          ...(sessionRel && sessionRel.includes("/")
-            ? [{ label: sessionRel.split("/")[0], go: "date:" + sessionRel.split("/")[0] }]
+          ...(sessionRel && sessionRel.includes("/") && plDateOf(sessionRel)
+            ? [{ label: plDateOf(sessionRel), go: "date:" + plDateOf(sessionRel) }]
             : []),
           { label: sessionLabel, go: "session:" + sessionRel + ":" + sessionLabel },
           { label: pl.curFile.file },

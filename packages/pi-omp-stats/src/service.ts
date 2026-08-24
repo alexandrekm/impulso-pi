@@ -19,7 +19,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -119,7 +119,42 @@ function forwardedEnv(): Record<string, string> {
   }
   // Always anchor the stats dir so logs + db land deterministically.
   if (!env.PI_STATS_DIR) env.PI_STATS_DIR = statsDir();
+
+  // The dashboard is a machine-global service that aggregates every
+  // profile. When `PI_STATS_PROFILES_DIR` is not explicitly set but profile
+  // dirs exist on disk, default to profiles mode so a bare
+  // `pi-omp-stats service install` (with no PI_STATS_* in the shell) still
+  // discovers all profiles instead of silently falling back to the legacy
+  // single-dir `~/.pi/agent` (which is usually empty in a ppi setup).
+  if (!env.PI_STATS_PROFILES_DIR && profilesDirHasProfiles(defaultProfilesDir())) {
+    env.PI_STATS_PROFILES_DIR = defaultProfilesDir();
+  }
+
+  // In profiles mode, a stray `PI_CODING_AGENT_DIR` /
+  // `PI_CODING_AGENT_SESSION_DIR` leaked from the installing shell would
+  // pin the dashboard to a single profile and conflict with profile
+  // discovery — drop it. (In legacy single-dir mode these are the legitimate
+  // way to point at a non-default agent dir, so leave them alone there.)
+  if (env.PI_STATS_PROFILES_DIR) {
+    delete env.PI_CODING_AGENT_DIR;
+    delete env.PI_CODING_AGENT_SESSION_DIR;
+  }
   return env;
+}
+
+/** Default profiles root: `~/.pi/profiles`. */
+function defaultProfilesDir(): string {
+  return path.join(os.homedir(), ".pi", "profiles");
+}
+
+/** True if `dir` exists and contains at least one subdirectory. */
+function profilesDirHasProfiles(dir: string): boolean {
+  if (!existsSync(dir)) return false;
+  try {
+    return readdirSync(dir, { withFileTypes: true }).some((e) => e.isDirectory());
+  } catch {
+    return false;
+  }
 }
 
 /* -------------------------------------------------------------------------- */
