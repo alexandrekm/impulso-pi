@@ -210,6 +210,14 @@ and `/api/stats/compaction*` + `/api/stats/memory*` routes feed a Compaction
 panel and an Observational Memory panel (with a searchable memory browser) in
 the dashboard. A schema-version sentinel in `meta` resets file offsets once on
 upgrade so the new tables backfill from existing sessions.
+`install.sh` always rebuilds + reinstalls the `pi-omp-stats` global bin
+(a version check isn't safe for git-checked-out packages), and when the
+background service is already registered it also **restarts** it
+(`pi-omp-stats service restart`) so the running launchd/systemd process picks
+up the freshly-built binary — without this, KeepAlive keeps the old process
+alive forever and the dashboard serves stale assets after an upgrade. In
+profiles mode it re-runs `service install` first to re-bake
+`PI_STATS_PROFILES_DIR` into the plist/unit, then restarts.
 
 ## Non-clobber sync
 
