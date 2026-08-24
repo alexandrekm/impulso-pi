@@ -3,6 +3,7 @@ name: glean
 description: Use Glean via the glean CLI — search company knowledge, chat with Glean Assistant, look up people, manage collections/shortcuts/pins/agents.
 author: alexandre.mendonca
 tags: [glean, search, knowledge, cli]
+disable-model-invocation: true
 ---
 
 # Glean (glean CLI)

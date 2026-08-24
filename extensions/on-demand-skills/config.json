@@ -5,6 +5,10 @@
     "datadog": {
       "keywords": ["datadog", "dashboard", "metric", "monitor", "pup", "slo", "synthetics", "apm"],
       "hint": "Use the Datadog skill at {path} — load it with the `read` tool for how to interact with Datadog via the `pup` CLI (dashboards, metrics, monitors, logs, SLOs, synthetics, APM)."
+    },
+    "glean": {
+      "keywords": ["glean", "go-link", "go link"],
+      "hint": "Use the Glean skill at {path} — load it with the `read` tool for how to interact with Glean via the `glean` CLI (search company knowledge, chat with Glean Assistant, look up people/orgs, manage collections/shortcuts/pins/agents)."
     }
   }
 }
