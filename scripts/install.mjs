@@ -922,17 +922,30 @@ export async function maybeOfferStatsService(freshlyInstalled, yes, profilesMode
     env: serviceEnv,
   });
   if (statusRes.status === 0) {
+    // The service is already registered, but install.sh just rebuilt +
+    // reinstalled the global pi-omp-stats binary. Restart the running
+    // process so it picks up the new code — otherwise launchd/systemd
+    // KeepAlive keeps the *old* binary alive forever and the dashboard
+    // serves stale assets (e.g. missing new panels after an upgrade).
     if (profilesMode) {
+      // Re-bake PI_STATS_PROFILES_DIR into the plist/unit first, in case
+      // the profile set changed since last install.
       console.log("==> pi-omp-stats service install (refresh profile discovery)");
-      const res = spawnSync("pi-omp-stats", ["service", "install"], {
+      const ins = spawnSync("pi-omp-stats", ["service", "install"], {
         stdio: "inherit",
         env: serviceEnv,
       });
-      if (res.status !== 0)
+      if (ins.status !== 0)
         console.error("  service refresh failed; rerun pi-omp-stats service install");
-    } else {
-      console.log("  pi-omp-stats service is already registered and running.");
     }
+    console.log("==> pi-omp-stats service restart (pick up freshly installed build)");
+    const res = spawnSync("pi-omp-stats", ["service", "restart"], {
+      stdio: "inherit",
+      env: serviceEnv,
+    });
+    if (res.status !== 0)
+      console.error("  service restart failed; rerun pi-omp-stats service restart");
+    else console.log("  pi-omp-stats service restarted with the latest build.");
     return;
   }
 
