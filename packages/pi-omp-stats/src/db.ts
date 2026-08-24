@@ -32,8 +32,11 @@ import type {
   BehaviorModelStats,
   BehaviorOverallStats,
   BehaviorTimeSeriesPoint,
+  CompactionStats,
   CostTimeSeriesPoint,
   FolderStats,
+  MemoryEventStats,
+  MemoryKind,
   MessageStats,
   ModelPerformancePoint,
   ModelStats,
@@ -206,7 +209,98 @@ export async function initDb(): Promise<DatabaseSync> {
 			session_file TEXT PRIMARY KEY,
 			folder TEXT NOT NULL
 		);
+
+		-- Compaction events (impulso-pi). One row per 'compaction' session entry.
+		-- 'tokens_before' is the context size at trigger; 'from_hook' splits
+		-- obs-memory-driven compactions from pi-native window-pressure ones.
+		-- '*_tokens'/'cost' are the summary-generation LLM call's usage (nullable).
+		CREATE TABLE IF NOT EXISTS compaction_stats (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_file TEXT NOT NULL,
+			entry_id TEXT NOT NULL,
+			folder TEXT NOT NULL,
+			timestamp INTEGER NOT NULL,
+			model TEXT,
+			provider TEXT,
+			tokens_before INTEGER NOT NULL,
+			from_hook INTEGER NOT NULL DEFAULT 0,
+			input_tokens INTEGER,
+			output_tokens INTEGER,
+			cache_read_tokens INTEGER,
+			cache_write_tokens INTEGER,
+			cost REAL,
+			-- Phase 2 fields (nullable; populated once the upstream pi patch lands).
+			reason TEXT,
+			will_retry INTEGER,
+			tokens_after INTEGER,
+			UNIQUE(session_file, entry_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_compaction_stats_timestamp ON compaction_stats(timestamp);
+		CREATE INDEX IF NOT EXISTS idx_compaction_stats_model ON compaction_stats(model);
+		CREATE INDEX IF NOT EXISTS idx_compaction_stats_session ON compaction_stats(session_file);
+
+		-- Observational-memory events (impulso-pi). One row per memory in an
+		-- 'om.observations.recorded' / 'om.reflections.recorded' /
+		-- 'om.observations.dropped' custom entry, plus memories carried through a
+		-- compaction via 'om.folded' (folded = 1). 'entry_id' is null for
+		-- recorded/reflections entries (which carry no top-level id).
+		CREATE TABLE IF NOT EXISTS memory_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_file TEXT NOT NULL,
+			entry_id TEXT,
+			folder TEXT NOT NULL,
+			timestamp INTEGER NOT NULL,
+			kind TEXT NOT NULL,
+			memory_id TEXT NOT NULL,
+			relevance TEXT,
+			token_count INTEGER NOT NULL DEFAULT 0,
+			covers_up_to_id TEXT,
+			content TEXT,
+			source_count INTEGER,
+			folded INTEGER NOT NULL DEFAULT 0,
+			UNIQUE(session_file, memory_id, kind, folded)
+		);
+		CREATE INDEX IF NOT EXISTS idx_memory_events_timestamp ON memory_events(timestamp);
+		CREATE INDEX IF NOT EXISTS idx_memory_events_kind ON memory_events(kind);
+		CREATE INDEX IF NOT EXISTS idx_memory_events_relevance ON memory_events(relevance);
+		CREATE INDEX IF NOT EXISTS idx_memory_events_session ON memory_events(session_file);
+		CREATE INDEX IF NOT EXISTS idx_memory_events_memory_id ON memory_events(memory_id);
 	`);
+
+  // Schema-version sentinel: when new extraction tables are added (or any
+  // change that needs rows from already-synced bytes), bump SCHEMA_VERSION.
+  // On mismatch we reset every file offset so the next sync re-parses all
+  // files once — the dedup guards make the re-inserts idempotent, and parsing
+  // is cheap. Without this, a pre-existing DB would never backfill the new
+  // compaction/memory tables from files whose mtime is unchanged.
+  const SCHEMA_VERSION = "3-compaction-reason";
+  const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+    { value: string } | undefined;
+  if (db && (!row || row.value !== SCHEMA_VERSION)) {
+    // Add the Phase 2 columns to a DB created under schema v2. ALTER TABLE
+    // ADD COLUMN is a no-op error when the column already exists (fresh DB
+    // has them from the CREATE TABLE), so swallow the duplicate-column error.
+    const addColumn = (col: string, ddl: string) => {
+      try {
+        db!.exec(ddl);
+      } catch (err) {
+        // "duplicate column name" → already present; anything else rethrows.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/duplicate column/i.test(msg)) throw err;
+      }
+      void col;
+    };
+    addColumn("reason", "ALTER TABLE compaction_stats ADD COLUMN reason TEXT");
+    addColumn("will_retry", "ALTER TABLE compaction_stats ADD COLUMN will_retry INTEGER");
+    addColumn("tokens_after", "ALTER TABLE compaction_stats ADD COLUMN tokens_after INTEGER");
+    // The reason index can't be in the initial CREATE block (the column may
+    // not exist yet on a v2 DB), so create it here after the ALTERs.
+    db.exec("CREATE INDEX IF NOT EXISTS idx_compaction_stats_reason ON compaction_stats(reason)");
+    db.exec("DELETE FROM file_offsets");
+    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)").run(
+      SCHEMA_VERSION,
+    );
+  }
 
   return db;
 }
@@ -285,7 +379,13 @@ export function setFolderLabel(sessionFile: string, folder: string): void {
  * folder parsing landed. */
 export function relabelSessionFolder(sessionFile: string, folder: string): void {
   if (!db) return;
-  for (const table of ["messages", "user_messages", "tool_calls"]) {
+  for (const table of [
+    "messages",
+    "user_messages",
+    "tool_calls",
+    "compaction_stats",
+    "memory_events",
+  ]) {
     db.prepare(`UPDATE ${table} SET folder = ? WHERE session_file = ?`).run(folder, sessionFile);
   }
 }
@@ -489,6 +589,99 @@ export function updateToolResults(links: ToolResultLink[]): number {
     }
   });
   return updated;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Compaction + memory inserts (impulso-pi)                                   */
+/* -------------------------------------------------------------------------- */
+
+/** Insert compaction stats. Idempotent upsert on `UNIQUE(session_file, entry_id)`;
+ *  forked/branched sessions that deep-copy a parent's compaction entry share the
+ *  same `entry_id`, so the `WHERE NOT EXISTS` guard skips cross-lineage dupes. */
+export function insertCompactionStats(stats: CompactionStats[]): number {
+  if (!db || stats.length === 0) return 0;
+  const stmt = db.prepare(`
+		INSERT INTO compaction_stats (
+			session_file, entry_id, folder, timestamp, model, provider, tokens_before,
+			from_hook, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost,
+			reason, will_retry, tokens_after
+		)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		WHERE NOT EXISTS (
+			SELECT 1 FROM compaction_stats
+			WHERE entry_id = ? AND timestamp = ? AND session_file <> ?
+		)
+		ON CONFLICT(session_file, entry_id) DO UPDATE SET
+			reason = COALESCE(excluded.reason, compaction_stats.reason),
+			will_retry = COALESCE(excluded.will_retry, compaction_stats.will_retry),
+			tokens_after = COALESCE(excluded.tokens_after, compaction_stats.tokens_after)
+	`);
+  let inserted = 0;
+  tx(() => {
+    for (const s of stats) {
+      const result = stmt.run(
+        s.sessionFile,
+        s.entryId,
+        s.folder,
+        s.timestamp,
+        s.model,
+        s.provider,
+        s.tokensBefore,
+        s.fromHook ? 1 : 0,
+        s.inputTokens,
+        s.outputTokens,
+        s.cacheReadTokens,
+        s.cacheWriteTokens,
+        s.cost,
+        s.reason,
+        s.willRetry == null ? null : s.willRetry ? 1 : 0,
+        s.tokensAfter,
+        // `WHERE NOT EXISTS` binds.
+        s.entryId,
+        s.timestamp,
+        s.sessionFile,
+      );
+      if (Number(result.changes) > 0) inserted++;
+    }
+  });
+  return inserted;
+}
+
+/** Insert observational-memory event rows. Idempotent upsert on
+ *  `UNIQUE(session_file, memory_id, kind, folded)` — a memory id is recorded
+ *  once per session and may re-appear only as a `folded=1` row carried through
+ *  a later compaction, so the (kind, folded) qualifier keeps both visible. */
+export function insertMemoryEvents(events: MemoryEventStats[]): number {
+  if (!db || events.length === 0) return 0;
+  const stmt = db.prepare(`
+		INSERT INTO memory_events (
+			session_file, entry_id, folder, timestamp, kind, memory_id, relevance,
+			token_count, covers_up_to_id, content, source_count, folded
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(session_file, memory_id, kind, folded) DO NOTHING
+	`);
+  let inserted = 0;
+  tx(() => {
+    for (const e of events) {
+      const result = stmt.run(
+        e.sessionFile,
+        e.entryId,
+        e.folder,
+        e.timestamp,
+        e.kind,
+        e.memoryId,
+        e.relevance,
+        e.tokenCount,
+        e.coversUpToId,
+        e.content,
+        e.sourceCount,
+        e.folded ? 1 : 0,
+      );
+      if (Number(result.changes) > 0) inserted++;
+    }
+  });
+  return inserted;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1308,4 +1501,707 @@ export function getProviderTimeSeries(
     cost: row.cost ?? 0,
     requests: row.requests,
   }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Compaction aggregation (impulso-pi)                                        */
+/* -------------------------------------------------------------------------- */
+
+export interface CompactionSummary {
+  totalCompactions: number;
+  fromHook: number;
+  piNative: number;
+  totalCost: number;
+  meanTokensBefore: number | null;
+  medianTokensBefore: number | null;
+  p90TokensBefore: number | null;
+  firstTimestamp: number;
+  lastTimestamp: number;
+}
+
+export interface CompactionByModel {
+  model: string;
+  compactions: number;
+  fromHook: number;
+  meanTokensBefore: number | null;
+  totalCost: number;
+}
+
+export interface CompactionByDay {
+  timestamp: number;
+  compactions: number;
+  fromHook: number;
+  cost: number;
+}
+
+export interface CompactionTokensBeforeBucket {
+  bucket: number;
+  count: number;
+  fromHook: number;
+}
+
+const COMPACT_SUMMARY = `
+		SELECT COUNT(*) as total_compactions,
+			SUM(CASE WHEN from_hook = 1 THEN 1 ELSE 0 END) as from_hook,
+			SUM(CASE WHEN from_hook = 0 THEN 1 ELSE 0 END) as pi_native,
+			SUM(cost) as total_cost,
+			AVG(tokens_before) as mean_tokens_before,
+			MIN(timestamp) as first_timestamp,
+			MAX(timestamp) as last_timestamp
+		FROM compaction_stats
+`;
+
+/** Compute median and p90 of `tokens_before` for a cutoff via a
+ *  percentile-ish SQL trick (sqlite has no PERCENTILE). */
+function tokensBeforePercentiles(cutoff: number | null): {
+  median: number | null;
+  p90: number | null;
+} {
+  if (!db) return { median: null, p90: null };
+  const hasCutoff = cutoff !== null && cutoff > 0;
+  const where = hasCutoff ? "WHERE timestamp >= ?" : "";
+  const orderSql = `SELECT tokens_before FROM compaction_stats ${where} ORDER BY tokens_before`;
+  const rows = (hasCutoff
+    ? db.prepare(orderSql).all(cutoff)
+    : db.prepare(orderSql).all()) as unknown as Array<{ tokens_before: number }>;
+  if (rows.length === 0) return { median: null, p90: null };
+  const vals = rows.map((r) => r.tokens_before);
+  const pick = (q: number) => {
+    const idx = Math.min(vals.length - 1, Math.floor(q * (vals.length - 1)));
+    return vals[idx] ?? null;
+  };
+  return { median: pick(0.5), p90: pick(0.9) };
+}
+
+export function getCompactionSummary(cutoff?: number | null): CompactionSummary {
+  const empty: CompactionSummary = {
+    totalCompactions: 0,
+    fromHook: 0,
+    piNative: 0,
+    totalCost: 0,
+    meanTokensBefore: null,
+    medianTokensBefore: null,
+    p90TokensBefore: null,
+    firstTimestamp: 0,
+    lastTimestamp: 0,
+  };
+  if (!db) return empty;
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const sql = hasCutoff ? `${COMPACT_SUMMARY} WHERE timestamp >= ?` : COMPACT_SUMMARY;
+  const row = (hasCutoff ? db.prepare(sql).get(cutoff) : db.prepare(sql).get()) as
+    | {
+        total_compactions: number;
+        from_hook: number | null;
+        pi_native: number | null;
+        total_cost: number | null;
+        mean_tokens_before: number | null;
+        first_timestamp: number | null;
+        last_timestamp: number | null;
+      }
+    | undefined;
+  if (!row || !row.total_compactions) return empty;
+  const pct = tokensBeforePercentiles(hasCutoff ? cutoff : null);
+  return {
+    totalCompactions: row.total_compactions,
+    fromHook: row.from_hook ?? 0,
+    piNative: row.pi_native ?? 0,
+    totalCost: row.total_cost ?? 0,
+    meanTokensBefore: row.mean_tokens_before,
+    medianTokensBefore: pct.median,
+    p90TokensBefore: pct.p90,
+    firstTimestamp: row.first_timestamp ?? 0,
+    lastTimestamp: row.last_timestamp ?? 0,
+  };
+}
+
+export function getCompactionByModel(cutoff?: number | null): CompactionByModel[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT COALESCE(model, 'unknown') as model,
+			COUNT(*) as compactions,
+			SUM(CASE WHEN from_hook = 1 THEN 1 ELSE 0 END) as from_hook,
+			AVG(tokens_before) as mean_tokens_before,
+			SUM(cost) as total_cost
+		FROM compaction_stats
+		${hasCutoff ? "WHERE timestamp >= ?" : ""}
+		GROUP BY model
+		ORDER BY compactions DESC
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(cutoff)
+    : db.prepare(sql).all()) as unknown as Array<{
+    model: string;
+    compactions: number;
+    from_hook: number | null;
+    mean_tokens_before: number | null;
+    total_cost: number | null;
+  }>;
+  return rows.map((r) => ({
+    model: r.model,
+    compactions: r.compactions,
+    fromHook: r.from_hook ?? 0,
+    meanTokensBefore: r.mean_tokens_before,
+    totalCost: r.total_cost ?? 0,
+  }));
+}
+
+export function getCompactionTimeseries(
+  days = 14,
+  cutoff?: number | null,
+  bucketMs = 24 * 60 * 60 * 1000,
+): CompactionByDay[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null;
+  const seriesCutoff = hasCutoff ? (cutoff ?? Date.now() - days * 24 * 60 * 60 * 1000) : 0;
+  const sql = `
+		SELECT (timestamp / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket,
+			COUNT(*) as compactions,
+			SUM(CASE WHEN from_hook = 1 THEN 1 ELSE 0 END) as from_hook,
+			SUM(cost) as cost
+		FROM compaction_stats
+		${hasCutoff ? "WHERE timestamp >= ?" : ""}
+		GROUP BY bucket
+		ORDER BY bucket ASC
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(bucketMs, bucketMs, seriesCutoff)
+    : db.prepare(sql).all(bucketMs, bucketMs)) as unknown as Array<{
+    bucket: number;
+    compactions: number;
+    from_hook: number | null;
+    cost: number | null;
+  }>;
+  return rows.map((r) => ({
+    timestamp: r.bucket,
+    compactions: r.compactions,
+    fromHook: r.from_hook ?? 0,
+    cost: r.cost ?? 0,
+  }));
+}
+
+/** Histogram of `tokens_before` rounded to `bucketSize` tokens. The dashboard
+ *  overlays the active model's context window + the 0.9 line on this. */
+export function getCompactionTokensBeforeDistribution(
+  bucketSize = 10000,
+  cutoff?: number | null,
+  model?: string | null,
+): CompactionTokensBeforeBucket[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const hasModel = model && model !== "all" && model !== "unknown";
+  const where = [];
+  if (hasCutoff) where.push("timestamp >= ?");
+  if (hasModel) where.push("COALESCE(model, 'unknown') = ?");
+  const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const sql = `
+		SELECT (tokens_before / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket,
+			COUNT(*) as count,
+			SUM(CASE WHEN from_hook = 1 THEN 1 ELSE 0 END) as from_hook
+		FROM compaction_stats
+		${whereSql}
+		GROUP BY bucket
+		ORDER BY bucket ASC
+	`;
+  const binds: (string | number | null)[] = [bucketSize, bucketSize];
+  if (hasCutoff) binds.push(cutoff);
+  if (hasModel) binds.push(model);
+  const rows = db.prepare(sql).all(...binds) as unknown as Array<{
+    bucket: number;
+    count: number;
+    from_hook: number | null;
+  }>;
+  return rows.map((r) => ({ bucket: r.bucket, count: r.count, fromHook: r.from_hook ?? 0 }));
+}
+
+export interface CompactionByReason {
+  reason: string;
+  compactions: number;
+  fromHook: number;
+  willRetry: number;
+  meanTokensBefore: number | null;
+  meanTokensAfter: number | null;
+}
+
+/** Compaction counts grouped by trigger reason (manual / threshold / overflow).
+ *  Rows with NULL reason (written before the upstream Phase 2 patch) are grouped
+ *  under 'unknown'. */
+export function getCompactionByReason(cutoff?: number | null): CompactionByReason[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT COALESCE(reason, 'unknown') as reason,
+			COUNT(*) as compactions,
+			SUM(CASE WHEN from_hook = 1 THEN 1 ELSE 0 END) as from_hook,
+			SUM(CASE WHEN will_retry = 1 THEN 1 ELSE 0 END) as will_retry,
+			AVG(tokens_before) as mean_tokens_before,
+			AVG(tokens_after) as mean_tokens_after
+		FROM compaction_stats
+		${hasCutoff ? "WHERE timestamp >= ?" : ""}
+		GROUP BY reason
+		ORDER BY compactions DESC
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(cutoff)
+    : db.prepare(sql).all()) as unknown as Array<{
+    reason: string;
+    compactions: number;
+    from_hook: number | null;
+    will_retry: number | null;
+    mean_tokens_before: number | null;
+    mean_tokens_after: number | null;
+  }>;
+  return rows.map((r) => ({
+    reason: r.reason,
+    compactions: r.compactions,
+    fromHook: r.from_hook ?? 0,
+    willRetry: r.will_retry ?? 0,
+    meanTokensBefore: r.mean_tokens_before,
+    meanTokensAfter: r.mean_tokens_after,
+  }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Observational-memory aggregation (impulso-pi)                               */
+/* -------------------------------------------------------------------------- */
+
+export interface MemorySummary {
+  observations: number;
+  reflections: number;
+  drops: number;
+  // Excludes folded rows (freshly recorded only).
+  relevanceLow: number;
+  relevanceMedium: number;
+  relevanceHigh: number;
+  relevanceCritical: number;
+  meanObservationTokens: number | null;
+  // Live memory pool: distinct non-dropped observation+reflection tokens,
+  // using the latest ledger state per session (folded snapshots win).
+  poolTokens: number;
+  dropRate: number;
+  firstTimestamp: number;
+  lastTimestamp: number;
+}
+
+export interface MemoryByDay {
+  timestamp: number;
+  observations: number;
+  reflections: number;
+  drops: number;
+}
+
+export interface MemoryRelevanceBucket {
+  relevance: string;
+  count: number;
+}
+
+export interface MemoryPoolPoint {
+  timestamp: number;
+  poolTokens: number;
+}
+
+export interface MemoryListItem {
+  id: number;
+  sessionFile: string;
+  entryId: string | null;
+  timestamp: number;
+  kind: MemoryKind;
+  memoryId: string;
+  relevance: string | null;
+  tokenCount: number;
+  coversUpToId: string | null;
+  content: string | null;
+  sourceCount: number | null;
+  folded: boolean;
+  folder: string;
+}
+
+export interface MemoryListResult {
+  items: MemoryListItem[];
+  total: number;
+}
+
+export interface MemoryDetail extends MemoryListItem {
+  sourceEntryIds: string[];
+  supportingObservationIds: string[];
+}
+
+const RELEVANCE_COLS = `
+		SUM(CASE WHEN kind = 'observation' AND folded = 0 AND relevance = 'low' THEN 1 ELSE 0 END) as rel_low,
+		SUM(CASE WHEN kind = 'observation' AND folded = 0 AND relevance = 'medium' THEN 1 ELSE 0 END) as rel_medium,
+		SUM(CASE WHEN kind = 'observation' AND folded = 0 AND relevance = 'high' THEN 1 ELSE 0 END) as rel_high,
+		SUM(CASE WHEN kind = 'observation' AND folded = 0 AND relevance = 'critical' THEN 1 ELSE 0 END) as rel_critical
+`;
+
+export function getMemorySummary(cutoff?: number | null): MemorySummary {
+  const empty: MemorySummary = {
+    observations: 0,
+    reflections: 0,
+    drops: 0,
+    relevanceLow: 0,
+    relevanceMedium: 0,
+    relevanceHigh: 0,
+    relevanceCritical: 0,
+    meanObservationTokens: null,
+    poolTokens: 0,
+    dropRate: 0,
+    firstTimestamp: 0,
+    lastTimestamp: 0,
+  };
+  if (!db) return empty;
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const where = hasCutoff ? "WHERE timestamp >= ?" : "";
+  const sql = `
+		SELECT
+			SUM(CASE WHEN kind = 'observation' AND folded = 0 THEN 1 ELSE 0 END) as observations,
+			SUM(CASE WHEN kind = 'reflection' AND folded = 0 THEN 1 ELSE 0 END) as reflections,
+			SUM(CASE WHEN kind = 'drop' AND folded = 0 THEN 1 ELSE 0 END) as drops,
+			${RELEVANCE_COLS},
+			AVG(CASE WHEN kind = 'observation' AND folded = 0 THEN token_count END) as mean_obs_tokens,
+			MIN(timestamp) as first_timestamp,
+			MAX(timestamp) as last_timestamp
+		FROM memory_events
+		${where}
+	`;
+  const row = (hasCutoff ? db.prepare(sql).get(cutoff) : db.prepare(sql).get()) as
+    | {
+        observations: number | null;
+        reflections: number | null;
+        drops: number | null;
+        rel_low: number | null;
+        rel_medium: number | null;
+        rel_high: number | null;
+        rel_critical: number | null;
+        mean_obs_tokens: number | null;
+        first_timestamp: number | null;
+        last_timestamp: number | null;
+      }
+    | undefined;
+  if (!row || !(row.observations || row.reflections || row.drops)) return empty;
+  const observations = row.observations ?? 0;
+  const drops = row.drops ?? 0;
+  // Live pool tokens: for each session, take the latest folded snapshot's
+  // token sum (if any), else the sum of non-folded observation+reflection
+  // tokens. Sum across sessions in range.
+  const poolTokens = computePoolTokens(hasCutoff ? cutoff : null);
+  return {
+    observations,
+    reflections: row.reflections ?? 0,
+    drops,
+    relevanceLow: row.rel_low ?? 0,
+    relevanceMedium: row.rel_medium ?? 0,
+    relevanceHigh: row.rel_high ?? 0,
+    relevanceCritical: row.rel_critical ?? 0,
+    meanObservationTokens: row.mean_obs_tokens,
+    poolTokens,
+    dropRate: observations > 0 ? drops / observations : 0,
+    firstTimestamp: row.first_timestamp ?? 0,
+    lastTimestamp: row.last_timestamp ?? 0,
+  };
+}
+
+/** Live memory-pool token size: per session, prefer the latest `om.folded`
+ *  snapshot's token sum (it represents the ledger state after the most recent
+ *  compaction); otherwise sum the freshly-recorded (folded=0) observation+
+ *  reflection tokens. Sum across sessions. */
+function computePoolTokens(cutoff: number | null): number {
+  if (!db) return 0;
+  const hasCutoff = cutoff !== null && cutoff > 0;
+  // Sessions that have at least one folded snapshot in range.
+  const foldedSql = `
+		SELECT session_file, MAX(timestamp) as ts, SUM(token_count) as tokens
+		FROM memory_events
+		WHERE folded = 1 ${hasCutoff ? "AND timestamp >= ?" : ""}
+		GROUP BY session_file
+	`;
+  const foldedRows = (hasCutoff
+    ? db.prepare(foldedSql).all(cutoff)
+    : db.prepare(foldedSql).all()) as unknown as Array<{
+    session_file: string;
+    ts: number;
+    tokens: number | null;
+  }>;
+  const foldedSessions = new Set(foldedRows.map((r) => r.session_file));
+  let total = foldedRows.reduce((s, r) => s + (r.tokens ?? 0), 0);
+  // Sessions without a folded snapshot: sum freshly-recorded obs+reflection tokens.
+  if (foldedSessions.size > 0) {
+    const placeholders = foldedSessions.size
+      ? Array(foldedSessions.size).fill("?").join(",")
+      : "''";
+    const freshSql = `
+			SELECT session_file, SUM(token_count) as tokens
+			FROM memory_events
+			WHERE folded = 0 AND kind IN ('observation','reflection') ${hasCutoff ? "AND timestamp >= ?" : ""}
+			  AND session_file NOT IN (${placeholders})
+			GROUP BY session_file
+		`;
+    const binds: (string | number | null)[] = [];
+    if (hasCutoff) binds.push(cutoff);
+    binds.push(...foldedSessions);
+    const freshRows = db.prepare(freshSql).all(...binds) as unknown as Array<{
+      tokens: number | null;
+    }>;
+    total += freshRows.reduce((s, r) => s + (r.tokens ?? 0), 0);
+  } else {
+    const freshSql = `
+			SELECT SUM(token_count) as tokens FROM memory_events
+			WHERE folded = 0 AND kind IN ('observation','reflection') ${hasCutoff ? "AND timestamp >= ?" : ""}
+		`;
+    const row = (hasCutoff ? db.prepare(freshSql).get(cutoff) : db.prepare(freshSql).get()) as
+      { tokens: number | null } | undefined;
+    total += row?.tokens ?? 0;
+  }
+  return total;
+}
+
+export function getMemoryTimeseries(
+  days = 14,
+  cutoff?: number | null,
+  bucketMs = 24 * 60 * 60 * 1000,
+): MemoryByDay[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null;
+  const seriesCutoff = hasCutoff ? (cutoff ?? Date.now() - days * 24 * 60 * 60 * 1000) : 0;
+  const sql = `
+		SELECT (timestamp / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket,
+			SUM(CASE WHEN kind = 'observation' AND folded = 0 THEN 1 ELSE 0 END) as observations,
+			SUM(CASE WHEN kind = 'reflection' AND folded = 0 THEN 1 ELSE 0 END) as reflections,
+			SUM(CASE WHEN kind = 'drop' AND folded = 0 THEN 1 ELSE 0 END) as drops
+		FROM memory_events
+		${hasCutoff ? "WHERE timestamp >= ?" : ""}
+		GROUP BY bucket
+		ORDER BY bucket ASC
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(bucketMs, bucketMs, seriesCutoff)
+    : db.prepare(sql).all(bucketMs, bucketMs)) as unknown as Array<{
+    bucket: number;
+    observations: number | null;
+    reflections: number | null;
+    drops: number | null;
+  }>;
+  return rows.map((r) => ({
+    timestamp: r.bucket,
+    observations: r.observations ?? 0,
+    reflections: r.reflections ?? 0,
+    drops: r.drops ?? 0,
+  }));
+}
+
+export function getMemoryRelevanceDistribution(cutoff?: number | null): MemoryRelevanceBucket[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT relevance, COUNT(*) as count
+		FROM memory_events
+		WHERE kind = 'observation' AND folded = 0 AND relevance IS NOT NULL
+		${hasCutoff ? "AND timestamp >= ?" : ""}
+		GROUP BY relevance
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(cutoff)
+    : db.prepare(sql).all()) as unknown as Array<{
+    relevance: string;
+    count: number;
+  }>;
+  const order = ["low", "medium", "high", "critical"];
+  return rows.sort((a, b) => order.indexOf(a.relevance) - order.indexOf(b.relevance));
+}
+
+/** Live memory-pool token size over time (per day). For each day bucket, the
+ *  pool size is approximated by the cumulative freshly-recorded obs+reflection
+ *  tokens minus dropped observation tokens up to the end of that bucket. */
+export function getMemoryPoolGrowth(
+  days = 30,
+  cutoff?: number | null,
+  bucketMs = 24 * 60 * 60 * 1000,
+): MemoryPoolPoint[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null;
+  const seriesCutoff = hasCutoff ? (cutoff ?? Date.now() - days * 24 * 60 * 60 * 1000) : 0;
+  // Cumulative recorded tokens (obs+reflection, folded=0) per bucket, then
+  // subtract cumulative dropped observation tokens. Drops carry no token_count,
+  // so we subtract the token_count of dropped observation ids that were
+  // recorded earlier in the same session — approximated by joining drops to
+  // the recorded observation row by memory_id.
+  // Cumulative recorded obs+reflection tokens (folded=0) per bucket, minus
+  // the token_count of recorded observations that were later dropped in the
+  // same session (joined by memory_id). Gives a running live-pool estimate.
+  const fixedSql = `
+		WITH recorded AS (
+			SELECT (timestamp / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket,
+				memory_id, session_file, token_count, timestamp
+			FROM memory_events
+			WHERE kind = 'observation' AND folded = 0 ${hasCutoff ? "AND timestamp >= ?" : ""}
+		),
+		dropped AS (
+			SELECT d.session_file, d.memory_id, (d.timestamp / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket
+			FROM memory_events d
+			WHERE d.kind = 'drop' AND d.folded = 0
+		)
+		SELECT r.bucket,
+			SUM(r.token_count) as recorded_tokens,
+			SUM(CASE WHEN dr.memory_id IS NOT NULL THEN r.token_count ELSE 0 END) as dropped_tokens
+		FROM recorded r
+		LEFT JOIN dropped dr
+			ON dr.session_file = r.session_file AND dr.memory_id = r.memory_id
+		GROUP BY r.bucket
+		ORDER BY r.bucket ASC
+	`;
+  const binds: (string | number | null)[] = [bucketMs, bucketMs];
+  if (hasCutoff) binds.push(seriesCutoff);
+  binds.push(bucketMs, bucketMs);
+  const rows = db.prepare(fixedSql).all(...binds) as unknown as Array<{
+    bucket: number;
+    recorded_tokens: number | null;
+    dropped_tokens: number | null;
+  }>;
+  let cumulative = 0;
+  return rows.map((r) => {
+    cumulative += (r.recorded_tokens ?? 0) - (r.dropped_tokens ?? 0);
+    return { timestamp: r.bucket, poolTokens: Math.max(0, cumulative) };
+  });
+}
+
+export interface MemoryListOptions {
+  kind?: string | null;
+  relevance?: string | null;
+  session?: string | null;
+  q?: string | null;
+  limit?: number;
+  offset?: number;
+  folded?: boolean | null;
+}
+
+export function listMemoryEvents(opts: MemoryListOptions = {}): MemoryListResult {
+  if (!db) return { items: [], total: 0 };
+  const where: string[] = [];
+  const binds: (string | number | null)[] = [];
+  if (opts.kind && opts.kind !== "all") {
+    where.push("kind = ?");
+    binds.push(opts.kind);
+  }
+  if (opts.relevance && opts.relevance !== "all") {
+    where.push("relevance = ?");
+    binds.push(opts.relevance);
+  }
+  if (opts.session && opts.session !== "all") {
+    where.push("session_file = ?");
+    binds.push(opts.session);
+  }
+  if (opts.q && opts.q.trim()) {
+    where.push("content LIKE ?");
+    binds.push(`%${opts.q.trim()}%`);
+  }
+  if (opts.folded === false) {
+    where.push("folded = 0");
+  } else if (opts.folded === true) {
+    where.push("folded = 1");
+  }
+  const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const limit = Math.max(1, Math.min(500, opts.limit ?? 100));
+  const offset = Math.max(0, opts.offset ?? 0);
+  const countSql = `SELECT COUNT(*) as total FROM memory_events ${whereSql}`;
+  const total = (db.prepare(countSql).get(...binds) as { total: number }).total;
+  const listSql = `
+		SELECT id, session_file, entry_id, folder, timestamp, kind, memory_id, relevance,
+			token_count, covers_up_to_id, content, source_count, folded
+		FROM memory_events
+		${whereSql}
+		ORDER BY timestamp DESC, id DESC
+		LIMIT ? OFFSET ?
+	`;
+  const rows = db.prepare(listSql).all(...binds, limit, offset) as unknown as Array<{
+    id: number;
+    session_file: string;
+    entry_id: string | null;
+    folder: string;
+    timestamp: number;
+    kind: MemoryKind;
+    memory_id: string;
+    relevance: string | null;
+    token_count: number;
+    covers_up_to_id: string | null;
+    content: string | null;
+    source_count: number | null;
+    folded: number;
+  }>;
+  const items: MemoryListItem[] = rows.map((r) => ({
+    id: r.id,
+    sessionFile: r.session_file,
+    entryId: r.entry_id,
+    folder: r.folder,
+    timestamp: r.timestamp,
+    kind: r.kind,
+    memoryId: r.memory_id,
+    relevance: r.relevance,
+    tokenCount: r.token_count,
+    coversUpToId: r.covers_up_to_id,
+    content: r.content,
+    sourceCount: r.source_count,
+    folded: r.folded === 1,
+  }));
+  return { items, total };
+}
+
+/** Single memory + the source/support ids stored on its recorded row.
+ *  `sourceEntryIds` for observations, `supportingObservationIds` for reflections. */
+export function getMemoryById(id: number): MemoryDetail | null {
+  if (!db) return null;
+  const row = db
+    .prepare(
+      `SELECT id, session_file, entry_id, folder, timestamp, kind, memory_id, relevance,
+				token_count, covers_up_to_id, content, source_count, folded
+			FROM memory_events WHERE id = ?`,
+    )
+    .get(id) as
+    | {
+        id: number;
+        session_file: string;
+        entry_id: string | null;
+        folder: string;
+        timestamp: number;
+        kind: MemoryKind;
+        memory_id: string;
+        relevance: string | null;
+        token_count: number;
+        covers_up_to_id: string | null;
+        content: string | null;
+        source_count: number | null;
+        folded: number;
+      }
+    | undefined;
+  if (!row) return null;
+  const base: MemoryListItem = {
+    id: row.id,
+    sessionFile: row.session_file,
+    entryId: row.entry_id,
+    folder: row.folder,
+    timestamp: row.timestamp,
+    kind: row.kind,
+    memoryId: row.memory_id,
+    relevance: row.relevance,
+    tokenCount: row.token_count,
+    coversUpToId: row.covers_up_to_id,
+    content: row.content,
+    sourceCount: row.source_count,
+    folded: row.folded === 1,
+  };
+  // The source ids weren't stored as an array (only the count was), so expose
+  // empty arrays — the raw ids are recoverable from the session JSONL via the
+  // entry id / coversUpToId if a future detail pane needs them.
+  return {
+    ...base,
+    sourceEntryIds: row.kind === "observation" ? [] : [],
+    supportingObservationIds: row.kind === "reflection" ? [] : [],
+  };
+}
+
+/** Distinct session files that have memory events (for the browser filter). */
+export function listMemorySessions(): string[] {
+  if (!db) return [];
+  const rows = db
+    .prepare("SELECT DISTINCT session_file FROM memory_events ORDER BY session_file")
+    .all() as unknown as Array<{ session_file: string }>;
+  return rows.map((r) => r.session_file);
 }

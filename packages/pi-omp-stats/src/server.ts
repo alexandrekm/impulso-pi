@@ -18,9 +18,15 @@ import { fileURLToPath } from "node:url";
 import * as fs from "node:fs";
 import {
   getBehaviorDashboardStats,
+  getCompactionDashboardStats,
+  getCompactionTokensBefore,
   getCostDashboardStats,
   getDashboardStats,
   getModelDashboardStats,
+  getMemoryDashboardStats,
+  getMemoryDetail,
+  getMemoryList,
+  getMemorySessions,
   getOverviewStats,
   getProviderDashboardStats,
   getRecentErrors,
@@ -126,6 +132,53 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
     return sendJson(res, 200, await getToolDashboardStats(range));
   if (pathname === "/api/stats/providers")
     return sendJson(res, 200, await getProviderDashboardStats(range));
+  if (pathname === "/api/stats/compaction")
+    return sendJson(res, 200, await getCompactionDashboardStats(range));
+  if (pathname === "/api/stats/compaction/timeseries")
+    return sendJson(res, 200, {
+      series: (await getCompactionDashboardStats(range)).timeseries,
+    });
+  if (pathname === "/api/stats/compaction/tokens-before") {
+    const model = url.searchParams.get("model");
+    return sendJson(res, 200, await getCompactionTokensBefore(range, model));
+  }
+  if (pathname === "/api/stats/memory")
+    return sendJson(res, 200, await getMemoryDashboardStats(range));
+  if (pathname === "/api/stats/memory/timeseries")
+    return sendJson(res, 200, {
+      series: (await getMemoryDashboardStats(range)).timeseries,
+    });
+  if (pathname === "/api/stats/memory/relevance")
+    return sendJson(res, 200, {
+      buckets: (await getMemoryDashboardStats(range)).relevance,
+    });
+  if (pathname === "/api/stats/memory/pool")
+    return sendJson(res, 200, {
+      series: (await getMemoryDashboardStats(range)).poolGrowth,
+    });
+  if (pathname === "/api/stats/memory/sessions")
+    return sendJson(res, 200, { sessions: await getMemorySessions() });
+  if (pathname === "/api/stats/memory/list") {
+    const kind = url.searchParams.get("kind");
+    const relevance = url.searchParams.get("relevance");
+    const session = url.searchParams.get("session");
+    const q = url.searchParams.get("q");
+    const limit = url.searchParams.get("limit");
+    const offset = url.searchParams.get("offset");
+    return sendJson(
+      res,
+      200,
+      await getMemoryList({
+        range,
+        kind,
+        relevance,
+        session,
+        q,
+        limit: limit ? parseInt(limit, 10) : undefined,
+        offset: offset ? parseInt(offset, 10) : undefined,
+      }),
+    );
+  }
 
   if (pathname === "/api/stats/recent") {
     const limit = url.searchParams.get("limit");
@@ -189,6 +242,17 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
     const details = await getRequestDetails(parseInt(id, 10));
     if (!details) return sendJson(res, 404, { error: "Not Found" });
     return sendJson(res, 200, details);
+  }
+
+  if (pathname.startsWith("/api/stats/memory/")) {
+    // /api/stats/memory/<id> → single memory detail (must come after the
+    // fixed /api/stats/memory/* routes above).
+    const idStr = pathname.split("/").pop();
+    const id = idStr ? parseInt(idStr, 10) : NaN;
+    if (!Number.isFinite(id)) return sendJson(res, 400, { error: "Bad Request" });
+    const detail = await getMemoryDetail(id);
+    if (!detail) return sendJson(res, 404, { error: "Not Found" });
+    return sendJson(res, 200, detail);
   }
 
   if (pathname === "/api/sync") {

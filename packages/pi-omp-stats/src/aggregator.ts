@@ -18,9 +18,19 @@ import {
   getBehaviorByModel,
   getBehaviorOverall,
   getBehaviorTimeSeries,
+  getCompactionByModel,
+  getCompactionByReason,
+  getCompactionSummary,
+  getCompactionTimeseries,
+  getCompactionTokensBeforeDistribution,
   getCostTimeSeries,
   getFileOffset,
   getFolderLabel,
+  getMemoryById,
+  getMemoryPoolGrowth,
+  getMemoryRelevanceDistribution,
+  getMemorySummary,
+  getMemoryTimeseries,
   getMessageById,
   getMessageCount,
   getStatsDbPath,
@@ -40,9 +50,13 @@ import {
   getToolTimeSeries,
   getTimeSeries,
   initDb,
+  insertCompactionStats,
+  insertMemoryEvents,
   insertMessageStats,
   insertToolCalls,
   insertUserMessageStats,
+  listMemoryEvents,
+  listMemorySessions,
   markSessionBackfillsComplete,
   relabelSessionFolder,
   setStatsDatabase,
@@ -85,6 +99,8 @@ function applyParseResult(
   if (result.userLinks.length > 0) updateUserMessageLinks(result.userLinks);
   if (result.toolCalls.length > 0) insertToolCalls(result.toolCalls);
   if (result.toolResults.length > 0) updateToolResults(result.toolResults);
+  if (result.compactions.length > 0) insertCompactionStats(result.compactions);
+  if (result.memoryEvents.length > 0) insertMemoryEvents(result.memoryEvents);
   if (result.folder) {
     // Relabel all of this file's rows (old + new) with the header-derived
     // folder. Indexed UPDATE; idempotent, and fixes rows persisted before
@@ -519,4 +535,68 @@ export function getStatsDbPathForDisplay(): string {
 /** Resolve the stats dir (DB home). Exposed for display. */
 export function getStatsDirPath(): string {
   return path.dirname(getStatsDbPath());
+}
+
+/* -------------------------------------------------------------------------- */
+/* Compaction + memory dashboard accessors (impulso-pi)                        */
+/* -------------------------------------------------------------------------- */
+
+export async function getCompactionDashboardStats(range?: string | null) {
+  await initDb();
+  const { modelSeriesDays, modelSeriesBucketMs, cutoff } = getTimeRangeConfig(range);
+  return {
+    summary: getCompactionSummary(cutoff),
+    byModel: getCompactionByModel(cutoff),
+    byReason: getCompactionByReason(cutoff),
+    timeseries: getCompactionTimeseries(modelSeriesDays, cutoff, modelSeriesBucketMs),
+    tokensBeforeDistribution: getCompactionTokensBeforeDistribution(10000, cutoff),
+  };
+}
+
+export async function getCompactionTokensBefore(range?: string | null, model?: string | null) {
+  await initDb();
+  const { cutoff } = getTimeRangeConfig(range);
+  return { buckets: getCompactionTokensBeforeDistribution(10000, cutoff, model) };
+}
+
+export async function getMemoryDashboardStats(range?: string | null) {
+  await initDb();
+  const { modelSeriesDays, modelSeriesBucketMs, cutoff } = getTimeRangeConfig(range);
+  return {
+    summary: getMemorySummary(cutoff),
+    timeseries: getMemoryTimeseries(modelSeriesDays, cutoff, modelSeriesBucketMs),
+    relevance: getMemoryRelevanceDistribution(cutoff),
+    poolGrowth: getMemoryPoolGrowth(30, cutoff),
+  };
+}
+
+export async function getMemoryList(opts: {
+  range?: string | null;
+  kind?: string | null;
+  relevance?: string | null;
+  session?: string | null;
+  q?: string | null;
+  limit?: number;
+  offset?: number;
+}) {
+  await initDb();
+  return listMemoryEvents({
+    kind: opts.kind,
+    relevance: opts.relevance,
+    session: opts.session,
+    q: opts.q,
+    limit: opts.limit,
+    offset: opts.offset,
+    folded: false,
+  });
+}
+
+export async function getMemoryDetail(id: number) {
+  await initDb();
+  return getMemoryById(id);
+}
+
+export async function getMemorySessions() {
+  await initDb();
+  return listMemorySessions();
 }
