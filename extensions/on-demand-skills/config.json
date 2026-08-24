@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "//": "On-demand skill triggers. Each entry is a skill name → { keywords, hint }. When the user's message matches any keyword (case-insensitive word boundary), the hint (with {path} replaced by the skill's SKILL.md filePath) is injected as a pointer. Requires `disable-model-invocation: true` in the skill's SKILL.md frontmatter so it's kept out of the always-on system prompt. A trigger no-ops if the skill isn't installed on the current profile.",
+  "triggers": {
+    "datadog": {
+      "keywords": ["datadog", "dashboard", "metric", "monitor", "pup", "slo", "synthetics", "apm"],
+      "hint": "The user mentioned Datadog. Read the Datadog skill file at {path} with the `read` tool to learn the `pup` CLI (dashboards, metrics, monitors, logs, SLOs, synthetics, APM), then proceed with the task."
+    }
+  }
+}
