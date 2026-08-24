@@ -70,8 +70,7 @@ const SKILLS_DIR = join(CONFIG_DIR, "skills");
 
 function isFeatureEnabled(id: string): boolean {
   try {
-    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
-    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8");
+    const raw = readFileSync(join(CONFIG_DIR, "impulso-settings.json"), "utf8");
     return !((JSON.parse(raw).disabled ?? []) as string[]).includes(id);
   } catch {
     return true;
