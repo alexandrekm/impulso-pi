@@ -80,7 +80,20 @@ Pick a type from §0 and write a concise description. Compose:
 If there are several logical changes already staged, split into one commit per
 logical change, each conforming to §0.
 
-## 4. Commit
+## 4. Self-check BEFORE committing
+
+Run this checklist against your proposed message. If **any** answer is wrong,
+rewrite before `git commit`:
+
+- [ ] Type is one of `feat fix docs style refactor perf test chore build ci revert`?
+- [ ] Subject is lowercase imperative, no trailing `.` — e.g. `feat: add dark mode toggle`?
+- [ ] Subject ≤ 72 chars?
+- [ ] Scope (if used) is short and clarifies the change — not a free-word dumping ground?
+- [ ] Subject describes what the diff actually does, not overstated?
+
+Only when every box passes, go to §5.
+
+## 5. Commit
 
 Show the proposed message, then commit — no approval gate:
 
@@ -92,7 +105,7 @@ Pre-commit hooks fire automatically. On failure: show the output, auto-fix what
 you can (`pre-commit run --files $(git diff --staged --name-only)`), re-stage,
 retry once. Fails again → stop and report what needs manual fixing.
 
-## 5. Push
+## 6. Push
 
 ```bash
 git push -u origin <branch-name>
@@ -101,7 +114,7 @@ git push -u origin <branch-name>
 Diverged → inform the user and ask whether to force-push or reconcile. Never
 force-push without asking first.
 
-## 6. Generate PR content
+## 7. Generate PR content
 
 ```bash
 git diff <base>...HEAD
@@ -130,7 +143,7 @@ git log <base>..HEAD --format="%s%n%b"
 
 Show the title and body in your response, then create the PR — no approval gate.
 
-## 7. Create PR
+## 8. Create PR
 
 ```bash
 gh pr create --title "type: description" --body "<body>"
@@ -139,6 +152,6 @@ gh pr create --title "type: description" --body "<body>"
 Pass `--body` explicitly with the content you composed — don't rely on
 `gh pr create --fill`'s auto-summary.
 
-## 8. Report
+## 9. Report
 
 Output the PR URL. Done.
