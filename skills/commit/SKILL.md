@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Make a single git commit on a Motive/KeepTruckin repo with a Conventional Commit message that passes commitlint — Jira-key scope required, no special chars in subject, correct type. Use this whenever you run `git commit`, including follow-up commits on an existing PR, CI fixes, and iteration. Not for creating PRs (use create-pr) or addressing review comments (use address-pr-comments).
+description: Use this when doing a commit on a Motive/KeepTruckin repo.
 author: alexandre.mendonca
 tags: [git, commit, commitlint, conventional-commits, motive]
 ---
