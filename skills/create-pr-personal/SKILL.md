@@ -146,11 +146,16 @@ Show the title and body in your response, then create the PR — no approval gat
 ## 8. Create PR
 
 ```bash
-gh pr create --title "type: description" --body "<body>"
+umask 077
+cat > /tmp/pr-body.md <<'PR_BODY_EOF'
+<body — backticks and quotes are safe here>
+PR_BODY_EOF
+gh pr create --title "type: description" --body-file /tmp/pr-body.md
 ```
 
-Pass `--body` explicitly with the content you composed — don't rely on
-`gh pr create --fill`'s auto-summary.
+For a multi-line body, **write it to a temp file and use `--body-file`** — never inline a heredoc (`--body "$(cat <<'EOF' … EOF)"`), which breaks on backticks and unmatched quotes in the body (the single most common `gh pr create` failure). Use a unique delimiter (e.g. `PR_BODY_EOF`) so a literal `EOF` line inside the body can't end the heredoc early.
+
+Pass the body explicitly via `--body-file` with the content you composed — don't rely on `gh pr create --fill`'s auto-summary.
 
 ## 9. Report
 
