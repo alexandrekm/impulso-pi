@@ -1,0 +1,11 @@
+{
+  "default": "code",
+  "modes": ["code", "doc"],
+  "gated": {
+    "gws-docs-authoring": ["doc"],
+    "jira": ["code"],
+    "jira-authoring": ["code"],
+    "commit": ["code"],
+    "create-pr": ["code"]
+  }
+}
