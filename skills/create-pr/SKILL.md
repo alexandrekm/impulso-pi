@@ -179,6 +179,18 @@ gh pr create --title "type(JIRA_KEY): lowercase description" --body "<filled-in 
 
 Never use `gh pr create --fill` — always the company template.
 
+For a multi-line body, **write it to a temp file and use `--body-file`** — never inline a heredoc (`--body "$(cat <<'EOF' … EOF)"`), which breaks on backticks and unmatched quotes in the body (the single most common `gh pr create` failure):
+
+```bash
+umask 077
+cat > /tmp/pr-body.md <<'PR_BODY_EOF'
+<filled-in body — backticks and quotes are safe here>
+PR_BODY_EOF
+gh pr create --title "type(JIRA_KEY): lowercase description" --body-file /tmp/pr-body.md
+```
+
+Use a unique delimiter (e.g. `PR_BODY_EOF`) so a literal `EOF` line inside the body can't end the heredoc early.
+
 ## 12. Comment on the Jira ticket
 
 Post a comment on the ticket with the PR title and link so the review is visible from Jira. `JIRA_KEY` = the key from §2; `PR_TITLE` = the exact title from §9/§11; `PR_URL` = the URL `gh pr create` printed.

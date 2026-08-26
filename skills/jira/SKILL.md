@@ -9,7 +9,13 @@ tags: [jira, acli, ticket, workflow]
 
 Resolve a Jira ticket for current work, search tickets, create tickets, transition, and manage sprints — via the `acli` CLI. Every piece of work must trace to a Jira ticket. No JIRA_KEY = no branch = no PR.
 
-**Requires `acli`** installed and authenticated (`acli auth login`).
+**Requires `acli`** installed and authenticated. Verify before first use:
+
+```bash
+acli auth status   # must show ✓ Authenticated + site k2labs.atlassian.net
+```
+
+If `acli` is missing, install it and run `acli auth login`. The REST fallback (`FALLBACK.md`) needs two env vars — `JIRA_EMAIL` (your `@gomotive.com` address) and `ATLASSIAN_API_KEY` (already in env). You only need them when `acli` is unavailable or for the no-`acli` operations (sprint-add, story points, createmeta); a healthy `acli auth status` means you do **not** have to set them.
 
 If `acli` is unavailable or fails, REST API fallbacks are in `skill://jira/FALLBACK.md` — load it on demand. Some operations (sprint-add, story points, createmeta) have no `acli` equivalent and always need REST.
 

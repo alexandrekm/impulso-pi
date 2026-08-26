@@ -15,6 +15,27 @@ Full reference for `acli jira`. Use `acli jira <command> --help` for the most up
 | `acli auth status` | `acli auth status` |
 | `acli auth switch` | `acli auth switch` |
 
+## Parsing `--json` output
+
+`acli` emits JSON on stdout; **prefer `jq`** over hand-rolled `python3 -c` parsers, which break on Jira's nested field shapes. Errors go to stderr; exit 1 on failure.
+
+```bash
+# One ticket's fields, cleanly
+acli jira workitem view AICPE-107 --json | jq '.fields'
+
+# Search → key + status name + summary (status is an OBJECT, not a list)
+acli jira workitem search --jql "assignee = currentUser()" --json \
+  | jq -r '.[] | [.key, .fields.status.name, .fields.summary] | @tsv'
+```
+
+**Shape gotchas** (these caused real fallbacks in past sessions):
+- `fields.status` is an **object** `{ "name": "In Progress", ... }` — use `.fields.status.name`. Indexing it like a list (`fields.status[0]`) raises `TypeError: unhashable type: 'slice'`.
+- `fields.issuetype` is likewise an object — `.fields.issuetype.name`.
+- `fields.customfield_10020` (Sprint) is a **list** of sprint objects — `.fields.customfield_10020[].name`; it is `null`/empty when the ticket isn't on a sprint, so guard it.
+- `fields.assignee` is `null` when unassigned — `.fields.assignee.name // "Unassigned"`.
+
+If you must use Python, read stdin and walk the shapes above; never assume a field is a list vs object — inspect with `jq 'keys'` first.
+
 ## Work Items
 
 | Command | Key Flags |
