@@ -144,10 +144,11 @@
     // Google Workspace CLI skills (docs, sheets, drive, gmail + shared +
     // granular helper sub-skills) vendored from
     // https://github.com/googleworkspace/cli under extensions/gws/skills/.
-    // Mode-gated: the skills stay out of context until `/gws on` is run,
-    // then this extension injects them into the system prompt for the
-    // session. Off by default. State persists in <configDir>/gws.json.
-    // Toggled in /settings → Tools & Safety → Google Workspace.
+    // Injected in doc mode: the extension reads <configDir>/mode.json and
+    // surfaces Docs/Sheets/Drive/Gmail skills when mode === "doc". No
+    // separate /gws command or settings toggle — `/mode doc` (from the
+    // modes extension) is the gws switch. Inert on profiles without modes.
+    // Core so the vendored skills ship everywhere; the trigger is work-only.
     "extensions/gws/": { "tags": ["core"] },
 
     // On-demand skill injection (keyword-triggered). Keeps skills out of
@@ -159,6 +160,17 @@
     // `datadog`/`dashboard`/`metrics`/etc. Toggled in /settings → Pi → Input.
     // Generic — add more skills to the config anytime.
     "extensions/on-demand-skills/": { "tags": ["core"] },
+    // modes: per-profile skill mode switch (code | doc) layered on top of
+    // profiles. A mode gates which synced skills reach the system prompt each
+    // turn — e.g. code mode shows jira/create-pr/commit and hides
+    // gws-docs-authoring; doc mode shows gws-docs-authoring and hides the
+    // PR/commit flow. Skills not in the gated map (address-pr-comments,
+    // datadog, glean) stay always-on. Toggled with /mode code|doc|toggle;
+    // state in <configDir>/mode.json, applies next message (no /reload).
+    // Doc mode also surfaces the gws skills (the gws extension reads mode.json).
+    // Work-only for now. Config: extensions/modes/config.json. Toggled in
+    // /settings → Tools & Safety → Modes.
+    "extensions/modes/": { "tags": ["work"] },
 
     // Vision handoff for text-only models (https://pi.dev/packages/pi-vision-handoff).
     // Transparent swap: describes images via a chosen vision model and swaps
@@ -356,6 +368,14 @@
     // create-pr and address-pr-comments defer to these same rules for their
     // commit steps.
     "skills/commit/": { "tags": ["work"] },
+    // gws-docs-authoring: author/evolve long-form Google Docs via the gws
+    // CLI on top of the vendored gws-docs / gws-shared skills (from the
+    // extensions/gws/ extension). Two hard-won rules: edit docs in place
+    // (never delete/recreate — keeps the documentId/URL stable), and insert
+    // PNG images from Drive manually when org policy blocks public sharing
+    // (the Docs API's insertInlineImage needs a publicly fetchable URL).
+    // Use for Docs one-pagers, TDDs, design docs built programmatically.
+    "skills/gws-docs-authoring/": { "tags": ["work"] },
     // create-pr-personal: lightweight commit + PR workflow for personal
     // repos. Same shape as create-pr but stripped down — Conventional
     // Commits for the message + PR title, a short what/why PR body, no Jira,

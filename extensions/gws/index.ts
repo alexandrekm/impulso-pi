@@ -1,24 +1,20 @@
-// Google Workspace (gws) skills — mode-gated.
+// Google Workspace (gws) skills — injected in doc mode.
 //
 // Vendors the `gws` CLI agent skills for Docs, Sheets, Drive, and Gmail
 // (plus the shared auth/flags reference and each service's granular helper
 // sub-skills) from https://github.com/googleworkspace/cli under
 // ./skills/gws-*/SKILL.md. Those files are NOT placed in pi's skill
 // discovery locations, so pi never loads them by default — they stay out of
-// context entirely until the user opts in.
+// context entirely until doc mode is active.
 //
-// Opt-in is a per-profile mode toggled by the `/gws` command:
+// The toggle is the `modes` extension's `/mode doc` command (state in
+// <configDir>/mode.json). There is no separate `/gws` command or settings
+// toggle: doc mode *is* the gws toggle. This extension reads mode.json fresh
+// on every turn inside `before_agent_start`, so switching modes takes effect
+// on the next user message — no `/reload` needed. On profiles without the
+// modes extension (mode.json absent), this extension is inert.
 //
-//   /gws on        enable gws skills for the rest of the session
-//   /gws off       disable them again
-//   /gws toggle    flip the mode
-//   /gws           show status
-//
-// State persists in <configDir>/gws.json ({ enabled: boolean }), default
-// off. The mode is read fresh on every turn inside `before_agent_start`, so
-// toggling takes effect on the next user message — no `/reload` needed.
-//
-// When enabled, this extension:
+// When mode === "doc", this extension:
 //   1. parses the 5 primary SKILL.md files (shared + docs/sheets/drive/gmail)
 //      for name + description, and
 //   2. injects them as skill objects into event.systemPromptOptions.skills,
@@ -34,21 +30,17 @@
 // rebuilds the whole prompt from systemPromptOptions): we both mutate
 // opts.skills (so a later-rebuilding system-prompt includes them) AND append
 // to event.systemPrompt (so a system-prompt that already ran, or none, still
-// gets them). At most one copy survives: if system-prompt rebuilds after us
-// it overwrites our append and re-emits skills from opts.skills (with ours);
-// if it ran before us or is absent, our append is the sole copy.
-//
-// Toggled via the impulso settings page (feature id `gws`); off = the
-// extension registers nothing and adds no context. Core so every profile
-// gets it; the mode itself is per-profile and off by default.
+// gets them). The `modes` extension's own skills-block rewrite (which runs on
+// the same event) collapses any duplicate blocks into one regardless of
+// handler order, so the final prompt is clean either way.
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const CONFIG_DIR = process.env.PI_CODING_AGENT_DIR || dirname(dirname(MODULE_DIR));
-const STATE_PATH = join(CONFIG_DIR, "gws.json");
+const MODE_PATH = join(CONFIG_DIR, "mode.json");
 const SKILLS_DIR = join(MODULE_DIR, "skills");
 
 // Primary skills surfaced in the system prompt. The granular helper
@@ -57,43 +49,21 @@ const SKILLS_DIR = join(MODULE_DIR, "skills");
 const PRIMARY_SKILLS = ["gws-shared", "gws-docs", "gws-sheets", "gws-drive", "gws-gmail"] as const;
 
 // ─────────────────────────────────────────────────────────────────────────
-// Feature flag (inline — same pattern as system-prompt, so this extension
-// has no import-time dependency on impulso-settings being present).
+// Mode state (<configDir>/mode.json) — owned by the `modes` extension.
 // ─────────────────────────────────────────────────────────────────────────
 
-function isFeatureEnabled(id: string): boolean {
-  try {
-    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
-    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8");
-    return !((JSON.parse(raw).disabled ?? []) as string[]).includes(id);
-  } catch {
-    return true;
-  }
+interface ModeState {
+  mode?: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// Mode state (<configDir>/gws.json)
-// ─────────────────────────────────────────────────────────────────────────
-
-interface GwsState {
-  enabled?: boolean;
-}
-
-function readState(): boolean {
+// True iff the current mode is "doc" (the gws-injecting mode). mode.json
+// absent (no modes extension on this profile) → false → inert.
+function isDocMode(): boolean {
   try {
-    const data = JSON.parse(readFileSync(STATE_PATH, "utf8")) as GwsState;
-    return data.enabled === true;
+    const data = JSON.parse(readFileSync(MODE_PATH, "utf8")) as ModeState;
+    return data.mode === "doc";
   } catch {
     return false;
-  }
-}
-
-function writeState(enabled: boolean): void {
-  try {
-    mkdirSync(CONFIG_DIR, { recursive: true });
-    writeFileSync(STATE_PATH, JSON.stringify({ enabled }, null, 2) + "\n", "utf8");
-  } catch {
-    // Non-fatal: in-memory flag still works for the session.
   }
 }
 
@@ -216,11 +186,9 @@ function formatSkillsBlock(skills: ParsedSkill[]): string {
 // ─────────────────────────────────────────────────────────────────────────
 
 export default function (pi: any): void {
-  if (!isFeatureEnabled("gws")) return;
-
-  // Inject the gws skills into the system prompt when the mode is on.
+  // Inject the gws skills into the system prompt when doc mode is active.
   pi.on("before_agent_start", async (event: any) => {
-    if (!readState()) return;
+    if (!isDocMode()) return;
     const skills = primarySkills();
     if (skills.length === 0) return;
 
@@ -245,49 +213,10 @@ export default function (pi: any): void {
 
     // 2) Append an <available_skills> block to the chained prompt so the
     //    skills appear even if system-prompt already ran (or is disabled).
+    //    The modes extension collapses this with any other block into one.
     const block = formatSkillsBlock(skills);
     if (block) {
       return { systemPrompt: event.systemPrompt + block };
     }
-  });
-
-  // /gws on|off|toggle|status — toggle the mode.
-  pi.registerCommand("gws", {
-    description: "Toggle Google Workspace (gws) skills on/off. Usage: /gws on|off|toggle|status",
-    getArgumentCompletions: (prefix: string) => {
-      const options = ["on", "off", "toggle", "status"];
-      const matches = options.filter((o) => o.startsWith(prefix.toLowerCase()));
-      return matches.length > 0 ? matches.map((value) => ({ value, label: value })) : null;
-    },
-    handler: async (args: string, ctx: any) => {
-      const action = (args.trim().toLowerCase() || "status") as string;
-      if (!["on", "off", "toggle", "status"].includes(action)) {
-        ctx.ui.notify("Usage: /gws on|off|toggle|status", "error");
-        return;
-      }
-
-      let enabled = readState();
-      if (action === "on") enabled = true;
-      else if (action === "off") enabled = false;
-      else if (action === "toggle") enabled = !enabled;
-
-      if (action !== "status") writeState(enabled);
-
-      if (action === "status") {
-        ctx.ui.notify(
-          `gws skills are ${enabled ? "ON" : "OFF"} — ${
-            enabled
-              ? "Docs/Sheets/Drive/Gmail skills are in context."
-              : "use /gws on to enable Docs/Sheets/Drive/Gmail skills."
-          }`,
-          "info",
-        );
-      } else {
-        ctx.ui.notify(
-          `gws skills ${enabled ? "enabled" : "disabled"} — applies on your next message.`,
-          "info",
-        );
-      }
-    },
   });
 }

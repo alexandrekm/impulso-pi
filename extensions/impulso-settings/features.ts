@@ -318,17 +318,16 @@ export const FEATURES: Feature[] = [
     kind: "local",
   },
 
-  // ── Google Workspace ──────────────────────────────────────────────────
+  // ── Modes ──────────────────────────────────────────────────────────────
   {
-    id: "gws",
+    id: "modes",
     tab: "tools",
-    group: "Google Workspace",
-    label: "gws skills (Docs/Sheets/Drive/Gmail)",
+    group: "Modes",
+    label: "Skill modes (code / doc)",
     description:
-      "Google Workspace CLI skills (docs, sheets, drive, gmail + shared) vendored from github.com/googleworkspace/cli. Mode-gated: /gws on enables them for the session. Off by default — no context cost when unused.",
+      "Per-profile mode that gates which skills reach the system prompt. /mode code|doc|toggle; code = full dev workflow (jira, create-pr, commit), doc = Google Docs authoring + glean + datadog + gws skills (Docs/Sheets/Drive/Gmail, injected in doc mode). State in mode.json, applies next message. Work-only.",
     kind: "local",
   },
-
   // ── Orca & Misc ────────────────────────────────────────────────────────
   {
     id: "orca-integration",
