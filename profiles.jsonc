@@ -394,6 +394,16 @@
       "tags": ["core"],
       "dest": "extensions/borderonusermessages/index.ts",
     },
+    // border-on-tool-calls: draws a `┌─ <toolName> ─┐` / `│ … │` /
+    // `└──────┘` box around every tool call in the TUI transcript so each
+    // tool invocation reads as a discrete framed block labeled with its
+    // name. Patches ToolExecutionComponent.prototype.render at
+    // session_start (same mechanism as border-on-user-messages). TUI-only;
+    // toggleable from /impulso. Core so every profile gets it.
+    "extensions/borderontoolcalls/borderontoolcalls.ts": {
+      "tags": ["core"],
+      "dest": "extensions/borderontoolcalls/index.ts",
+    },
     // pi-btw (narumitw): ask side questions in a separate side thread without
     // derailing the main Pi conversation/coding task. `/btw <question>` starts a
     // fresh side thread immediately; `/btw` opens a manager (start from main

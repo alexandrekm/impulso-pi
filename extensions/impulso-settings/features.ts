@@ -317,6 +317,15 @@ export const FEATURES: Feature[] = [
       "Draw a `┌─ You ─┐` box around every user message in the TUI transcript so your own messages stand out. TUI-only.",
     kind: "local",
   },
+  {
+    id: "border-on-tool-calls",
+    tab: "tools",
+    group: "Appearance",
+    label: "Border on tool calls",
+    description:
+      "Draw a `┌─ <toolName> ─┐` box around every tool call in the TUI transcript so each invocation reads as a discrete framed block labeled with its name. TUI-only.",
+    kind: "local",
+  },
 
   // ── Modes ──────────────────────────────────────────────────────────────
   {
