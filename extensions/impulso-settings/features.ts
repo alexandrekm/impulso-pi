@@ -373,7 +373,7 @@ export const FEATURES: Feature[] = [
     group: "System prompt",
     label: "Custom fixed prompt",
     description:
-      "Owns the fixed parts of pi's system prompt (intro, Pi-docs block) while keeping dynamic parts (tools, guidelines, context, skills, cwd). Edit extensions/system-prompt/system-prompt.ts.",
+      "Owns fixed prompt text while preserving dynamic tools, guidelines, context, skills, and cwd. Pi-development guidance lives in the on-demand pi-development skill.",
     kind: "local",
   },
   {

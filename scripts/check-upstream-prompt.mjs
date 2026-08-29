@@ -1,38 +1,21 @@
 #!/usr/bin/env node
 // Upstream pi system-prompt drift detector.
 //
-// impulso-pi owns the FIXED parts of pi's system prompt in
-// extensions/system-prompt/system-prompt.ts (intro, tools-footer line,
-// always-on guidelines, Pi-docs block prose). The DYNAMIC parts (active
-// tools, tool-contributed guidelines, --append-system-prompt, project
-// context, skills, cwd) flow from pi. To stay in sync with upstream, this
-// script snapshots pi's DEFAULT system prompt (built with deterministic
-// inputs, runtime-resolved doc paths + cwd redacted) and compares it to a
-// committed golden baseline at
+// Snapshots pi's DEFAULT system prompt. The local system-prompt extension
+// intentionally replaces Pi's verbose documentation block with a concise pointer
+// to the pi-development skill, but this baseline remains useful for reviewing
+// upstream wording changes.
+//
+// The generated prompt uses deterministic inputs and redacts runtime-resolved
+// documentation paths plus cwd before comparing to:
 //   extensions/system-prompt/upstream-prompt.golden
 //
-// If pi changes any fixed text (intro wording, guidelines, Pi-docs prose,
-// tools-footer line, etc.) the snapshot diverges and this check fails in
-// CI, printing a diff. That's the signal to:
-//   1. Review the diff.
-//   2. If you want to track upstream, update the constants in
-//      extensions/system-prompt/system-prompt.ts (INTRO, TOOLS_FOOTER,
-//      ALWAYS_ON_GUIDELINES, PI_DOCS_BLOCK) to match.
-//   3. Update the golden baseline:
-//        node scripts/check-upstream-prompt.mjs --update
-//   4. Re-run: npm run typecheck && npm run lint && npm test
-//
-// If you've INTENTIONALLY diverged your constants from pi's defaults, you
-// don't need to touch them — just update the golden so the drift baseline
-// reflects the new upstream:
-//   node scripts/check-upstream-prompt.mjs --update
-//
 // Implementation note: buildSystemPrompt is not exported from the package's
-// public entry (only ".", "./rpc-entry", "./client"), so we import it by
-// relative path from the installed dist. If pi restructures this file away,
-// the script errors loudly — which is itself a drift signal to investigate.
+// public entry (only ".", "./rpc-entry", "./client"), so we import it by relative
+// path from the installed dist. If pi restructures this file away, the script
+// errors loudly — which is itself a drift signal to investigate.
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, unlinkSync, realpathSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync, spawnSync } from "node:child_process";
@@ -43,19 +26,31 @@ const TMP = join(ROOT, "extensions/system-prompt/.upstream-prompt.generated");
 const UPDATE = process.argv.includes("--update");
 
 // buildSystemPrompt lives at dist/core/system-prompt.js in the installed
-// package. Resolve from node_modules at repo root.
-const MOD_PATH = join(
+// package. Prefer the repository's dev dependency; otherwise use the globally
+// installed CLI package so the check still works in a setup without node_modules.
+const LOCAL_MOD_PATH = join(
   ROOT,
   "node_modules/@earendil-works/pi-coding-agent/dist/core/system-prompt.js",
 );
+let globalModPath;
+try {
+  const cliPath = realpathSync(
+    process.env.PI_CLI_PATH || execSync("command -v pi", { encoding: "utf8" }).trim(),
+  );
+  // The resolved CLI resides at <package>/dist/cli.js, beside dist/core/.
+  globalModPath = join(dirname(cliPath), "core/system-prompt.js");
+} catch {
+  // Keep the local path in the error message when neither source is available.
+}
+const MOD_PATH = existsSync(LOCAL_MOD_PATH) ? LOCAL_MOD_PATH : (globalModPath ?? LOCAL_MOD_PATH);
 let buildSystemPrompt;
 try {
   ({ buildSystemPrompt } = await import(MOD_PATH));
 } catch (err) {
   console.error(
     `Cannot import pi's buildSystemPrompt from ${MOD_PATH}.\n` +
-      `This usually means @earendil-works/pi-coding-agent isn't installed ` +
-      `or pi restructured its dist layout (itself a drift signal).\n` +
+      `Install the repo dependencies with npm install, or pass PI_CLI_PATH=$(command -v pi).\n` +
+      `Pi may also have restructured its dist layout (itself a drift signal).\n` +
       `Underlying error: ${err.message}`,
   );
   process.exit(1);
@@ -126,8 +121,7 @@ if (r.status !== 1 && r.status !== 0) {
 console.error(
   "\nIf this change is expected, update the baseline:\n" +
     "  node scripts/check-upstream-prompt.mjs --update\n" +
-    "Then, if you track upstream, also update the constants in\n" +
-    "  extensions/system-prompt/system-prompt.ts\n" +
-    "and re-run: npm run typecheck && npm run lint && npm test\n",
+    "Then review whether skills/pi-development/SKILL.md or the local prompt pointer\n" +
+    "also need to change, and re-run: npm run typecheck && npm run lint && npm test\n",
 );
 process.exit(1);
