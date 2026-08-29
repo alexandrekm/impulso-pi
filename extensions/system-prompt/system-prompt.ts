@@ -105,7 +105,6 @@ function formatSkillsForPrompt(skills: any[]): string {
   return lines.join("\n");
 }
 
-
 // Reassemble the prompt from structured options + our fixed constants.
 function buildPrompt(opts: any): string {
   const selectedTools: string[] = opts.selectedTools ?? ["read", "bash", "edit", "write"];

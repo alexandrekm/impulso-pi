@@ -42,7 +42,7 @@ try {
 } catch {
   // Keep the local path in the error message when neither source is available.
 }
-const MOD_PATH = existsSync(LOCAL_MOD_PATH) ? LOCAL_MOD_PATH : globalModPath ?? LOCAL_MOD_PATH;
+const MOD_PATH = existsSync(LOCAL_MOD_PATH) ? LOCAL_MOD_PATH : (globalModPath ?? LOCAL_MOD_PATH);
 let buildSystemPrompt;
 try {
   ({ buildSystemPrompt } = await import(MOD_PATH));
