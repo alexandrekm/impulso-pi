@@ -6,17 +6,12 @@
 // How it works: pi assembles the full system prompt before firing
 // `before_agent_start`. We get the structured pieces via
 // `event.systemPromptOptions` and reassemble the prompt ourselves, substituting
-// our own INTRO, "in addition" line, always-on guidelines, and Pi-docs block.
+// our own INTRO, "in addition" line, always-on guidelines, and a concise pointer
+// to the pi-development skill.
 // The dynamic pieces (selectedTools/toolSnippets, promptGuidelines,
 // appendSystemPrompt, contextFiles, skills, cwd) come straight from the
 // options, so tool activation, skill loading, AGENTS.md, /append, etc. keep
 // working without us having to know about them.
-//
-// The three paths inside the Pi-docs block (readme/docs/examples) are resolved
-// by pi at runtime from its install location, so we extract them from the
-// already-interpolated `event.systemPrompt` rather than hardcoding or
-// importing pi internals. If we can't find them we bail and leave pi's prompt
-// untouched (safe no-op).
 //
 // If the user supplied their own custom prompt (SYSTEM.md / --system-prompt),
 // `options.customPrompt` is set and pi took the custom-prompt branch — we
@@ -46,8 +41,8 @@ function isFeatureEnabled(id: string): boolean {
 
 // ─────────────────────────────────────────────────────────────────────────
 // FIXED parts — owned here. Edit these to change the non-dynamic prompt.
-// Values are currently byte-identical to pi's defaults so behaviour is
-// unchanged until you deliberately diverge.
+// The intro/footer/guidelines match pi defaults; the Pi-development pointer is
+// an intentional divergence from pi's verbose always-on documentation block.
 // ─────────────────────────────────────────────────────────────────────────
 
 const INTRO =
@@ -68,16 +63,11 @@ const ALWAYS_ON_GUIDELINES = [
 // grep/find/ls are (i.e. the user would otherwise have no file-search tool).
 const BASH_ONLY_FILEOPS_GUIDELINE = "Use bash for file operations like ls, rg, find";
 
-// Pi-docs block template. {readme}/{docs}/{examples} are filled from pi's
-// own resolved paths (extracted from the prompt pi already built).
-const PI_DOCS_BLOCK = `Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):
-- Main documentation: {readme}
-- Additional docs: {docs}
-- Examples: {examples} (extensions, custom tools, SDK)
-- When reading pi docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory
-- When asked about: extensions (docs/extensions.md, examples/extensions/), themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), pi packages (docs/packages.md), environment variables (docs/environment-variables.md)
-- When working on pi topics, read the docs and examples, and follow .md cross-references before implementing
-- Always read pi .md files completely and follow links to related docs (e.g., tui.md for TUI API details)`;
+// Detailed Pi-development guidance belongs in an on-demand skill rather than
+// every system prompt. The pointer is emitted only when the model-invocable skill
+// is actually loaded (for example, not under --no-skills).
+const PI_DEVELOPMENT_SKILL_POINTER =
+  "For pi-specific work (core, SDK, extensions, themes, skills, or TUI), load the `pi-development` skill before acting.";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Helpers — replicate pi's internal assembly so output matches pi's default
@@ -115,32 +105,9 @@ function formatSkillsForPrompt(skills: any[]): string {
   return lines.join("\n");
 }
 
-// Pull pi's resolved readme/docs/examples paths out of the prompt it already
-// assembled (they're interpolated into the Pi-docs block). Returns undefined
-// if the block isn't present (e.g. customPrompt was used).
-function extractDocPaths(prompt: string):
-  | {
-      readme: string;
-      docs: string;
-      examples: string;
-    }
-  | undefined {
-  const readme = prompt.match(/^- Main documentation: (.+)$/m)?.[1];
-  const docs = prompt.match(/^- Additional docs: (.+)$/m)?.[1];
-  const examples = prompt.match(/^- Examples: (.+?) \(extensions, custom tools, SDK\)$/m)?.[1];
-  if (!readme || !docs || !examples) return undefined;
-  return { readme, docs, examples };
-}
 
 // Reassemble the prompt from structured options + our fixed constants.
-function buildPrompt(
-  opts: any,
-  docPaths: {
-    readme: string;
-    docs: string;
-    examples: string;
-  },
-): string {
+function buildPrompt(opts: any): string {
   const selectedTools: string[] = opts.selectedTools ?? ["read", "bash", "edit", "write"];
   const toolSnippets: Record<string, string> = opts.toolSnippets ?? {};
 
@@ -174,11 +141,12 @@ function buildPrompt(
   for (const g of ALWAYS_ON_GUIDELINES) add(g);
   const guidelines = guidelinesList.map((g) => `- ${g}`).join("\n");
 
-  const docsBlock = PI_DOCS_BLOCK.replace("{readme}", docPaths.readme)
-    .replace("{docs}", docPaths.docs)
-    .replace("{examples}", docPaths.examples);
+  const hasPiDevelopmentSkill = (opts.skills ?? []).some(
+    (skill: any) => skill.name === "pi-development" && !skill.disableModelInvocation,
+  );
+  const skillPointer = hasPiDevelopmentSkill ? `\n\n${PI_DEVELOPMENT_SKILL_POINTER}` : "";
 
-  let prompt = `${INTRO}\n\nAvailable tools:\n${toolsList}\n\n${TOOLS_FOOTER}\n\nGuidelines:\n${guidelines}\n\n${docsBlock}`;
+  let prompt = `${INTRO}\n\nAvailable tools:\n${toolsList}\n\n${TOOLS_FOOTER}\n\nGuidelines:\n${guidelines}${skillPointer}`;
 
   // appendSystemPrompt (--append-system-prompt / APPEND_SYSTEM.md)
   const append: string[] | undefined = opts.appendSystemPrompt;
@@ -221,9 +189,6 @@ export default function (pi: any): void {
     // anyway. Don't double-process.
     if (opts.customPrompt) return;
 
-    const docPaths = extractDocPaths(event.systemPrompt);
-    if (!docPaths) return; // couldn't locate the docs block — safe no-op
-
-    return { systemPrompt: buildPrompt(opts, docPaths) };
+    return { systemPrompt: buildPrompt(opts) };
   });
 }

@@ -51,17 +51,14 @@
     "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
 
     // system-prompt: owns the FIXED parts of pi's system prompt (intro,
-    // tools-footer line, always-on guidelines, Pi-docs block) while keeping
-    // the DYNAMIC parts (active tools, tool-contributed guidelines,
-    // --append-system-prompt, <project_context>, skills, cwd) flowing from
-    // pi. Reassembles the prompt in before_agent_start from
-    // event.systemPromptOptions, extracting pi's resolved readme/docs/
-    // examples paths from the prompt pi already built. Constants are
-    // currently byte-identical to pi defaults, so behaviour is unchanged
-    // until you edit them in extensions/system-prompt/system-prompt.ts.
-    // Respects user overrides (SYSTEM.md / --system-prompt): if customPrompt
-    // is set, it leaves pi's prompt alone. Toggled via /settings id
-    // `system-prompt`. Core so every profile gets it.
+    // tools-footer line, always-on guidelines) while keeping the DYNAMIC parts
+    // (active tools, tool-contributed guidelines, --append-system-prompt,
+    // <project_context>, skills, cwd) flowing from pi. It replaces pi's verbose
+    // always-on Pi-documentation block with a short pointer to the on-demand
+    // pi-development skill, keeping the full instructions out of each prompt.
+    // Respects user overrides (SYSTEM.md / --system-prompt): if customPrompt is
+    // set, it leaves pi's prompt alone. Toggled via /settings id `system-prompt`.
+    // Core so every profile gets it.
     "extensions/system-prompt/system-prompt.ts": { "tags": ["core"] },
 
     // /impulso AND /settings — impulso-pi feature settings page. An OMP-
@@ -310,6 +307,14 @@
     // every profile gets it. Ported from impulso-omp's skill of the same name;
     // the OMP `ask` tool calls were adapted to pi's `ask_user_question` schema.
     "skills/address-pr-comments/": { "tags": ["core"] },
+
+    // pi-development: on-demand instructions for modifying pi or its supported
+    // customization surfaces (extensions, skills, themes, TUI, SDK, providers,
+    // models, packages, prompts, settings, and keybindings). The custom system
+    // prompt emits only a short pointer, while this skill retains the detailed
+    // documentation locations, required reading, and topic index. Core so every
+    // profile gets it.
+    "skills/pi-development/": { "tags": ["core"] },
 
     // pi-provider-litellm (balcsida): LiteLLM proxy native Provider extension.
     // Discovers models from a self-hosted LiteLLM proxy and registers them
