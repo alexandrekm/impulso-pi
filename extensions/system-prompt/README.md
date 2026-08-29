@@ -19,15 +19,18 @@ Pi modification workflow is then loaded only for Pi-specific work.
 ## How it works
 
 In the `before_agent_start` hook, the extension reassembles the prompt from
-`event.systemPromptOptions` (the structured pieces pi already computed),
-substituting our own constants for the fixed text:
+`event.systemPromptOptions` (the structured pieces pi already computed). Its
+fixed text is grouped into named sections, while dynamic content still comes
+directly from Pi:
 
-| Part | Source |
+| Section / part | Source |
 | --- | --- |
-| Intro ("You are an expert coding assistant…") | `INTRO` constant |
-| "In addition to the tools above…" line | `TOOLS_FOOTER` constant |
-| Always-on guidelines | `ALWAYS_ON_GUIDELINES` |
-| Pi-development pointer | `PI_DEVELOPMENT_SKILL_POINTER`, when that skill is loaded |
+| General instructions | `generalInstructions` |
+| Available-tools heading | `availableToolsHeading` |
+| "In addition to the tools above…" line | `additionalToolsInstructions` |
+| Guidelines heading | `guidelinesHeading` |
+| Output style / always-on guidelines | `outputStyle` |
+| Pi-development pointer | `piDevelopmentSkillPointer`, when that skill is loaded |
 | Available tools list | `opts.selectedTools` + `opts.toolSnippets` |
 | Tool-contributed guidelines | `opts.promptGuidelines` |
 | `--append-system-prompt` / `APPEND_SYSTEM.md` | `opts.appendSystemPrompt` |
@@ -35,8 +38,9 @@ substituting our own constants for the fixed text:
 | Skills block | `opts.skills` |
 | cwd | `opts.cwd` |
 
-The intro, footer, and guidelines match Pi defaults. Replacing Pi's
-documentation block with the skill pointer is an intentional divergence.
+The emitted prompt is unchanged: the general instructions, footer, and output
+style match Pi defaults, while replacing Pi's documentation block with the
+skill pointer remains the intentional divergence.
 
 ## Safety
 
@@ -47,11 +51,11 @@ documentation block with the skill pointer is an intentional divergence.
   (feature id `system-prompt`, Pi tab) can turn it off → pi's stock prompt is
   used verbatim after `/reload`.
 
-## Customizing the fixed parts
+## Customizing the fixed sections
 
-Edit the constants at the top of `system-prompt.ts`
-(`INTRO`, `TOOLS_FOOTER`, `ALWAYS_ON_GUIDELINES`,
-`PI_DEVELOPMENT_SKILL_POINTER`) and `/reload`. The dynamic parts keep flowing
+Edit the named section constants near the top of `system-prompt.ts`
+(`generalInstructions`, `outputStyle`, `additionalToolsInstructions`, and
+`piDevelopmentSkillPointer`) and `/reload`. The dynamic parts keep flowing
 from pi automatically. Edit `skills/pi-development/SKILL.md` to change the
 on-demand Pi-development instructions.
 
