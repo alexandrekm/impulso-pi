@@ -6,8 +6,8 @@
 // How it works: pi assembles the full system prompt before firing
 // `before_agent_start`. We get the structured pieces via
 // `event.systemPromptOptions` and reassemble the prompt ourselves, substituting
-// our own INTRO, "in addition" line, always-on guidelines, and a concise pointer
-// to the pi-development skill.
+// our own fixed sections and a concise pointer to the pi-development skill.
+//
 // The dynamic pieces (selectedTools/toolSnippets, promptGuidelines,
 // appendSystemPrompt, contextFiles, skills, cwd) come straight from the
 // options, so tool activation, skill loading, AGENTS.md, /append, etc. keep
@@ -20,9 +20,9 @@
 // Toggled via the impulso settings page (feature id `system-prompt`); off =
 // pi's stock prompt is used verbatim.
 
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Feature flag (same pattern as other local extensions — inline so this
@@ -40,38 +40,41 @@ function isFeatureEnabled(id: string): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// FIXED parts — owned here. Edit these to change the non-dynamic prompt.
-// The intro/footer/guidelines match pi defaults; the Pi-development pointer is
+// Fixed prompt sections — edit these to change the non-dynamic prompt.
+// The first three sections match pi defaults. The pi-development pointer is
 // an intentional divergence from pi's verbose always-on documentation block.
 // ─────────────────────────────────────────────────────────────────────────
 
-const INTRO =
+const generalInstructions =
   "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.";
 
-// Sandwiched between the tools list and the Guidelines section.
-const TOOLS_FOOTER =
+const availableToolsHeading = "Available tools:";
+
+const additionalToolsInstructions =
   "In addition to the tools above, you may have access to other custom tools depending on the project.";
 
-// Guidelines appended for every prompt (after any tool-dependent / tool-
-// contributed bullets). Order matches pi's default.
-const ALWAYS_ON_GUIDELINES = [
+const guidelinesHeading = "Guidelines:";
+
+// Output style stays in the guidelines section so tool-provided guidance can
+// be merged and deduplicated without changing the resulting prompt.
+const outputStyle = [
   "Be concise in your responses",
   "Show file paths clearly when working with files",
 ];
 
 // Tool-dependent guideline pi adds when bash is active but none of
 // grep/find/ls are (i.e. the user would otherwise have no file-search tool).
-const BASH_ONLY_FILEOPS_GUIDELINE = "Use bash for file operations like ls, rg, find";
+const bashOnlyFileopsGuideline = "Use bash for file operations like ls, rg, find";
 
 // Detailed Pi-development guidance belongs in an on-demand skill rather than
 // every system prompt. The pointer is emitted only when the model-invocable skill
 // is actually loaded (for example, not under --no-skills).
-const PI_DEVELOPMENT_SKILL_POINTER =
+const piDevelopmentSkillPointer =
   "For pi-specific work (core, SDK, extensions, themes, skills, or TUI), load the `pi-development` skill before acting.";
 
 // ─────────────────────────────────────────────────────────────────────────
-// Helpers — replicate pi's internal assembly so output matches pi's default
-// when the constants above are unchanged.
+// Section builders — dynamic sections continue to be assembled from Pi's
+// structured options, while the fixed sections above remain easy to scan/edit.
 // ─────────────────────────────────────────────────────────────────────────
 
 function escapeXml(str: string): string {
@@ -85,8 +88,9 @@ function escapeXml(str: string): string {
 
 // Mirror of pi's formatSkillsForPrompt (dist/core/skills.js).
 function formatSkillsForPrompt(skills: any[]): string {
-  const visible = (skills ?? []).filter((s: any) => !s.disableModelInvocation);
+  const visible = (skills ?? []).filter((skill: any) => !skill.disableModelInvocation);
   if (visible.length === 0) return "";
+
   const lines = [
     "\n\nThe following skills provide specialized instructions for specific tasks.",
     "Use the read tool to load a skill's file when the task matches its description.",
@@ -105,47 +109,64 @@ function formatSkillsForPrompt(skills: any[]): string {
   return lines.join("\n");
 }
 
-// Reassemble the prompt from structured options + our fixed constants.
-function buildPrompt(opts: any): string {
-  const selectedTools: string[] = opts.selectedTools ?? ["read", "bash", "edit", "write"];
-  const toolSnippets: Record<string, string> = opts.toolSnippets ?? {};
-
-  // Available tools — only tools with a snippet are listed; "(none)" otherwise.
+function buildAvailableToolsSection(
+  selectedTools: string[],
+  toolSnippets: Record<string, string>,
+): string {
+  // Only tools with a snippet are listed; "(none)" otherwise.
   const visible = selectedTools.filter((name) => !!toolSnippets[name]);
   const toolsList =
     visible.length > 0
       ? visible.map((name) => `- ${name}: ${toolSnippets[name]}`).join("\n")
       : "(none)";
 
-  // Guidelines — deduped, order: bash-only fileops, tool-contributed, always-on.
-  const guidelinesList: string[] = [];
+  return `${availableToolsHeading}\n${toolsList}`;
+}
+
+function buildGuidelinesSection(opts: any, selectedTools: string[]): string {
+  // Deduped order matches pi: bash-only fileops, tool-provided, output style.
+  const guidelines: string[] = [];
   const seen = new Set<string>();
-  const add = (g: string) => {
-    if (!seen.has(g)) {
-      seen.add(g);
-      guidelinesList.push(g);
+  const add = (guideline: string) => {
+    if (!seen.has(guideline)) {
+      seen.add(guideline);
+      guidelines.push(guideline);
     }
   };
+
   const hasBash = selectedTools.includes("bash");
   const hasGrep = selectedTools.includes("grep");
   const hasFind = selectedTools.includes("find");
   const hasLs = selectedTools.includes("ls");
   if (hasBash && !hasGrep && !hasFind && !hasLs) {
-    add(BASH_ONLY_FILEOPS_GUIDELINE);
+    add(bashOnlyFileopsGuideline);
   }
-  for (const g of opts.promptGuidelines ?? []) {
-    const norm = g.trim();
-    if (norm.length > 0) add(norm);
+  for (const guideline of opts.promptGuidelines ?? []) {
+    const normalized = guideline.trim();
+    if (normalized.length > 0) add(normalized);
   }
-  for (const g of ALWAYS_ON_GUIDELINES) add(g);
-  const guidelines = guidelinesList.map((g) => `- ${g}`).join("\n");
+  for (const guideline of outputStyle) add(guideline);
 
   const hasPiDevelopmentSkill = (opts.skills ?? []).some(
     (skill: any) => skill.name === "pi-development" && !skill.disableModelInvocation,
   );
-  const skillPointer = hasPiDevelopmentSkill ? `\n\n${PI_DEVELOPMENT_SKILL_POINTER}` : "";
+  const skillPointer = hasPiDevelopmentSkill ? `\n\n${piDevelopmentSkillPointer}` : "";
 
-  let prompt = `${INTRO}\n\nAvailable tools:\n${toolsList}\n\n${TOOLS_FOOTER}\n\nGuidelines:\n${guidelines}${skillPointer}`;
+  const guidelinesList = guidelines.map((guideline) => `- ${guideline}`).join("\n");
+  return `${guidelinesHeading}\n${guidelinesList}${skillPointer}`;
+}
+
+// Reassemble the prompt from structured options + our fixed sections.
+function buildPrompt(opts: any): string {
+  const selectedTools: string[] = opts.selectedTools ?? ["read", "bash", "edit", "write"];
+  const toolSnippets: Record<string, string> = opts.toolSnippets ?? {};
+
+  let prompt = [
+    generalInstructions,
+    buildAvailableToolsSection(selectedTools, toolSnippets),
+    additionalToolsInstructions,
+    buildGuidelinesSection(opts, selectedTools),
+  ].join("\n\n");
 
   // appendSystemPrompt (--append-system-prompt / APPEND_SYSTEM.md)
   const append: string[] | undefined = opts.appendSystemPrompt;
@@ -184,7 +205,7 @@ export default function (pi: any): void {
     if (!opts) return; // older pi without structured options — leave prompt alone
 
     // Respect an explicit user override (SYSTEM.md / --system-prompt): pi
-    // took the customPrompt branch, so the "fixed parts" aren't pi's default
+    // took the customPrompt branch, so the fixed parts aren't pi's default
     // anyway. Don't double-process.
     if (opts.customPrompt) return;
 
