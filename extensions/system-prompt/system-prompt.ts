@@ -57,7 +57,10 @@ const guidelinesHeading = "Guidelines:";
 
 // Output style stays in the guidelines section so tool-provided guidance can
 // be merged and deduplicated without changing the resulting prompt.
-const outputStyle = ["Be concise in your responses", "Show file paths clearly when working with files"];
+const outputStyle = [
+  "Be concise in your responses",
+  "Show file paths clearly when working with files",
+];
 
 // Tool-dependent guideline pi adds when bash is active but none of
 // grep/find/ls are (i.e. the user would otherwise have no file-search tool).
@@ -106,7 +109,10 @@ function formatSkillsForPrompt(skills: any[]): string {
   return lines.join("\n");
 }
 
-function buildAvailableToolsSection(selectedTools: string[], toolSnippets: Record<string, string>): string {
+function buildAvailableToolsSection(
+  selectedTools: string[],
+  toolSnippets: Record<string, string>,
+): string {
   // Only tools with a snippet are listed; "(none)" otherwise.
   const visible = selectedTools.filter((name) => !!toolSnippets[name]);
   const toolsList =
@@ -146,7 +152,8 @@ function buildGuidelinesSection(opts: any, selectedTools: string[]): string {
   );
   const skillPointer = hasPiDevelopmentSkill ? `\n\n${piDevelopmentSkillPointer}` : "";
 
-  return `${guidelinesHeading}\n${guidelines.map((guideline) => `- ${guideline}`).join("\n")}${skillPointer}`;
+  const guidelinesList = guidelines.map((guideline) => `- ${guideline}`).join("\n");
+  return `${guidelinesHeading}\n${guidelinesList}${skillPointer}`;
 }
 
 // Reassemble the prompt from structured options + our fixed sections.
