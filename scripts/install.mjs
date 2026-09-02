@@ -152,8 +152,30 @@ function hasCmd(cmd) {
 }
 
 function ensurePpiInstalled() {
-  const r = spawnSync("npm", ["install", "-g", "pi-profiles"], { stdio: "inherit" });
+  // npm prints progress to stdout (inherit) but writes errors to stderr;
+  // capture stderr so we can detect a permission failure and hint at sudo.
+  const r = spawnSync("npm", ["install", "-g", "pi-profiles"], {
+    stdio: ["inherit", "inherit", "pipe"],
+  });
   if (r.error || r.status !== 0) {
+    const err = (r.stderr && r.stderr.toString()) || "";
+    const permHit = /EACCES|EPERM|permission|Operation not permitted|access/i.test(err);
+    console.error("");
+    console.error("'npm install -g pi-profiles' failed.");
+    if (permHit) {
+      console.error(
+        "This looks like a permissions error — your user can't write to the global npm prefix.",
+      );
+      console.error("You can either fix the prefix ownership, or re-run the install with sudo:");
+      console.error("");
+      console.error("  sudo ./install.sh <args>   # or directly: sudo npm install -g pi-profiles");
+      console.error("");
+      console.error(
+        'Tip: a one-time `sudo chown -R "$USER" "$(npm config get prefix)"` lets future installs run without sudo.',
+      );
+    } else if (err.trim()) {
+      console.error(err.trim());
+    }
     throw new Error("'npm install -g pi-profiles' failed");
   }
 }
@@ -197,6 +219,9 @@ function piUninstall(pkg, dir) {
 
 // ---- npm version checks --------------------------------------------------
 
+// The npm package name for pi itself, used for the self-update check.
+const PI_NPM_PACKAGE = "@earendil-works/pi-coding-agent";
+
 const latestCache = new Map();
 function latestVersion(pkgName) {
   if (latestCache.has(pkgName)) return latestCache.get(pkgName);
@@ -214,6 +239,31 @@ function installedPkgVersion(dir, pkgName) {
   } catch {
     return null;
   }
+}
+
+// Global npm package version (e.g. ppi / pi-profiles). Returns null if not
+// installed globally under npm. `npm list -g --json <name>` exits non-zero
+// and reports a problem when the package is absent, so parse defensively.
+function installedGlobalPkgVersion(pkgName) {
+  const r = spawnSync("npm", ["list", "-g", "--depth=0", "--json", pkgName], {
+    encoding: "utf8",
+  });
+  if (r.status !== 0 && !r.stdout) return null;
+  try {
+    const deps = JSON.parse(r.stdout).dependencies || {};
+    return deps[pkgName]?.version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// pi's own currently-running version (`pi --version`). Returns null if the
+// `pi` CLI is absent or `--version` fails — the caller treats null as
+// "don't bother offering a self-update".
+function installedPiVersion() {
+  const r = spawnSync("pi", ["--version"], { encoding: "utf8" });
+  if (r.status !== 0) return null;
+  return r.stdout.trim() || null;
 }
 
 function pkgNameFromSpec(spec) {
@@ -315,11 +365,44 @@ function buildDepList(names, profiles) {
   const needsPpi = names.some((n) => !n.base);
   const items = [];
 
-  // `pi` CLI is a hard prerequisite, not a choosable dep — checked elsewhere.
+  // `pi` CLI presence is a hard prerequisite checked before we get here,
+  // so hasCmd("pi") is true. Offer a self-update only when a newer version
+  // is published — an up-to-date pi stays silent.
+  {
+    const installed = installedPiVersion();
+    const latest = latestVersion(PI_NPM_PACKAGE);
+    if (installed && latest && installed !== latest) {
+      items.push({
+        key: "pi",
+        kind: "pi",
+        label: `pi (${PI_NPM_PACKAGE})`,
+        state: "update",
+        installed,
+        latest,
+      });
+    }
+  }
 
-  // ppi: required when any target is a profile.
-  if (needsPpi && !hasCmd("ppi")) {
-    items.push({ key: "ppi", kind: "ppi", label: "ppi (pi-profiles)", state: "missing" });
+  // ppi: required when any target is a profile. If already installed,
+  // check the global version against npm and surface an update only when
+  // outdated — so an up-to-date ppi stays silent and never bothers you.
+  if (needsPpi) {
+    if (!hasCmd("ppi")) {
+      items.push({ key: "ppi", kind: "ppi", label: "ppi (pi-profiles)", state: "missing" });
+    } else {
+      const installed = installedGlobalPkgVersion("pi-profiles");
+      const latest = latestVersion("pi-profiles");
+      if (installed && latest && installed !== latest) {
+        items.push({
+          key: "ppi",
+          kind: "ppi",
+          label: "ppi (pi-profiles)",
+          state: "update",
+          installed,
+          latest,
+        });
+      }
+    }
   }
 
   // packages (npm: and git:): union across targets.
@@ -416,9 +499,23 @@ async function reviewDepsSelect(names, profiles, yes) {
   return { items, needsPpi, selected };
 }
 
+// Self-update pi if the user opted in during the dependency review.
+// `pi update self` is pi's own non-interactive self-update: it checks npm
+// for a newer release and reinstalls globally only when one exists. Runs
+// before ppi/profile work so the rest of the install uses the fresh pi.
+function applyPiSelection(selected, items) {
+  if (!selected.includes("pi")) return;
+  const it = items.find((i) => i.key === "pi");
+  if (!it || it.state !== "update") return;
+  console.log(`==> Updating pi (${PI_NPM_PACKAGE}) ${it.installed} -> ${it.latest}`);
+  const r = spawnSync("pi", ["update", "self"], { stdio: "inherit" });
+  if (r.error) throw new Error("'pi' CLI not found. Install pi first: https://pi.dev");
+  if (r.status !== 0) throw new Error("'pi update self' failed");
+}
+
 // Install `ppi` if selected; abort if it was required and not selected.
 // Must run BEFORE profile dirs are created (ensureProfile needs ppi).
-function applyPpiSelection(needsPpi, selected) {
+function applyPpiSelection(needsPpi, selected, items) {
   const ppiMissing = !hasCmd("ppi");
   if (needsPpi && ppiMissing && !selected.includes("ppi")) {
     console.error("`ppi` is required for profile targets but was not selected. Aborting.");
@@ -426,7 +523,12 @@ function applyPpiSelection(needsPpi, selected) {
     process.exit(1);
   }
   if (selected.includes("ppi")) {
-    console.log("==> Installing ppi (pi-profiles) globally");
+    const it = items.find((i) => i.key === "ppi");
+    if (it && it.state === "update") {
+      console.log(`==> Updating ppi (pi-profiles) globally (${it.installed} -> ${it.latest})`);
+    } else {
+      console.log("==> Installing ppi (pi-profiles) globally");
+    }
     ensurePpiInstalled();
   }
 }
@@ -1068,15 +1170,18 @@ async function main() {
     // 1. Dependency review + select (interactive unless --yes). No dirs needed
     //    yet — buildDepList treats a missing dir as "not installed".
     const { items, needsPpi, selected } = await reviewDepsSelect(names, profiles, yes);
-    // 2. Install ppi if selected; abort if required & not selected.
-    applyPpiSelection(needsPpi, selected);
-    // 3. Create profile dirs (ppi is now available for non-base targets).
+    // 2. Self-update pi if the user opted in (runs before ppi/profile work
+    //    so the rest of the install uses the freshly-updated pi).
+    applyPiSelection(selected, items);
+    // 3. Install ppi if selected; abort if required & not selected.
+    applyPpiSelection(needsPpi, selected, items);
+    // 4. Create profile dirs (ppi is now available for non-base targets).
     for (const t of names) {
       if (!t.base) ensureProfile(t.name);
     }
-    // 4. Execute npm installs/updates (dirs now exist).
+    // 5. Execute npm installs/updates (dirs now exist).
     executeNpmInstalls(selected, items, names);
-    // 5. File sync.
+    // 6. File sync.
     for (const t of names) {
       console.log(`==> install -> ${t.base ? "base" : t.name} (${t.dir})`);
       migrateLegacyPermissionSystem(t);
