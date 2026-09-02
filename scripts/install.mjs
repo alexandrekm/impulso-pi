@@ -151,31 +151,41 @@ function hasCmd(cmd) {
   return r.status === 0;
 }
 
+// Detect an npm permission failure in captured stderr and print a helpful
+// hint. Returns true when it looked like a permissions error. npm writes
+// errors to stderr; callers capture stderr (stdout can stay inherited).
+function hintNpmPermissionError(errText, { command } = {}) {
+  const err = errText || "";
+  const permHit = /EACCES|EPERM|permission|Operation not permitted|access/i.test(err);
+  if (command) console.error(`${command} failed.`);
+  if (!permHit) {
+    if (err.trim()) console.error(err.trim());
+    return false;
+  }
+  console.error(
+    "This looks like a permissions error — your user can't write to the global npm prefix.",
+  );
+  console.error("You can either fix the prefix ownership, or re-run the install with sudo:");
+  console.error("");
+  console.error("  sudo ./install.sh <args>");
+  console.error("");
+  console.error(
+    'Tip: a one-time `sudo chown -R "$USER" "$(npm config get prefix)"` lets future installs run without sudo.',
+  );
+  return true;
+}
+
 function ensurePpiInstalled() {
   // npm prints progress to stdout (inherit) but writes errors to stderr;
-  // capture stderr so we can detect a permission failure and hint at sudo.
+  // capture stderr so we can detect a permission failure and hint at it.
   const r = spawnSync("npm", ["install", "-g", "pi-profiles"], {
     stdio: ["inherit", "inherit", "pipe"],
   });
   if (r.error || r.status !== 0) {
-    const err = (r.stderr && r.stderr.toString()) || "";
-    const permHit = /EACCES|EPERM|permission|Operation not permitted|access/i.test(err);
     console.error("");
-    console.error("'npm install -g pi-profiles' failed.");
-    if (permHit) {
-      console.error(
-        "This looks like a permissions error — your user can't write to the global npm prefix.",
-      );
-      console.error("You can either fix the prefix ownership, or re-run the install with sudo:");
-      console.error("");
-      console.error("  sudo ./install.sh <args>   # or directly: sudo npm install -g pi-profiles");
-      console.error("");
-      console.error(
-        'Tip: a one-time `sudo chown -R "$USER" "$(npm config get prefix)"` lets future installs run without sudo.',
-      );
-    } else if (err.trim()) {
-      console.error(err.trim());
-    }
+    hintNpmPermissionError((r.stderr && r.stderr.toString()) || "", {
+      command: "'npm install -g pi-profiles'",
+    });
     throw new Error("'npm install -g pi-profiles' failed");
   }
 }
@@ -996,14 +1006,19 @@ export function installStandaloneTools(profiles) {
     }
     // Global install packs the dir (dist/ included via the package's `files`)
     // and links the bin. `prepare` may be blocked by npm's allow-scripts
-    // policy here, but dist/ was already built by the step above.
-    if (
-      spawnSync("npm", ["install", "-g", ".", "--no-audit", "--no-fund"], {
-        cwd: dir,
-        stdio: "inherit",
-      }).status !== 0
-    ) {
-      console.error(`  ${pkgName}: 'npm install -g .' failed, skipping`);
+    // policy here, but dist/ was already built by the step above. Capture
+    // stderr so a permission failure on the global prefix gets the sudo /
+    // user-prefix hint instead of a bare 'failed, skipping'.
+    const globalRes = spawnSync("npm", ["install", "-g", ".", "--no-audit", "--no-fund"], {
+      cwd: dir,
+      stdio: ["inherit", "inherit", "pipe"],
+    });
+    if (globalRes.status !== 0) {
+      console.error("");
+      hintNpmPermissionError((globalRes.stderr && globalRes.stderr.toString()) || "", {
+        command: `  ${pkgName}: 'npm install -g .'`,
+      });
+      console.error(`  ${pkgName}: skipped (global install failed)`);
       continue;
     }
     const binName =

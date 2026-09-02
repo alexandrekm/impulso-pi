@@ -23,18 +23,19 @@ npm install -g pi-profiles   # provides `ppi` (auto-installed by ./install.sh if
 ./install.sh pull   [target]  # promote local edits upstream
 ```
 
-If `npm install -g pi-profiles` fails with a permissions error (your user
-can't write to the global npm prefix), either fix the prefix ownership once:
+If `npm install -g` fails with a permissions error (your user can't write
+to the global npm prefix), the root-free fix is to point npm at a dir you own
+(one time, applies to all future global installs):
 
 ```bash
-sudo chown -R "$USER" "$(npm config get prefix)"
+mkdir -p ~/.npm-global
+npm config set prefix ~/.npm-global
+echo 'export PATH=~/.npm-global/bin:$PATH' >> ~/.zshrc   # or ~/.bashrc
+# open a new shell so the new PATH + prefix take effect
 ```
 
-or just run the install with sudo:
-
-```bash
-sudo ./install.sh <args>
-```
+or re-run the install with `sudo ./install.sh <args>`. `./install.sh`
+detects the permission failure and prints these hints itself.
 
 `<target>` is a profile name (`work` / `personal`), `--all`, or
 `--base`. For profile targets, `install` first reviews dependencies — `ppi` if
