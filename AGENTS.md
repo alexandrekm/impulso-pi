@@ -304,3 +304,8 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
 ```bash
 npm install -g pi-profiles   # provides `ppi` (auto-installed by ./install.sh if missing)
 ```
+
+If that fails with a permissions error (user can't write to the global npm
+prefix), either fix the prefix ownership once (`sudo chown -R "$USER" "$(npm
+config get prefix)"`) or re-run the install with `sudo ./install.sh <args>`.
+`./install.sh` detects the permission failure and prints this hint itself.
