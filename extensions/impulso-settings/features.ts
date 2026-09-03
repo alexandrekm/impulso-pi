@@ -203,6 +203,19 @@ export const FEATURES: Feature[] = [
     kind: "package",
     spec: "npm:pi-provider-litellm",
   },
+  {
+    id: "cache-ttl",
+    tab: "providers",
+    group: "Prompt caching",
+    label: "Cache TTL",
+    description:
+      "Prompt-cache retention: short = provider default (Anthropic 5m, OpenAI in-memory); long = extended (Anthropic 1h, OpenAI 24h, Bedrock 1h). Long cache writes cost more, but wins when turns are >5min apart. Written to <configDir>/cache-ttl.json, applied by extensions/cache-ttl/cache-ttl.ts via PI_CACHE_RETENTION. /reload to apply.",
+    kind: "config",
+    configFile: "cache-ttl.json",
+    key: "retention",
+    values: ["short", "long"],
+    defaultValue: "short",
+  },
 
   // ── Tools & Safety ─────────────────────────────────────────────────────
   {
