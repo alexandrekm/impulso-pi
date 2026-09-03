@@ -755,12 +755,15 @@ export function getFeatureState(f: Feature): string {
     }
     return "";
   }
-  if (f.picker) {
+  if (f.picker && f.key) {
     // Plain-string picker (no modelKey): free-form value (e.g. a model id);
-    // "" means the key is absent / "same as main".
-    const raw = getByPath(readSettings(), f.key!);
+    // "" means the key is absent / "same as main". A picker feature without
+    // a key is a registry misconfiguration — degrade to "" instead of
+    // crashing on an undefined path.
+    const raw = getByPath(readSettings(), f.key);
     return raw === undefined ? "" : String(raw);
   }
+  if (f.picker) return "";
   const raw = getByPath(readSettings(), f.key!);
   const isBool =
     !f.values ||
@@ -846,11 +849,15 @@ export function setFeatureState(f: Feature, value: string): void {
     return;
   }
   if (f.picker) {
-    // Plain-string picker (no modelKey): write the provider/id string
-    // directly; "" removes the key so the default chain applies again.
-    if (value === "") deleteByPath(data, f.key!);
-    else setByPath(data, f.key!, value);
-    writeSettings(data);
+    // Plain-string picker (no modelKey). A picker feature without a key
+    // is a registry misconfiguration — no-op instead of writing to an
+    // undefined path.
+    if (f.key) {
+      // "" removes the key so the default chain applies again.
+      if (value === "") deleteByPath(data, f.key);
+      else setByPath(data, f.key, value);
+      writeSettings(data);
+    }
     return;
   }
   const isBool =
