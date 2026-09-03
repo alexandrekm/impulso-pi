@@ -1085,25 +1085,44 @@ export async function maybeOfferStatsService(freshlyInstalled, yes, profilesMode
   }
 
   // Preserve a user-set dashboard port/host across the service re-install.
-  // Reads the existing systemd unit (or launchd plist) for `--port`/`--host`
-  // args so ./install.sh --all doesn't reset a non-default (e.g. 3848) back
-  // to the default 3847 and collide with another process. Returns CLI args.
+  // Finds --port/--host in the existing systemd unit, systemd drop-ins, or
+  // launchd plist so ./install.sh --all doesn't reset a non-default (e.g.
+  // 3848) back to the default 3847 and collide with another process. Mirrors
+  // pi-omp-stats' own describeInstalledService() so both the CLI-style
+  // (--port 3848) and launchd XML (<string>--port</string>...) forms match.
+  // Returns CLI args.
   function preserveStatsServicePortHost() {
     const candidates = [
       join(homedir(), ".config/systemd/user/pi-omp-stats.service"),
-      join(homedir(), ".config/systemd/user/pi-omp-stats.service.d/"),
       join(homedir(), "Library/LaunchAgents/dev.pi.omp-stats.plist"),
       join(homedir(), "Library/LaunchAgents/pi-omp-stats.plist"),
     ];
+    // systemd drop-in overrides may also carry --port/--host; read every
+    // *.conf in the .service.d/ directory (skip the directory itself).
+    const dropInDir = join(homedir(), ".config/systemd/user/pi-omp-stats.service.d/");
+    try {
+      for (const name of readdirSync(dropInDir)) {
+        if (name.endsWith(".conf")) candidates.push(join(dropInDir, name));
+      }
+    } catch {
+      // No drop-in directory; fine.
+    }
     for (const file of candidates) {
       let text = "";
       try {
+        if (lstatSync(file).isDirectory()) continue;
         text = readFileSync(file, "utf8");
       } catch {
         continue;
       }
-      const portMatch = text.match(/--port"?\s*"?(\d+)/);
-      const hostMatch = text.match(/--host"?\s*"?([^\s"]+)/);
+      // launchd stores each arg as an XML <string> node; systemd units use
+      // one inline ExecStart= line. Match either form.
+      const portMatch =
+        text.match(/<string>--port<\/string>\s*<string>(\d+)<\/string>/) ??
+        text.match(/--port"?\s*"?(\d+)/);
+      const hostMatch =
+        text.match(/<string>--host<\/string>\s*<string>([^<]+)<\/string>/) ??
+        text.match(/--host"?\s*"?([^\s"]+)/);
       const args = [];
       if (portMatch) args.push("--port", portMatch[1]);
       if (hostMatch) args.push("--host", hostMatch[1]);
