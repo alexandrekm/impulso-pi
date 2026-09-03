@@ -637,8 +637,12 @@ export default function (pi: ExtensionAPI) {
       // to this profile (segment hidden). Polled on the 1s diff timer — the
       // /mode command writes the file, so the footer picks it up within a
       // second without any cross-extension wiring.
+      // NOTE: this file is at extensions/pi-dynamic-footer/observability.ts —
+      // three dirname()s to reach <configDir> (modes' index.ts is one level
+      // shallower and gets away with two).
       const CONFIG_DIR =
-        process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+        process.env.PI_CODING_AGENT_DIR ||
+        dirname(dirname(dirname(fileURLToPath(import.meta.url))));
       const MODE_STATE_PATH = join(CONFIG_DIR, "mode.json");
       const MODE_CONFIG_PATH = join(CONFIG_DIR, "extensions", "modes", "config.json");
 
