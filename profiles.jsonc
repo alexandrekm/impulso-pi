@@ -14,13 +14,6 @@
     "hideThinkingBlock": true,
     // Catppuccin Mocha, from the pi-themes package (git: below).
     "theme": "catppuccin-mocha",
-
-    // Initial rollout exposes only our custom read-only scout; package-built
-    // worker/reviewer/etc. roles stay undiscoverable until a later, explicit
-    // expansion. This managed safety boundary is re-applied on every sync.
-    "subagents": {
-      "disableBuiltins": true,
-    },
   },
 
   // DEFAULT settings — deep fill-only: a key (and nested sub-keys) is
@@ -40,6 +33,25 @@
     "observational-memory": {
       "compactAfterTokensMode": "ratio",
       "compactAfterTokensRatio": 0.9,
+    },
+
+    // pi-subagents: seeded here (fill-only) instead of managed `settings` so
+    // each profile can pick its own scout model locally in settings.json
+    // without the next install reverting it (managed keys overwrite
+    // whole-key; defaults never reset existing values). Fresh machines get
+    // the same starting point: builtin agent roles disabled (custom
+    // read-only scout only) and a fast recon tier on scout. agentOverrides
+    // beats agent frontmatter, so agents/scout.md stays vendor-neutral.
+    // Trade-off: disableBuiltins is seed-only — it is no longer re-applied
+    // if you flip it off yourself.
+    "subagents": {
+      "disableBuiltins": true,
+      "agentOverrides": {
+        "scout": {
+          "model": "google/gemini-3.8-flash",
+          "thinking": "low",
+        },
+      },
     },
   },
 

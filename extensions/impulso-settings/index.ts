@@ -285,7 +285,7 @@ export class ImpulsoSettingsView implements Component {
     const isOn = value === "on" || (value !== "off" && value !== "");
     const tag = isOn ? "● on" : "○ off";
     // For enum values other than on/off, show the value plainly.
-    const text = value === "on" || value === "off" ? tag : value;
+    const text = value === "" ? "same as main" : value === "on" || value === "off" ? tag : value;
     return selected ? this.theme.fg("accent", text) : this.theme.fg(isOn ? "muted" : "dim", text);
   }
 
@@ -417,17 +417,27 @@ function makePick(
   ui: any,
 ): (f: Feature, current: string) => Promise<string | undefined> {
   return (f, current) => {
-    if (f.id === "pi-btw-model" || f.id === "observational-memory-model") {
+    if (
+      f.id === "pi-btw-model" ||
+      f.id === "observational-memory-model" ||
+      f.id === "subagents-scout-model"
+    ) {
       const models = (modelRegistry?.getAll?.() ?? []).map((m: any) => ({
         value: `${m.provider}/${m.id}`,
         label: `${m.provider}/${m.id}`,
       }));
-      const title = f.id === "pi-btw-model" ? "Side-thread model" : "Memory worker model";
+      const title =
+        f.id === "pi-btw-model"
+          ? "Side-thread model"
+          : f.id === "subagents-scout-model"
+            ? "Scout model"
+            : "Memory worker model";
       return openConfigPicker(ui, {
         title,
         items: models,
         current,
-        blankLabel: "Same as main thread",
+        blankLabel:
+          f.id === "subagents-scout-model" ? "Same as main session" : "Same as main thread",
       });
     }
     return Promise.resolve(undefined);
