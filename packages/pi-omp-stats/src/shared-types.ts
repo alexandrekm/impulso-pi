@@ -103,6 +103,35 @@ export interface DashboardStats {
   costSeries: CostTimeSeriesPoint[];
 }
 
+/* Passive pi-subagents lifecycle telemetry. */
+
+export interface SubagentRunSummary {
+  totalRuns: number;
+  completed: number;
+  failed: number;
+  stopped: number;
+  partial: number;
+  rejected: number;
+  totalDurationMs: number;
+  medianDurationMs: number | null;
+  totalTokens: number;
+  totalCost: number;
+}
+
+export interface SubagentRunBreakdown {
+  role: string;
+  model: string;
+  context: string;
+  runs: number;
+  totalTokens: number;
+  totalCost: number;
+}
+
+export interface SubagentDashboardStats {
+  summary: SubagentRunSummary;
+  breakdown: SubagentRunBreakdown[];
+}
+
 /* Behavior / "rage" analytics (ported from omp; pure string analysis). */
 
 export interface BehaviorTimeSeriesPoint {
