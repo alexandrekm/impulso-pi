@@ -26,6 +26,10 @@ import {
   getCostTimeSeries,
   getFileOffset,
   getFolderLabel,
+  getGuardByKind,
+  getGuardByModel,
+  getGuardSummary,
+  getGuardTimeseries,
   getMemoryById,
   getMemoryPoolGrowth,
   getMemoryRelevanceDistribution,
@@ -51,10 +55,13 @@ import {
   getTimeSeries,
   initDb,
   insertCompactionStats,
+  insertGuardEvents,
   insertMemoryEvents,
   insertMessageStats,
   insertToolCalls,
   insertUserMessageStats,
+  listGuardEvents,
+  listGuardSessions,
   listMemoryEvents,
   listMemorySessions,
   markSessionBackfillsComplete,
@@ -101,6 +108,7 @@ function applyParseResult(
   if (result.toolResults.length > 0) updateToolResults(result.toolResults);
   if (result.compactions.length > 0) insertCompactionStats(result.compactions);
   if (result.memoryEvents.length > 0) insertMemoryEvents(result.memoryEvents);
+  if (result.guardEvents.length > 0) insertGuardEvents(result.guardEvents);
   if (result.folder) {
     // Relabel all of this file's rows (old + new) with the header-derived
     // folder. Indexed UPDATE; idempotent, and fixes rows persisted before
@@ -599,4 +607,46 @@ export async function getMemoryDetail(id: number) {
 export async function getMemorySessions() {
   await initDb();
   return listMemorySessions();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Guard-block dashboard accessors (impulso-pi)                               */
+/* -------------------------------------------------------------------------- */
+
+export async function getGuardDashboardStats(range?: string | null) {
+  await initDb();
+  const { modelSeriesDays, modelSeriesBucketMs, cutoff } = getTimeRangeConfig(range);
+  return {
+    summary: getGuardSummary(cutoff),
+    byKind: getGuardByKind(cutoff),
+    byModel: getGuardByModel(cutoff),
+    timeseries: getGuardTimeseries(modelSeriesDays, cutoff, modelSeriesBucketMs),
+  };
+}
+
+export async function getGuardList(opts: {
+  range?: string | null;
+  guard?: string | null;
+  kind?: string | null;
+  session?: string | null;
+  q?: string | null;
+  limit?: number;
+  offset?: number;
+}) {
+  await initDb();
+  const { cutoff } = getTimeRangeConfig(opts.range);
+  return listGuardEvents({
+    guard: opts.guard,
+    kind: opts.kind,
+    session: opts.session,
+    q: opts.q,
+    limit: opts.limit,
+    offset: opts.offset,
+    cutoff,
+  });
+}
+
+export async function getGuardSessions() {
+  await initDb();
+  return listGuardSessions();
 }

@@ -202,14 +202,19 @@ version-string comparison can't detect a `git pull`/merge that changed the
 source without bumping `version`; both npm commands are cheap/idempotent when
 nothing changed, so always rebuilding is what keeps the global bin in sync.
 Currently the only tool is `pi-omp-stats` (see `packages/pi-omp-stats/`).
-Besides usage/cost/tool stats, it now also tracks **compaction** events and
+Besides usage/cost/tool stats, it now also tracks **compaction** events,
 **observational-memory** events (observations/reflections/drops + the
-`om.folded` snapshot carried through compactions), parsed from session JSONL
-with no upstream pi change. New `compaction_stats` + `memory_events` tables
-and `/api/stats/compaction*` + `/api/stats/memory*` routes feed a Compaction
-panel and an Observational Memory panel (with a searchable memory browser) in
-the dashboard. A schema-version sentinel in `meta` resets file offsets once on
-upgrade so the new tables backfill from existing sessions.
+`om.folded` snapshot carried through compactions), and **guard blocks**
+(commit-guard / command-guard `tool_call` blocks, recovered from the error
+tool results pi persists for them — guard, kind, model, blocked command,
+reason), all parsed from session JSONL with no upstream pi change. New
+`compaction_stats` + `memory_events` + `guard_events` tables and
+`/api/stats/compaction*` + `/api/stats/memory*` + `/api/stats/guards*`
+routes feed a Compaction panel, an Observational Memory panel (with a
+searchable memory browser), and a Guards panel (with a searchable list of
+blocked commands) in the dashboard. A schema-version sentinel in `meta`
+resets file offsets once on upgrade so the new tables backfill from existing
+sessions.
 `install.sh` always rebuilds + reinstalls the `pi-omp-stats` global bin
 (a version check isn't safe for git-checked-out packages), and when the
 background service is already registered it also **restarts** it

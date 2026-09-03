@@ -31,6 +31,7 @@ import type {
   AssistantMessage,
   CompactionStats,
   ContentBlock,
+  GuardEventStats,
   MemoryEventStats,
   MemoryKind,
   MessageStats,
@@ -461,6 +462,80 @@ function isEnoent(err: unknown): boolean {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Guard-block extraction (impulso-pi addition)                                */
+/* -------------------------------------------------------------------------- */
+
+/** Guards whose `tool_call` block reasons are persisted as a toolResult text
+ *  block prefixed with `[<guard name>]` (the impulso convention used by
+ *  extensions/commit-guard and extensions/command-guard). */
+const GUARD_REASON_PREFIX_RE = /^\[(commit-guard|command-guard)\]/;
+
+/** Coarse categorisation of a guard block reason, parsed from its text.
+ *  Keep in sync with the reason wording in the guard extensions. */
+function classifyGuardReason(guard: string, reason: string): string {
+  if (guard === "commit-guard") {
+    if (reason.includes("`--no-verify` is blocked")) return "no-verify";
+    if (reason.includes("failed the repo's commitlint")) return "commitlint";
+    if (reason.includes("violates commitlint rules")) return "builtin-rules";
+    return "other";
+  }
+  if (reason.includes("blocked access to")) return "env-denied";
+  if (reason.includes("requires approval")) return "approval";
+  if (reason.includes("blocked by user")) return "blocked-by-user";
+  if (reason.includes("denied")) return "denied";
+  return "other";
+}
+
+/** Guard blocks from a blocked `toolResult` entry. pi persists a `tool_call`
+ *  hook block as a toolResult with `isError: true` whose first text block is
+ *  the guard's `[<name>] reason`; each matching block becomes one row.
+ *  `commandByCallId` links the result's toolCallId back to the assistant
+ *  toolCall block seen earlier in the same walk (empty on mid-stream
+ *  incremental chunks, so `command` is null there). */
+function extractGuardEvents(
+  sessionFile: string,
+  folder: string,
+  entry: SessionMessageEntry,
+  commandByCallId: Map<string, string>,
+  lastModel: string | null,
+  lastProvider: string | null,
+): GuardEventStats[] {
+  const msg = entry.message as ToolResultMessage;
+  if (msg.role !== "toolResult") return [];
+  const blocks = Array.isArray(msg.content)
+    ? (msg.content as Array<{ type?: unknown; text?: unknown }>)
+    : [];
+  const out: GuardEventStats[] = [];
+  for (const block of blocks) {
+    if (
+      !block ||
+      typeof block !== "object" ||
+      block.type !== "text" ||
+      typeof block.text !== "string"
+    )
+      continue;
+    const m = GUARD_REASON_PREFIX_RE.exec(block.text);
+    if (!m) continue;
+    const guard = m[1];
+    const reason = block.text.slice(m[0].length).trim() || block.text;
+    out.push({
+      sessionFile,
+      entryId: entry.id,
+      folder,
+      timestamp: coerceEntryTimestamp(undefined, entry),
+      guard,
+      kind: classifyGuardReason(guard, reason),
+      model: lastModel,
+      provider: lastProvider,
+      command:
+        typeof msg.toolCallId === "string" ? (commandByCallId.get(msg.toolCallId) ?? null) : null,
+      reason: block.text,
+    });
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Compaction + observational-memory extraction (impulso-pi addition)          */
 /* -------------------------------------------------------------------------- */
 
@@ -709,6 +784,7 @@ export async function parseSessionFile(
     toolResults: [],
     compactions: [],
     memoryEvents: [],
+    guardEvents: [],
     newOffset: fromOffset,
   };
 
@@ -733,6 +809,11 @@ export async function parseSessionFile(
   const toolResults: ToolResultLink[] = [];
   const compactions: CompactionStats[] = [];
   const memoryEvents: MemoryEventStats[] = [];
+  const guardEvents: GuardEventStats[] = [];
+  // toolCallId → command string for tool calls carrying a `command` argument
+  // (bash). Populated from assistant toolCall blocks so a later blocked
+  // toolResult can be attributed to the exact command that was blocked.
+  const commandByCallId = new Map<string, string>();
   // Running last-seen assistant model/provider. `compaction` entries do not
   // carry a model; the compaction extractor inherits these so compaction
   // stats can be attributed to the model that was active at trigger time.
@@ -764,6 +845,11 @@ export async function parseSessionFile(
     if (isToolResultMessage(entry)) {
       const link = extractToolResultLink(sessionPath, entry);
       if (link) toolResults.push(link);
+      // Guard blocks (commit-guard / command-guard) are persisted as error
+      // toolResults whose first text block is prefixed `[<guard name>]`.
+      guardEvents.push(
+        ...extractGuardEvents(sessionPath, folder, entry, commandByCallId, lastModel, lastProvider),
+      );
       continue;
     }
     if (isAssistantMessage(entry)) {
@@ -774,6 +860,27 @@ export async function parseSessionFile(
         lastProvider = msgStats.provider;
       }
       toolCalls.push(...extractToolCalls(sessionPath, folder, entry, agentType));
+      // Remember toolCallId → command for later guard-block attribution.
+      const amsg = entry.message as AssistantMessage;
+      if (Array.isArray(amsg.content)) {
+        for (const block of amsg.content as Array<{
+          type?: unknown;
+          id?: unknown;
+          arguments?: unknown;
+        }>) {
+          if (
+            block &&
+            typeof block === "object" &&
+            block.type === "toolCall" &&
+            typeof block.id === "string" &&
+            block.arguments &&
+            typeof block.arguments === "object" &&
+            typeof (block.arguments as { command?: unknown }).command === "string"
+          ) {
+            commandByCallId.set(block.id, (block.arguments as { command: string }).command);
+          }
+        }
+      }
       // Link assistant's responding model back to the user message it answered.
       const parentId = entry.parentId;
       if (parentId) {
@@ -827,6 +934,7 @@ export async function parseSessionFile(
     toolResults,
     compactions,
     memoryEvents,
+    guardEvents,
     folder,
     newOffset: start + read,
   };
