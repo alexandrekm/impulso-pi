@@ -41,13 +41,16 @@ export function tokenize(s: string): string[] {
     while (i < n && /\s/.test(s[i])) i++;
     if (i >= n) break;
     let tok = "";
+    let quoted = false; // an empty quoted arg (""/ '') is a real token
     while (i < n && !/\s/.test(s[i])) {
       const c = s[i];
       if (c === "'") {
+        quoted = true;
         i++;
         while (i < n && s[i] !== "'") tok += s[i++];
         if (i < n) i++; // closing quote
       } else if (c === '"') {
+        quoted = true;
         i++;
         while (i < n && s[i] !== '"') {
           if (s[i] === "\\" && i + 1 < n) {
@@ -62,7 +65,10 @@ export function tokenize(s: string): string[] {
         tok += s[i++];
       }
     }
-    if (tok !== "") tokens.push(tok);
+    // Preserve empty quoted tokens (e.g. `git commit -m "" file.txt`:
+    // `-m` takes the empty string, `file.txt` is a pathspec). Discard only
+    // bare-whitespace gaps that produced no token and no quote.
+    if (tok !== "" || quoted) tokens.push(tok);
   }
   return tokens;
 }

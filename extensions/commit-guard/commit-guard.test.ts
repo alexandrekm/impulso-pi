@@ -29,6 +29,21 @@ describe("tokenize", () => {
       "-mfeat(AICPE-1): x",
     ]);
   });
+
+  test("preserves empty quoted tokens (regression for PR #73 review)", () => {
+    // `git commit -m "" file.txt`: `-m` takes the empty string, `file.txt`
+    // is a pathspec — not the message.
+    assert.deepEqual(tokenize(`git commit -m "" file.txt`), [
+      "git",
+      "commit",
+      "-m",
+      "",
+      "file.txt",
+    ]);
+    assert.deepEqual(tokenize(`git commit -m ''`), ["git", "commit", "-m", ""]);
+    const info = extractCommits(`git commit -m "" file.txt`)[0];
+    assert.deepEqual(info.messages, [""]);
+  });
 });
 
 function commit(cmd: string): CommitInfo | undefined {
