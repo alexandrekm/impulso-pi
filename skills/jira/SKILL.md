@@ -15,9 +15,9 @@ Resolve a Jira ticket for current work, search tickets, create tickets, transiti
 acli auth status   # must show ✓ Authenticated + site k2labs.atlassian.net
 ```
 
-If `acli` is missing, install it and run `acli auth login`. The REST fallback (`FALLBACK.md`) needs two env vars — `JIRA_EMAIL` (your `@gomotive.com` address) and `ATLASSIAN_API_KEY` (already in env). You only need them when `acli` is unavailable or for the no-`acli` operations (sprint-add, story points, createmeta); a healthy `acli auth status` means you do **not** have to set them.
+If `acli` is missing, install it and run `acli auth login`. The REST fallback (`FALLBACK.md`) needs two env vars — `JIRA_EMAIL` (your `@gomotive.com` address) and `ATLASSIAN_API_KEY` (already in env). You only need them when `acli` is unavailable or for the no-`acli` operations (sprint-add, story points, createmeta, epic parent on an existing ticket); a healthy `acli auth status` means you do **not** have to set them.
 
-If `acli` is unavailable or fails, REST API fallbacks are in `skill://jira/FALLBACK.md` — load it on demand. Some operations (sprint-add, story points, createmeta) have no `acli` equivalent and always need REST.
+If `acli` is unavailable or fails, REST API fallbacks are in `skill://jira/FALLBACK.md` — load it on demand. Some operations (sprint-add, story points, createmeta, epic parent on an existing ticket) have no `acli` equivalent and always need REST.
 
 Full command reference: `skill://jira/REFERENCE.md` — load it when you need flags or commands not covered below.
 
@@ -33,6 +33,7 @@ Announce at start: "I'm using the jira skill to resolve the Jira ticket."
 | View | `acli jira workitem view KEY-123 --fields "*all" --json` |
 | Create | `acli jira workitem create --summary "..." --description "..." --project "..." --type "Task" --assignee "@me" --parent "EPIC-1" --label "mlp"` |
 | Edit | `acli jira workitem edit --key "KEY-123" --summary "..." --description "..." --yes` |
+| Set epic parent (existing ticket) | No `acli` flag — REST one-shot in `FALLBACK.md` ("Set / change epic parent") |
 | Transition | `acli jira workitem transition --key "KEY-123" --status "In Progress" --yes` |
 | Assign | `acli jira workitem assign --key "KEY-123" --assignee "@me"` |
 | Comment | `acli jira workitem comment create --key "KEY-123" --body "..."` |
@@ -41,6 +42,8 @@ Announce at start: "I'm using the jira skill to resolve the Jira ticket."
 | Active sprints | `acli jira board list-sprints --id <BOARD_ID> --state active --json` |
 
 Key flags: `--json` (always prefer for parsing), `--yes` (skip prompts in non-interactive use), `--paginate` (fetch all results).
+
+`--parent` exists **only on `workitem create`** — `workitem edit` has no `--parent` (not even via `--from-json`, which rejects `json: unknown field "parent"`) and `workitem link create` makes relation links (Blocks/Relates/…), not epic parentage. To set/change the epic parent of an existing ticket, use the REST one-shot in `FALLBACK.md`. Note `workitem view --json` omits `parent` from its default field set — pass `--fields "*all"` or verify via REST.
 
 `workitem search` valid `--fields`: `issuetype,key,assignee,priority,status,summary` only — `project` is **not** allowed. Infer project from key prefix.
 

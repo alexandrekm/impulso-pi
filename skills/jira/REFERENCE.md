@@ -33,6 +33,7 @@ acli jira workitem search --jql "assignee = currentUser()" --json \
 - `fields.issuetype` is likewise an object — `.fields.issuetype.name`.
 - `fields.customfield_10020` (Sprint) is a **list** of sprint objects — `.fields.customfield_10020[].name`; it is `null`/empty when the ticket isn't on a sprint, so guard it.
 - `fields.assignee` is `null` when unassigned — `.fields.assignee.name // "Unassigned"`.
+- `fields.parent` (epic) is **absent from the default `view --json` field set** — pass `--fields "*all"` to see it, or check via REST `GET /rest/api/2/issue/<KEY>?fields=parent`.
 
 If you must use Python, read stdin and walk the shapes above; never assume a field is a list vs object — inspect with `jq 'keys'` first.
 
@@ -44,7 +45,7 @@ If you must use Python, read stdin and walk the shapes above; never assume a fie
 | `acli jira workitem view [key]` | `--fields` (default: key,issuetype,summary,status,assignee,description; use `*all` or `*navigable`), `--json`, `--web` |
 | `acli jira workitem create` | `--summary`, `--project`, `--type` (Epic/Story/Task/Bug), `--assignee` (`@me`/email/`default`), `--description`, `--description-file`, `--label`, `--parent`, `--editor`, `--from-file`, `--from-json`, `--generate-json`, `--json` |
 | `acli jira workitem create-bulk` | `--from-json`, `--from-csv`, `--generate-json`, `--ignore-errors`, `--yes` |
-| `acli jira workitem edit` | `--key`, `--jql`, `--filter`, `--summary`, `--description`, `--description-file`, `--assignee`, `--type`, `--labels`, `--remove-labels`, `--remove-assignee`, `--from-json`, `--generate-json`, `--json`, `--yes` |
+| `acli jira workitem edit` | `--key`, `--jql`, `--filter`, `--summary`, `--description`, `--description-file`, `--assignee`, `--type`, `--labels`, `--remove-labels`, `--remove-assignee`, `--from-json`, `--generate-json`, `--json`, `--yes` (**no `--parent`** — parent only settable on `create`; re-parent via REST in `FALLBACK.md`) |
 | `acli jira workitem transition` | `--key`, `--jql`, `--filter`, `--status`, `--json`, `--ignore-errors`, `--yes` |
 | `acli jira workitem assign` | `--key`, `--jql`, `--filter`, `--from-file`, `--assignee` (`@me`/email/`default`), `--remove-assignee`, `--json`, `--ignore-errors`, `--yes` |
 | `acli jira workitem clone` | `--key`, `--jql`, `--filter`, `--from-file`, `--to-project`, `--to-site`, `--json`, `--ignore-errors`, `--yes` |
