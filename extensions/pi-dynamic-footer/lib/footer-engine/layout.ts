@@ -12,6 +12,7 @@ export const defaultAssembler: LayoutAssembler = (segments, width, theme) => {
   const line = [
     segments["turnCount"],
     segments["modelThink"],
+    segments["mode"],
     segments["tps"],
     segments["contextUsage"],
     segments["tokens"],

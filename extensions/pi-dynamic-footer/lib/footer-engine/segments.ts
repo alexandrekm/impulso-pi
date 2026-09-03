@@ -98,6 +98,11 @@ export const builtinRenderers: Record<string, SegmentRenderer> = {
     return theme.fg(color, text) + tier;
   },
 
+  mode(input) {
+    if (!input.mode) return "";
+    return input.theme.fg("accent", `◈ ${input.mode}`);
+  },
+
   runtime(input) {
     return input.theme.fg("dim", `⏱ ${fmtDuration(input.runtimeMs)}`);
   },
