@@ -1,0 +1,6 @@
+{
+  "orcaProgressTabs": {
+    "enabled": true
+  },
+  "maxSubagentDepth": 1
+}

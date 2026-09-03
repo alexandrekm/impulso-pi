@@ -14,6 +14,13 @@
     "hideThinkingBlock": true,
     // Catppuccin Mocha, from the pi-themes package (git: below).
     "theme": "catppuccin-mocha",
+
+    // Initial rollout exposes only our custom read-only scout; package-built
+    // worker/reviewer/etc. roles stay undiscoverable until a later, explicit
+    // expansion. This managed safety boundary is re-applied on every sync.
+    "subagents": {
+      "disableBuiltins": true,
+    },
   },
 
   // DEFAULT settings — deep fill-only: a key (and nested sub-keys) is
@@ -46,6 +53,20 @@
     // (every profile, and --base).
     "npm:@juicesharp/rpiv-ask-user-question": { "tags": ["core"] },
     "npm:@alfonzjanfrithz/pi-websearch": { "tags": ["core"] },
+
+    // pi-subagents owns all child-process lifecycle. The exact release was
+    // preflighted against Pi 0.84.4: scout uses a strict read/search tool
+    // allowlist, starts fresh, and Orca is only a best-effort observer.
+    "npm:pi-subagents@0.64.0": { "tags": ["core"] },
+    "extensions/subagent-telemetry/subagent-telemetry.ts": {
+      "tags": ["core"],
+      "dest": "extensions/subagent-telemetry/index.ts",
+    },
+    "extensions/subagent-telemetry/config.json": {
+      "tags": ["core"],
+      "dest": "extensions/subagent/config.json",
+    },
+    "agents/scout.md": { "tags": ["core"], "dest": "agents/scout.md" },
 
     // Notify the active pi config dir at startup (which profile loaded).
     "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
