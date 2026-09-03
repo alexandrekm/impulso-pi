@@ -23,6 +23,15 @@ The two things that get commit messages rejected most often are:
 Get both right before you run `git commit`. Do not rely on the hook to catch
 them — compose a conforming message up front.
 
+**Enforcement is automatic on the work profile.** The `commit-guard` pi
+extension hooks the bash tool and intercepts every `git commit` you make: it
+blocks `--no-verify`, and validates the message by running the repo's own
+commitlint when present (exactly what CI runs) or the built-in Motive rules
+otherwise. A non-compliant commit is blocked before it is created — you'll
+see the failing rule and can fix the message and retry, no CI round-trip. So
+the self-check in §4 is now backed by a hard gate, not just guidance. Do not
+try to bypass it (no `--no-verify`, no committing via the GitHub API).
+
 Announce at start: "I'm using the commit skill to write a commitlint-compliant commit message."
 
 ## 0. commitlint rules — check the repo's config first

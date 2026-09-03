@@ -300,6 +300,15 @@ export const FEATURES: Feature[] = [
     kind: "local",
   },
   {
+    id: "commit-guard",
+    tab: "tools",
+    group: "Safety",
+    label: "Commit guard",
+    description:
+      "Enforce commitlint on every git commit (blocks --no-verify; runs the repo's commitlint or the built-in Motive rules). Work-only.",
+    kind: "local",
+  },
+  {
     id: "pi-themes",
     tab: "tools",
     group: "Appearance",

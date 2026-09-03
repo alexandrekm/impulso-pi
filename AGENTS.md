@@ -298,6 +298,20 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
     level, model, transport, image settings…) use `/settings pi`. Pi-native
     settings are owned by pi's SettingsManager and aren't duplicated here.
 
+## Work-profile resources
+
+- `extensions/commit-guard/` — **commitlint enforcement on every `git commit`**
+  (work-only). Hooks the bash `tool_call` (same pattern as command-guard),
+  parses the commit message, blocks `--no-verify`/`-n`, and validates the
+  message by running the repo's own `node_modules/.bin/commitlint` when
+  present (exactly what CI runs) or the built-in Motive rules otherwise
+  (`rules.ts`: `type` ∈ {feat,fix,docs,style,refactor,perf,test,revert,
+  build,ci}, Jira-key scope, no special chars in subject, ≤200 chars). A
+  non-compliant commit is blocked before it is created — no CI round-trip or
+  history rewrite. `--amend` with `-m` is validated; `--amend` without `-m`
+  and force-push pass through (a true pre-tool "warn" isn't expressible in
+  the `tool_call` hook). Reuses `command-guard/engine.ts` (core) for shell
+  peeling/splitting. Toggled in `/settings` → Tools & Safety → Commit guard.
 
 ## Prerequisites
 
