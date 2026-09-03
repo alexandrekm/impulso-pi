@@ -175,6 +175,10 @@ portable.
 | GET    | `/api/stats/memory/sessions` | `{ sessions }` (sessions with memory events) |
 | GET    | `/api/stats/memory/list`   | `{ items, total }` (`?kind=&relevance=&session=&q=&limit=&offset=`) |
 | GET    | `/api/stats/memory/:id`    | single memory detail |
+| GET    | `/api/stats/guards`        | `{ summary, byKind, byModel, timeseries }` (guard blocks) |
+| GET    | `/api/stats/guards/timeseries` | `{ series }` (guard blocks per day) |
+| GET    | `/api/stats/guards/sessions` | `{ sessions }` (sessions with guard blocks) |
+| GET    | `/api/stats/guards/list`   | `{ items, total }` (`?guard=&kind=&session=&q=&limit=&offset=`) |
 | GET    | `/api/stats/recent`        | recent `MessageStats[]` (`?limit=`) |
 | GET    | `/api/stats/errors`        | error `MessageStats[]` (`?limit=`) |
 | GET    | `/api/request/:id`         | `RequestDetails` |
@@ -189,6 +193,15 @@ Phase 2 trigger `reason` / `willRetry` / `tokensAfter` when present) and the
 `om.observations.dropped` custom entries plus the `om.folded` snapshot
 carried through each compaction. No upstream change is needed for the core
 stats — it all reads the session JSONL already on disk.
+
+The **guard** endpoints surface the impulso guard extensions
+(`extensions/commit-guard`, `extensions/command-guard`): every `tool_call`
+hook block is persisted by pi as an error tool result whose first text block
+is the guard's `[<guard name>] reason`, so the parser extracts one
+`guard_events` row per block — guard, coarse `kind` (e.g. `no-verify`,
+`commitlint`, `builtin-rules`, `env-denied`, `denied`), model, the blocked
+command (recovered by linking the result back to the assistant toolCall
+block), and the full reason. Again, no upstream pi change is needed.
 
 The Phase 2 fields (`reason` = `manual` / `threshold` / `overflow`, `willRetry`,
 `tokensAfter`) are persisted only once the upstream pi patch lands (a small
@@ -219,7 +232,10 @@ summary-generation cost),
 **Observational Memory** (memory production, relevance distribution, live
 pool-token growth vs the 20k default, and a searchable/filterable memory
 browser listing individual observations/reflections with their 12-hex
-`memoryId` — the same id `recall()` takes — and a detail pane).
+`memoryId` — the same id `recall()` takes — and a detail pane), and
+**Guards** (commit-guard / command-guard blocks: totals, blocks-per-day
+chart, by-kind and by-model tables, and a searchable, paginated list of the
+blocked commands with their reasons).
 
 > **Note on latency/TTFT:** as of this port, earendil-works pi does not record
 > `duration` / `ttft` on assistant messages, so the Avg Latency, Avg TTFT, and

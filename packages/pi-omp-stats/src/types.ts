@@ -363,6 +363,40 @@ export interface MemoryEventStats {
   folded: boolean;
 }
 
+/**
+ * A guard block extracted from a blocked `toolResult` entry.
+ *
+ * pi persists a `tool_call` hook block as a normal tool result with
+ * `isError: true` whose first text block is the guard's `reason`, prefixed
+ * with the guard's name in square brackets (e.g. `[commit-guard] …`). The
+ * impulso guards (extensions/commit-guard, extensions/command-guard) use
+ * this convention, so the stats layer can surface every blocked agent
+ * action without any upstream pi change.
+ *
+ * `command` is recovered by linking the result's `toolCallId` back to the
+ * assistant `toolCall` block earlier in the same file (null when the parse
+ * chunk started after that block, e.g. a mid-stream incremental sync).
+ * `kind` is a coarse categorisation parsed from the reason text
+ * (see `classifyGuardReason` in the parser).
+ */
+export interface GuardEventStats {
+  id?: number;
+  sessionFile: string;
+  entryId: string;
+  folder: string;
+  timestamp: number;
+  /** Which guard produced the block ("commit-guard", "command-guard", …). */
+  guard: string;
+  /** Coarse reason category (see `classifyGuardReason`). */
+  kind: string;
+  model: string | null;
+  provider: string | null;
+  /** The bash command that was blocked, when recoverable. */
+  command: string | null;
+  /** The guard's full block reason. */
+  reason: string;
+}
+
 export interface ParseSessionResult {
   stats: MessageStats[];
   userStats: UserMessageStats[];
@@ -374,6 +408,9 @@ export interface ParseSessionResult {
   /** Observations / reflections / drops extracted from `om.*` custom entries,
    * plus memories carried through a compaction via `om.folded`. */
   memoryEvents: MemoryEventStats[];
+  /** Guard blocks (commit-guard / command-guard) extracted from blocked
+   * `toolResult` entries. */
+  guardEvents: GuardEventStats[];
   /** Terminal pi-subagents run records extracted from custom entries. */
   subagentRuns: SubagentRunStats[];
   /** Best-known folder/cwd for this session (header cwd, else lossy path decode). */

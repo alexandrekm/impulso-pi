@@ -1038,6 +1038,18 @@
               <line x1="12" y1="17" x2="12.01" y2="17" /></svg
             >Errors
           </button>
+          <button data-tab="guards">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg
+            >Guards
+          </button>
           <button data-tab="behavior">
             <svg
               viewBox="0 0 24 24"
@@ -1200,6 +1212,7 @@
         errorsList = null,
         compaction = null,
         memories = null,
+        guards = null,
         subagents = null;
       let costRange = "7d"; // independent window for the "Cost over time" chart
       let profile = "all";
@@ -1220,6 +1233,7 @@
         requests: "Recent Requests",
         errors: "Errors",
         payloads: "Payloads",
+        guards: "Guards",
         compaction: "Compaction",
         memories: "Observational Memory",
         subagents: "Subagents",
@@ -1861,6 +1875,8 @@
             renderSubagents();
           } else if (tab === "memories") {
             await loadMemories();
+          } else if (tab === "guards") {
+            await loadGuards();
           }
         } catch (e) {
           main.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
@@ -2423,6 +2439,198 @@
           <div class="pl-section" style="margin-top:14px"><h3>Content</h3><div class="content-box">${esc(d.content || "")}</div></div>
           <div class="kpi-note" style="margin-top:10px">session: <code>${esc(d.sessionFile.split("/sessions/").pop() || d.sessionFile)}</code></div>
         </div>`;
+      }
+
+      /* ---------------- Guards panel ---------------- */
+
+      let guardFilters = {
+        guard: "all",
+        kind: "all",
+        session: "all",
+        q: "",
+        offset: 0,
+        limit: 50,
+      };
+      let guardList = { items: [], total: 0 };
+      let guardSessions = [];
+
+      async function loadGuards() {
+        guards = await api("/api/stats/guards?range=" + range());
+        try {
+          const r = await api("/api/stats/guards/sessions");
+          guardSessions = r.sessions || [];
+        } catch (e) {
+          guardSessions = [];
+        }
+        await guardLoadList();
+        renderGuards();
+      }
+
+      function guardQuery() {
+        const p = new URLSearchParams();
+        p.set("guard", guardFilters.guard);
+        p.set("kind", guardFilters.kind);
+        p.set("session", guardFilters.session);
+        if (guardFilters.q.trim()) p.set("q", guardFilters.q.trim());
+        p.set("limit", String(guardFilters.limit));
+        p.set("offset", String(guardFilters.offset));
+        p.set("range", range());
+        return p.toString();
+      }
+
+      async function guardLoadList() {
+        guardList = await api("/api/stats/guards/list?" + guardQuery());
+      }
+
+      function renderGuards() {
+        const s = guards.summary;
+        const cards = `
+    ${card("Guard blocks", fmtNum(s.totalBlocks), "commits + commands stopped before running", "var(--red)")}
+    ${card("Commit-guard", fmtNum(s.commitGuard), "commits blocked", "var(--peach)")}
+    ${card("Command-guard", fmtNum(s.commandGuard), "commands blocked", "var(--yellow)")}
+    ${card("Sessions", fmtNum(s.sessions), "with at least one block", "var(--mauve)")}
+    ${card("Last block", s.lastTimestamp ? fmtDateShort(s.lastTimestamp) : "—", "most recent", "var(--teal)")}
+  `;
+        main.innerHTML = `<div class="cards">${cards}</div>
+    <div class="chart-wrap"><h3>Guard blocks per day</h3><canvas id="guards-freq-chart"></canvas></div>
+    <div class="section-title">Blocked by kind</div>
+    <div id="guards-kind-table"></div>
+    <div class="section-title">By model</div>
+    <div id="guards-model-table"></div>
+    <div class="section-title">Blocked actions</div>
+    <div id="guard-filters"></div>
+    <div id="guard-list"></div>
+    <div class="kpi-note" style="padding:2px 0 0">guards (commit-guard, command-guard) are pi extensions that block a tool call before it runs; every block is persisted as an error tool result in the session JSONL and parsed here with no upstream pi change.</div>
+  `;
+        main.querySelector("#guards-kind-table").innerHTML = table(
+          ["Guard", "Kind", "Blocks", "Last"],
+          guards.byKind.map((k) => [
+            `<span class="model" style="color:var(--accent)">${k.guard}</span>`,
+            k.kind,
+            fmtNum(k.blocks),
+            fmtDateShort(k.lastTimestamp),
+          ]),
+          ["", "", "num", "num"],
+        );
+        main.querySelector("#guards-model-table").innerHTML = table(
+          ["Model", "Blocks", "Commit-guard", "Command-guard"],
+          guards.byModel.map((m) => [
+            `<span class="model" style="color:var(--accent)">${m.model}</span>`,
+            fmtNum(m.blocks),
+            fmtNum(m.commitGuard),
+            fmtNum(m.commandGuard),
+          ]),
+          ["", "num", "num", "num"],
+        );
+        drawGuardFreq(guards.timeseries);
+        guardRenderFilters();
+        guardRenderList();
+      }
+
+      function drawGuardFreq(series) {
+        if (!chartReady || typeof Chart === "undefined" || !series || series.length === 0) return;
+        const labels = series.map((p) => fmtDay(p.timestamp));
+        const ctx = ensureChart("guards-freq-chart");
+        if (!ctx) return;
+        const peach = cssVar("--peach"),
+          yellow = cssVar("--yellow");
+        charts["guards-freq-chart"] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Commit-guard",
+                data: series.map((p) => p.commitGuard),
+                backgroundColor: peach + "a6",
+                stack: "g",
+                borderRadius: 3,
+              },
+              {
+                label: "Command-guard",
+                data: series.map((p) => p.commandGuard),
+                backgroundColor: yellow + "a6",
+                stack: "g",
+                borderRadius: 3,
+              },
+            ],
+          },
+          options: stacked(yTitle(baseChartOpts(), "Blocked calls")),
+        });
+      }
+
+      function guardRenderFilters() {
+        const wrap = main.querySelector("#guard-filters");
+        if (!wrap) return;
+        const pages = Math.max(1, Math.ceil(guardList.total / guardFilters.limit));
+        const page = Math.floor(guardFilters.offset / guardFilters.limit) + 1;
+        const kinds = [...new Set(guards.byKind.map((k) => k.kind))];
+        const sel = (cur, opts) =>
+          opts
+            .map((o) => `<option value="${o.v}"${o.v === cur ? " selected" : ""}>${o.l}</option>`)
+            .join("");
+        wrap.className = "mem-filters";
+        wrap.innerHTML = `
+          <span class="lbl">Guard</span><select id="guard-guard">${sel(guardFilters.guard, [
+            { v: "all", l: "all" },
+            { v: "commit-guard", l: "commit-guard" },
+            { v: "command-guard", l: "command-guard" },
+          ])}</select>
+          <span class="lbl">Kind</span><select id="guard-kind">${sel(guardFilters.kind, [
+            { v: "all", l: "all" },
+            ...kinds.map((k) => ({ v: k, l: k })),
+          ])}</select>
+          <span class="lbl">Session</span><select id="guard-session">${sel(guardFilters.session, [{ v: "all", l: "all" }, ...guardSessions.map((s) => ({ v: s, l: s.split("/sessions/").pop() || s }))])}</select>
+          <input type="text" id="guard-q" placeholder="search command/reason…" value="${esc(guardFilters.q)}">
+          <button class="btn" id="guard-search-btn">Search</button>
+          <span class="pages"><button id="guard-prev" ${guardFilters.offset === 0 ? "disabled" : ""}>‹ prev</button><span>${guardList.total ? page + "/" + pages : "0"} · ${fmtNum(guardList.total)} rows</span><button id="guard-next" ${guardFilters.offset + guardFilters.limit >= guardList.total ? "disabled" : ""}>next ›</button></span>
+        `;
+        const apply = () => {
+          guardFilters.guard = $("#guard-guard").value;
+          guardFilters.kind = $("#guard-kind").value;
+          guardFilters.session = $("#guard-session").value;
+          guardFilters.q = $("#guard-q").value;
+          guardFilters.offset = 0;
+          guardLoadList().then(renderGuards);
+        };
+        $("#guard-search-btn").addEventListener("click", apply);
+        $("#guard-q").addEventListener("keydown", (e) => {
+          if (e.key === "Enter") apply();
+        });
+        $("#guard-guard").addEventListener("change", apply);
+        $("#guard-kind").addEventListener("change", apply);
+        $("#guard-session").addEventListener("change", apply);
+        $("#guard-prev").addEventListener("click", () => {
+          guardFilters.offset = Math.max(0, guardFilters.offset - guardFilters.limit);
+          guardLoadList().then(renderGuards);
+        });
+        $("#guard-next").addEventListener("click", () => {
+          if (guardFilters.offset + guardFilters.limit < guardList.total) {
+            guardFilters.offset += guardFilters.limit;
+            guardLoadList().then(renderGuards);
+          }
+        });
+      }
+
+      function guardRenderList() {
+        const wrap = main.querySelector("#guard-list");
+        if (!wrap) return;
+        if (!guardList.items || guardList.items.length === 0) {
+          wrap.innerHTML = `<div class="pl-empty">No guard blocks match these filters.</div>`;
+          return;
+        }
+        wrap.innerHTML = table(
+          ["When", "Guard", "Kind", "Model", "Command", "Reason"],
+          guardList.items.map((g) => [
+            fmtDateShort(g.timestamp),
+            `<span class="model" style="color:var(--accent)">${g.guard}</span>`,
+            g.kind,
+            g.model || "—",
+            `<span class="folder truncate" title="${esc(g.command || "")}">${esc(shorten(g.command || "—", 60))}</span>`,
+            `<span class="folder truncate" title="${esc(g.reason || "")}">${esc(shorten((g.reason || "").replace(/^\[\w+-guard\]\s*/, ""), 90))}</span>`,
+          ]),
+          ["", "", "", "", "", ""],
+        );
       }
 
       function renderRecent(rows, isErrors) {
@@ -2989,7 +3197,7 @@
       $("#profile-select").addEventListener("change", (event) => {
         profile = event.target.value;
         stats = behavior = tools = providers = recent = errorsList = null;
-        compaction = memories = subagents = null;
+        compaction = memories = subagents = guards = null;
         memSelectedId = null;
         refreshAll();
       });

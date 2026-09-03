@@ -70,3 +70,12 @@ after toggling).
 - `parse.ts` — `git commit` extraction + shell tokenizer.
 - `rules.ts` — built-in Motive commitlint rules + `validateMessage`.
 - `commit-guard.test.ts` — `node --test` unit tests.
+
+## Observability
+
+Blocks are visible in the `pi-omp-stats` dashboard's **Guards** panel: pi
+persists every `tool_call` block as an error tool result whose first text
+block is the `[commit-guard]` reason, and `pi-omp-stats` parses those into
+`guard_events` rows (guard, kind, model, blocked command, reason) served via
+`/api/stats/guards*` — no upstream pi change and no explicit emit needed
+here.

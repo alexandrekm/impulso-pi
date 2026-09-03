@@ -35,6 +35,7 @@ import type {
   CompactionStats,
   CostTimeSeriesPoint,
   FolderStats,
+  GuardEventStats,
   MemoryEventStats,
   MemoryKind,
   MessageStats,
@@ -267,6 +268,28 @@ export async function initDb(): Promise<DatabaseSync> {
 		CREATE INDEX IF NOT EXISTS idx_memory_events_session ON memory_events(session_file);
 		CREATE INDEX IF NOT EXISTS idx_memory_events_memory_id ON memory_events(memory_id);
 
+		-- Guard blocks (impulso-pi). One row per commit-guard / command-guard
+		-- block: pi persists a 'tool_call' hook block as an error toolResult
+		-- whose first text block is the guard's reason, prefixed '[<guard>]'.
+		-- 'kind' is a coarse category parsed from the reason text.
+		CREATE TABLE IF NOT EXISTS guard_events (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_file TEXT NOT NULL,
+			entry_id TEXT NOT NULL,
+			folder TEXT NOT NULL,
+			timestamp INTEGER NOT NULL,
+			guard TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			model TEXT,
+			provider TEXT,
+			command TEXT,
+			reason TEXT,
+			UNIQUE(session_file, entry_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_guard_events_timestamp ON guard_events(timestamp);
+		CREATE INDEX IF NOT EXISTS idx_guard_events_guard ON guard_events(guard);
+		CREATE INDEX IF NOT EXISTS idx_guard_events_kind ON guard_events(kind);
+		CREATE INDEX IF NOT EXISTS idx_guard_events_session ON guard_events(session_file);
 
 		-- Passive pi-subagents lifecycle records. No task text, child output, or
 		-- artifact path is stored: these are aggregate-safe terminal metadata only.
@@ -302,8 +325,8 @@ export async function initDb(): Promise<DatabaseSync> {
   // On mismatch we reset every file offset so the next sync re-parses all
   // files once — the dedup guards make the re-inserts idempotent, and parsing
   // is cheap. Without this, a pre-existing DB would never backfill the new
-  // compaction/memory tables from files whose mtime is unchanged.
-  const SCHEMA_VERSION = "4-subagent-runs";
+  // compaction/memory/guard/subagent tables from files whose mtime is unchanged.
+  const SCHEMA_VERSION = "5-guard-subagent-events";
   const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
     { value: string } | undefined;
   if (db && (!row || row.value !== SCHEMA_VERSION)) {
@@ -415,6 +438,7 @@ export function relabelSessionFolder(sessionFile: string, folder: string): void 
     "tool_calls",
     "compaction_stats",
     "memory_events",
+    "guard_events",
   ]) {
     db.prepare(`UPDATE ${table} SET folder = ? WHERE session_file = ?`).run(folder, sessionFile);
   }
@@ -707,6 +731,49 @@ export function insertMemoryEvents(events: MemoryEventStats[]): number {
         e.content,
         e.sourceCount,
         e.folded ? 1 : 0,
+      );
+      if (Number(result.changes) > 0) inserted++;
+    }
+  });
+  return inserted;
+}
+
+/** Insert guard-block rows (commit-guard / command-guard). Idempotent
+ *  upsert on `UNIQUE(session_file, entry_id)`; the fork-style `WHERE NOT
+ *  EXISTS` guard skips cross-lineage duplicates from forked sessions that
+ *  deep-copy a parent's entries. */
+export function insertGuardEvents(events: GuardEventStats[]): number {
+  if (!db || events.length === 0) return 0;
+  const stmt = db.prepare(`
+		INSERT INTO guard_events (
+			session_file, entry_id, folder, timestamp, guard, kind,
+			model, provider, command, reason
+		)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		WHERE NOT EXISTS (
+			SELECT 1 FROM guard_events
+			WHERE entry_id = ? AND timestamp = ? AND session_file <> ?
+		)
+		ON CONFLICT(session_file, entry_id) DO NOTHING
+	`);
+  let inserted = 0;
+  tx(() => {
+    for (const e of events) {
+      const result = stmt.run(
+        e.sessionFile,
+        e.entryId,
+        e.folder,
+        e.timestamp,
+        e.guard,
+        e.kind,
+        e.model,
+        e.provider,
+        e.command,
+        e.reason,
+        // `WHERE NOT EXISTS` binds.
+        e.entryId,
+        e.timestamp,
+        e.sessionFile,
       );
       if (Number(result.changes) > 0) inserted++;
     }
@@ -2379,6 +2446,275 @@ export function listMemorySessions(): string[] {
   if (!db) return [];
   const rows = db
     .prepare("SELECT DISTINCT session_file FROM memory_events ORDER BY session_file")
+    .all() as unknown as Array<{ session_file: string }>;
+  return rows.map((r) => r.session_file);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Guard-block queries (impulso-pi)                                          */
+/* -------------------------------------------------------------------------- */
+
+export interface GuardSummary {
+  totalBlocks: number;
+  commitGuard: number;
+  commandGuard: number;
+  sessions: number;
+  firstTimestamp: number;
+  lastTimestamp: number;
+}
+
+export function getGuardSummary(cutoff?: number | null): GuardSummary {
+  const empty: GuardSummary = {
+    totalBlocks: 0,
+    commitGuard: 0,
+    commandGuard: 0,
+    sessions: 0,
+    firstTimestamp: 0,
+    lastTimestamp: 0,
+  };
+  if (!db) return empty;
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT COUNT(*) as total_blocks,
+			SUM(CASE WHEN guard = 'commit-guard' THEN 1 ELSE 0 END) as commit_guard,
+			SUM(CASE WHEN guard = 'command-guard' THEN 1 ELSE 0 END) as command_guard,
+			COUNT(DISTINCT session_file) as sessions,
+			MIN(timestamp) as first_timestamp,
+			MAX(timestamp) as last_timestamp
+		FROM guard_events
+		${hasCutoff ? "WHERE timestamp >= ?" : ""}
+	`;
+  const row = (hasCutoff ? db.prepare(sql).get(cutoff) : db.prepare(sql).get()) as
+    | {
+        total_blocks: number | null;
+        commit_guard: number | null;
+        command_guard: number | null;
+        sessions: number | null;
+        first_timestamp: number | null;
+        last_timestamp: number | null;
+      }
+    | undefined;
+  if (!row || !row.total_blocks) return empty;
+  return {
+    totalBlocks: row.total_blocks,
+    commitGuard: row.commit_guard ?? 0,
+    commandGuard: row.command_guard ?? 0,
+    sessions: row.sessions ?? 0,
+    firstTimestamp: row.first_timestamp ?? 0,
+    lastTimestamp: row.last_timestamp ?? 0,
+  };
+}
+
+export interface GuardByKind {
+  guard: string;
+  kind: string;
+  blocks: number;
+  lastTimestamp: number;
+}
+
+export function getGuardByKind(cutoff?: number | null): GuardByKind[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT guard, kind, COUNT(*) as blocks, MAX(timestamp) as last_timestamp
+		FROM guard_events
+		${hasCutoff ? "WHERE timestamp >= ?" : ""}
+		GROUP BY guard, kind
+		ORDER BY guard, blocks DESC
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(cutoff)
+    : db.prepare(sql).all()) as unknown as Array<{
+    guard: string;
+    kind: string;
+    blocks: number;
+    last_timestamp: number;
+  }>;
+  return rows.map((r) => ({
+    guard: r.guard,
+    kind: r.kind,
+    blocks: r.blocks,
+    lastTimestamp: r.last_timestamp,
+  }));
+}
+
+export interface GuardByModel {
+  model: string;
+  blocks: number;
+  commitGuard: number;
+  commandGuard: number;
+}
+
+export function getGuardByModel(cutoff?: number | null): GuardByModel[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT COALESCE(model, 'unknown') as model,
+			COUNT(*) as blocks,
+			SUM(CASE WHEN guard = 'commit-guard' THEN 1 ELSE 0 END) as commit_guard,
+			SUM(CASE WHEN guard = 'command-guard' THEN 1 ELSE 0 END) as command_guard
+		FROM guard_events
+		${hasCutoff ? "WHERE timestamp >= ?" : ""}
+		GROUP BY model
+		ORDER BY blocks DESC
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(cutoff)
+    : db.prepare(sql).all()) as unknown as Array<{
+    model: string;
+    blocks: number;
+    commit_guard: number | null;
+    command_guard: number | null;
+  }>;
+  return rows.map((r) => ({
+    model: r.model,
+    blocks: r.blocks,
+    commitGuard: r.commit_guard ?? 0,
+    commandGuard: r.command_guard ?? 0,
+  }));
+}
+
+export interface GuardByDay {
+  timestamp: number;
+  commitGuard: number;
+  commandGuard: number;
+}
+
+export function getGuardTimeseries(
+  days = 14,
+  cutoff?: number | null,
+  bucketMs = 24 * 60 * 60 * 1000,
+): GuardByDay[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null;
+  const seriesCutoff = hasCutoff ? (cutoff ?? Date.now() - days * 24 * 60 * 60 * 1000) : 0;
+  const sql = `
+		SELECT (timestamp / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket,
+			SUM(CASE WHEN guard = 'commit-guard' THEN 1 ELSE 0 END) as commit_guard,
+			SUM(CASE WHEN guard = 'command-guard' THEN 1 ELSE 0 END) as command_guard
+		FROM guard_events
+		${hasCutoff ? "WHERE timestamp >= ?" : ""}
+		GROUP BY bucket
+		ORDER BY bucket ASC
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(bucketMs, bucketMs, seriesCutoff)
+    : db.prepare(sql).all(bucketMs, bucketMs)) as unknown as Array<{
+    bucket: number;
+    commit_guard: number | null;
+    command_guard: number | null;
+  }>;
+  return rows.map((r) => ({
+    timestamp: r.bucket,
+    commitGuard: r.commit_guard ?? 0,
+    commandGuard: r.command_guard ?? 0,
+  }));
+}
+
+export interface GuardListItem {
+  id: number;
+  sessionFile: string;
+  entryId: string;
+  folder: string;
+  timestamp: number;
+  guard: string;
+  kind: string;
+  model: string | null;
+  provider: string | null;
+  command: string | null;
+  reason: string | null;
+}
+
+export interface GuardListOptions {
+  guard?: string | null;
+  kind?: string | null;
+  session?: string | null;
+  q?: string | null;
+  limit?: number;
+  offset?: number;
+  cutoff?: number | null;
+}
+
+export interface GuardListResult {
+  items: GuardListItem[];
+  total: number;
+}
+
+export function listGuardEvents(opts: GuardListOptions = {}): GuardListResult {
+  if (!db) return { items: [], total: 0 };
+  const where: string[] = [];
+  const binds: (string | number | null)[] = [];
+  if (opts.guard && opts.guard !== "all") {
+    where.push("guard = ?");
+    binds.push(opts.guard);
+  }
+  if (opts.kind && opts.kind !== "all") {
+    where.push("kind = ?");
+    binds.push(opts.kind);
+  }
+  if (opts.session && opts.session !== "all") {
+    where.push("session_file = ?");
+    binds.push(opts.session);
+  }
+  if (opts.q && opts.q.trim()) {
+    where.push("(command LIKE ? OR reason LIKE ?)");
+    const needle = `%${opts.q.trim()}%`;
+    binds.push(needle, needle);
+  }
+  if (opts.cutoff != null && opts.cutoff > 0) {
+    where.push("timestamp >= ?");
+    binds.push(opts.cutoff);
+  }
+  const whereSql = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const limit = Math.max(1, Math.min(500, opts.limit ?? 100));
+  const offset = Math.max(0, opts.offset ?? 0);
+  const total = (
+    db.prepare(`SELECT COUNT(*) as total FROM guard_events ${whereSql}`).get(...binds) as {
+      total: number;
+    }
+  ).total;
+  const listSql = `
+		SELECT id, session_file, entry_id, folder, timestamp, guard, kind,
+			model, provider, command, reason
+		FROM guard_events
+		${whereSql}
+		ORDER BY timestamp DESC, id DESC
+		LIMIT ? OFFSET ?
+	`;
+  const rows = db.prepare(listSql).all(...binds, limit, offset) as unknown as Array<{
+    id: number;
+    session_file: string;
+    entry_id: string;
+    folder: string;
+    timestamp: number;
+    guard: string;
+    kind: string;
+    model: string | null;
+    provider: string | null;
+    command: string | null;
+    reason: string | null;
+  }>;
+  const items: GuardListItem[] = rows.map((r) => ({
+    id: r.id,
+    sessionFile: r.session_file,
+    entryId: r.entry_id,
+    folder: r.folder,
+    timestamp: r.timestamp,
+    guard: r.guard,
+    kind: r.kind,
+    model: r.model,
+    provider: r.provider,
+    command: r.command,
+    reason: r.reason,
+  }));
+  return { items, total };
+}
+
+/** Distinct session files that have guard events (for the browser filter). */
+export function listGuardSessions(): string[] {
+  if (!db) return [];
+  const rows = db
+    .prepare("SELECT DISTINCT session_file FROM guard_events ORDER BY session_file")
     .all() as unknown as Array<{ session_file: string }>;
   return rows.map((r) => r.session_file);
 }

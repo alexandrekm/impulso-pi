@@ -27,6 +27,9 @@ import {
   getMemoryDetail,
   getMemoryList,
   getMemorySessions,
+  getGuardDashboardStats,
+  getGuardList,
+  getGuardSessions,
   getOverviewStats,
   getProviderDashboardStats,
   getRecentErrors,
@@ -179,6 +182,36 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
         range,
         kind,
         relevance,
+        session,
+        q,
+        limit: limit ? parseInt(limit, 10) : undefined,
+        offset: offset ? parseInt(offset, 10) : undefined,
+      }),
+    );
+  }
+
+  if (pathname === "/api/stats/guards")
+    return sendJson(res, 200, await getGuardDashboardStats(range));
+  if (pathname === "/api/stats/guards/timeseries")
+    return sendJson(res, 200, {
+      series: (await getGuardDashboardStats(range)).timeseries,
+    });
+  if (pathname === "/api/stats/guards/sessions")
+    return sendJson(res, 200, { sessions: await getGuardSessions() });
+  if (pathname === "/api/stats/guards/list") {
+    const guard = url.searchParams.get("guard");
+    const kind = url.searchParams.get("kind");
+    const session = url.searchParams.get("session");
+    const q = url.searchParams.get("q");
+    const limit = url.searchParams.get("limit");
+    const offset = url.searchParams.get("offset");
+    return sendJson(
+      res,
+      200,
+      await getGuardList({
+        range,
+        guard,
+        kind,
         session,
         q,
         limit: limit ? parseInt(limit, 10) : undefined,
