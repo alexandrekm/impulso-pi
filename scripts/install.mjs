@@ -740,10 +740,11 @@ export function doInstallSettings(t, profiles) {
   }
   let merged = current;
   const changed = [];
-  // Managed keys: overwrite (repo-owned).
+  // Managed keys: overwrite (repo-owned). Compare by value so object-valued
+  // settings (e.g. subagents) are idempotent across syncs.
   if (hasManaged) {
     for (const [k, val] of Object.entries(settings)) {
-      if (current[k] !== val) changed.push(k);
+      if (JSON.stringify(current[k]) !== JSON.stringify(val)) changed.push(k);
       merged = { ...merged, [k]: val };
     }
   }
