@@ -15,12 +15,19 @@
     // Catppuccin Mocha, from the pi-themes package (git: below).
     "theme": "catppuccin-mocha",
 
-    // Initial rollout exposes only our custom read-only scout; package-built
-    // worker/reviewer/etc. roles stay undiscoverable until a later, explicit
-    // expansion. This managed safety boundary is re-applied on every sync.
-    "subagents": {
-      "disableBuiltins": true,
-    },
+    // Default model — repo-owned, re-applied on every sync. In-session
+    // model changes (picker, /model <name>, Ctrl+P) stay session-only in
+    // pi 0.84.4 and never rewrite this. Change the default by editing
+    // these two lines + `./install.sh`.
+    "defaultProvider": "openrouter",
+    "defaultModel": "z-ai/glm-5.3",
+
+    // Ctrl+P model-cycle shortlist (--models format: exact ids or globs,
+    // optional :thinking suffix; matched against provider/id or bare id).
+    // Order = cycle order. Repo-owned like the keys above: edit +
+    // `./install.sh` to change. :batch variants are separate ids and are
+    // not matched by the exact forms below.
+    "enabledModels": ["moonshotai/kimi-k3", "anthropic/claude-sonnet-5", "anthropic/claude-opus-5"],
   },
 
   // DEFAULT settings — deep fill-only: a key (and nested sub-keys) is
@@ -39,7 +46,26 @@
     // to `calibrated` — install only fills these when absent, never resets.
     "observational-memory": {
       "compactAfterTokensMode": "ratio",
-      "compactAfterTokensRatio": 0.9,
+      "compactAfterTokensRatio": 0.6,
+    },
+
+    // pi-subagents: seeded here (fill-only) instead of managed `settings` so
+    // each profile can pick its own scout model locally in settings.json
+    // without the next install reverting it (managed keys overwrite
+    // whole-key; defaults never reset existing values). Fresh machines get
+    // the same starting point: builtin agent roles disabled (custom
+    // read-only scout only) and a fast recon tier on scout. agentOverrides
+    // beats agent frontmatter, so agents/scout.md stays vendor-neutral.
+    // Trade-off: disableBuiltins is seed-only — it is no longer re-applied
+    // if you flip it off yourself.
+    "subagents": {
+      "disableBuiltins": true,
+      "agentOverrides": {
+        "scout": {
+          "model": "google/gemini-3.8-flash",
+          "thinking": "low",
+        },
+      },
     },
   },
 
@@ -336,7 +362,9 @@
     // are set, so they're inert outside an Orca-launched terminal.
     "extensions/orca-integration/orca-agent-status.ts": { "tags": ["core"] },
     "extensions/orca-integration/orca-prefill.ts": { "tags": ["core"] },
-    "extensions/orca-integration/orca-titlebar-spinner.ts": { "tags": ["core"] },
+    "extensions/orca-integration/orca-titlebar-spinner.ts": {
+      "tags": ["core"],
+    },
     "extensions/herdr/herdr-agent-state.ts": { "tags": ["core"] },
 
     // address-pr-comments: one-pass workflow to fetch, evaluate, and act on

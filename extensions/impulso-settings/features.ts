@@ -55,8 +55,11 @@ export interface Feature {
   /** For `config`: a JSON file name relative to <configDir> (e.g. "pi-btw.json").
    *  The feature reads/writes a top-level key in that file. */
   configFile?: string;
-  /** For `config`: whether the value is picked via a searchable overlay
-   *  (large/dynamic lists like models) rather than cycled in-row. */
+  /** For `config` and `pi-setting`: whether the value is picked via a
+   *  searchable overlay (large/dynamic lists like models) rather than cycled
+   *  in-row. For `pi-setting`, pair with `modelKey` for a composite
+   *  {provider,id} object, or with a plain `key` for a free-form string
+   *  value (e.g. a `provider/id` model stored as a string). */
   picker?: boolean;
   /** For `pi-setting` + `picker`: base dotted path of a composite
    *  `{ provider, id[, thinking] }` model object in settings.json. The picker
@@ -229,6 +232,28 @@ export const FEATURES: Feature[] = [
     description:
       "Passive local recorder for bounded run metadata in the parent session; powers the local pi-omp-stats Subagents API. Reload after changing this.",
     kind: "local",
+  },
+  {
+    id: "subagents-scout-model",
+    tab: "tools",
+    group: "Subagents",
+    label: "Scout model…",
+    description:
+      "Model for the read-only scout subagent. 'Same as main session' (key absent) inherits the parent session model; pick a fast tier to keep recon cheap. Per-profile and survives install syncs (seeded fill-only from profiles.jsonc settingsDefaults). settings.json subagents.agentOverrides.scout.model. Reload or start a new session after changing this.",
+    kind: "pi-setting",
+    key: "subagents.agentOverrides.scout.model",
+    picker: true,
+  },
+  {
+    id: "subagents-scout-thinking",
+    tab: "tools",
+    group: "Subagents",
+    label: "Scout thinking",
+    description:
+      "Reasoning level for the scout model. 'Same as main session' (key absent) uses the model's default. settings.json subagents.agentOverrides.scout.thinking. Reload or start a new session after changing this.",
+    kind: "pi-setting",
+    key: "subagents.agentOverrides.scout.thinking",
+    values: ["", "off", "minimal", "low", "medium", "high", "xhigh", "max"],
   },
   {
     id: "vision-handoff",
@@ -655,6 +680,22 @@ function setByPath(obj: Json, dotted: string, value: unknown): void {
   cur[parts[parts.length - 1]] = value;
 }
 
+/** Delete the leaf key at a dotted path, keeping intermediate objects. */
+function deleteByPath(obj: Json, dotted: string): void {
+  const parts = dotted.split(".");
+  let cur: unknown = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const p = parts[i];
+    if (cur && typeof cur === "object" && !Array.isArray(cur)) {
+      cur = (cur as Json)[p];
+    } else {
+      return;
+    }
+  }
+  if (cur && typeof cur === "object" && !Array.isArray(cur)) {
+    delete (cur as Json)[parts[parts.length - 1]];
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────
 // State read / apply
 // ─────────────────────────────────────────────────────────────────────────
@@ -714,6 +755,15 @@ export function getFeatureState(f: Feature): string {
     }
     return "";
   }
+  if (f.picker && f.key) {
+    // Plain-string picker (no modelKey): free-form value (e.g. a model id);
+    // "" means the key is absent / "same as main". A picker feature without
+    // a key is a registry misconfiguration — degrade to "" instead of
+    // crashing on an undefined path.
+    const raw = getByPath(readSettings(), f.key);
+    return raw === undefined ? "" : String(raw);
+  }
+  if (f.picker) return "";
   const raw = getByPath(readSettings(), f.key!);
   const isBool =
     !f.values ||
@@ -798,12 +848,27 @@ export function setFeatureState(f: Feature, value: string): void {
     writeSettings(data);
     return;
   }
+  if (f.picker) {
+    // Plain-string picker (no modelKey). A picker feature without a key
+    // is a registry misconfiguration — no-op instead of writing to an
+    // undefined path.
+    if (f.key) {
+      // "" removes the key so the default chain applies again.
+      if (value === "") deleteByPath(data, f.key);
+      else setByPath(data, f.key, value);
+      writeSettings(data);
+    }
+    return;
+  }
   const isBool =
     !f.values ||
     f.values.length === 0 ||
     (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
   if (isBool) {
     setByPath(data, f.key!, value === "on");
+  } else if (value === "") {
+    // "" is the "same as main / use default" sentinel: remove the key.
+    deleteByPath(data, f.key!);
   } else {
     setByPath(data, f.key!, value);
   }
