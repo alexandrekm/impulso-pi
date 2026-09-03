@@ -11,7 +11,7 @@
     "format:check": "prettier --check .",
     "check:json": "node scripts/check-json.mjs",
     "check:upstream-prompt": "node scripts/check-upstream-prompt.mjs",
-    "test": "node --test --experimental-strip-types extensions/command-guard/*.test.ts"
+    "test": "node --test --experimental-strip-types extensions/command-guard/*.test.ts extensions/commit-guard/*.test.ts"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.1",

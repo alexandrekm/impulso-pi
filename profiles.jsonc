@@ -197,6 +197,26 @@
       "dest": "extensions/command-guard/command-guard.json",
     },
 
+    // commit-guard: enforces commitlint on every `git commit` the agent
+    // makes (work-only). Hooks the bash tool_call, parses the commit
+    // message, blocks --no-verify, and validates the message — running
+    // the repo's own commitlint when present (matching CI) or the built-in
+    // Motive rules otherwise. Mirrors command-guard's interception pattern;
+    // reuses command-guard/engine.ts (core, always present) for shell
+    // peeling/splitting. See extensions/commit-guard/README.md.
+    "extensions/commit-guard/commit-guard.ts": {
+      "tags": ["work"],
+      "dest": "extensions/commit-guard/index.ts",
+    },
+    "extensions/commit-guard/parse.ts": {
+      "tags": ["work"],
+      "dest": "extensions/commit-guard/parse.ts",
+    },
+    "extensions/commit-guard/rules.ts": {
+      "tags": ["work"],
+      "dest": "extensions/commit-guard/rules.ts",
+    },
+
     // Cursor models (Claude/GPT/Gemini/Grok/Composer) as a pi provider via
     // @rahularya01/pi-cursor. OAuth login (/login cursor), live GetUsableModels
     // discovery, native Connect/protobuf streaming over HTTP/2, and a tool
