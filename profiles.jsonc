@@ -46,7 +46,7 @@
     // to `calibrated` — install only fills these when absent, never resets.
     "observational-memory": {
       "compactAfterTokensMode": "ratio",
-      "compactAfterTokensRatio": 0.9,
+      "compactAfterTokensRatio": 0.6,
     },
 
     // pi-subagents: seeded here (fill-only) instead of managed `settings` so
