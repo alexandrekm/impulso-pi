@@ -10,6 +10,7 @@ export type SegmentKey =
   | "prStatus"
   | "ciStatus"
   | "contextUsage"
+  | "mode"
 
 export interface FooterSettings {
   segments: Record<SegmentKey, boolean>;
@@ -45,6 +46,8 @@ export interface FooterInput {
   prStatus: string | null;
   /** CI check summary for the PR head ref, e.g. "✅", "❌2", "⏳"; null if none/unavailable. */
   ciStatus: string | null;
+  /** Current /mode (from <configDir>/mode.json); null when the modes extension is absent. */
+  mode: string | null;
   settings: FooterSettings;
   theme: PiTheme;
   /** Subscription usage bars data, fetched on session_start and periodically */

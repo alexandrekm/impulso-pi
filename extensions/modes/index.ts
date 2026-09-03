@@ -6,13 +6,16 @@
 // but the mechanism is generic — add modes to config.json and the extension
 // extension picks them up.
 //
-//   /mode             show current mode
+//   /mode             flip code <-> doc (toggle)
+//   /mode status      show current mode
 //   /mode code        switch to code mode (default)
 //   /mode doc         switch to doc mode
 //   /mode toggle      flip code <-> doc
 //
-// State persists in <configDir>/mode.json ({ mode: "code" | "doc" }). The mode
-// is read fresh on every turn inside `before_agent_start`, so switching takes
+// State persists in <configDir>/mode.json ({ mode: "code" | "doc" }) but is
+// reset to the config `default` (code) on every session_start — the mode is
+// per-session, not a sticky cross-session preference. The mode is read
+// fresh on every turn inside `before_agent_start`, so switching takes
 // effect on the next user message — no `/reload` needed.
 //
 // Gating is declared in ./config.json under `gated`: a map of skill name -> the
@@ -165,6 +168,14 @@ function rewriteSkillsBlocks(prompt: string, skills: any[]): string {
 export default function (pi: any): void {
   if (!isFeatureEnabled("modes")) return;
 
+  // A session always starts in the default mode (code). mode.json is
+  // within-session state, not a cross-session preference: /mode is for
+  // temporarily flipping mid-session, and the next session starts clean.
+  pi.on("session_start", async () => {
+    const cfg = readConfig();
+    if (readMode() !== cfg.default) writeMode(cfg.default);
+  });
+
   // Gate the discovered skills for the current mode on every turn.
   pi.on("before_agent_start", async (event: any) => {
     const mode = readMode();
@@ -192,9 +203,10 @@ export default function (pi: any): void {
     }
   });
 
-  // /mode [code|doc|toggle|status] — switch the mode.
+  // /mode [code|doc|toggle|status] — bare /mode toggles.
   pi.registerCommand("mode", {
-    description: "Switch skill mode (code | doc). Usage: /mode [code|doc|toggle|status]",
+    description:
+      "Switch skill mode (code | doc). Bare /mode toggles; also: /mode [code|doc|toggle|status]",
     getArgumentCompletions: (prefix: string) => {
       const cfg = readConfig();
       const options = [...cfg.modes, "toggle", "status"];
@@ -203,12 +215,12 @@ export default function (pi: any): void {
     },
     handler: async (args: string, ctx: any) => {
       const cfg = readConfig();
-      const action = (args.trim().toLowerCase() || "status") as string;
+      const action = args.trim().toLowerCase();
 
       let mode = readMode();
       if (action === "status") {
         // just report
-      } else if (action === "toggle") {
+      } else if (action === "" || action === "toggle") {
         const idx = cfg.modes.indexOf(mode);
         mode = cfg.modes[(idx + 1) % cfg.modes.length];
         writeMode(mode);

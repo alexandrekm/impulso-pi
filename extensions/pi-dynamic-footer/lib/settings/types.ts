@@ -3,6 +3,7 @@ export type SegmentKey =
   | "runtime"
   | "pwd"
   | "git"
+  | "mode"
   | "contextUsage"
   | "contextProgress"
   | "contextPercentage"

@@ -18,8 +18,10 @@
  *   /obs-settings - Open status bar settings (presets, segments, zones)
  */
 
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type {
   ExtensionAPI,
@@ -629,6 +631,48 @@ export default function (pi: ExtensionAPI) {
       let diffAdded = 0;
       let diffRemoved = 0;
 
+      // Current /mode (modes extension). State lives in <configDir>/mode.json;
+      // falls back to the `default` in extensions/modes/config.json when no
+      // state file exists, and to null when the modes extension isn't synced
+      // to this profile (segment hidden). Polled on the 1s diff timer — the
+      // /mode command writes the file, so the footer picks it up within a
+      // second without any cross-extension wiring.
+      // NOTE: this file is at extensions/pi-dynamic-footer/observability.ts —
+      // three dirname()s to reach <configDir> (modes' index.ts is one level
+      // shallower and gets away with two).
+      const CONFIG_DIR =
+        process.env.PI_CODING_AGENT_DIR ||
+        dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+      const MODE_STATE_PATH = join(CONFIG_DIR, "mode.json");
+      const MODE_CONFIG_PATH = join(CONFIG_DIR, "extensions", "modes", "config.json");
+
+      function readCurrentMode(): string | null {
+        try {
+          const data = JSON.parse(readFileSync(MODE_STATE_PATH, "utf8")) as { mode?: unknown };
+          if (typeof data.mode === "string" && data.mode) return data.mode;
+        } catch {
+          // no state file yet — fall back to the configured default
+        }
+        try {
+          const cfg = JSON.parse(readFileSync(MODE_CONFIG_PATH, "utf8")) as {
+            default?: unknown;
+          };
+          if (typeof cfg.default === "string" && cfg.default) return cfg.default;
+        } catch {
+          // modes extension not installed on this profile
+        }
+        return null;
+      }
+
+      let currentMode: string | null = readCurrentMode();
+      function refreshMode(): void {
+        const mode = readCurrentMode();
+        if (mode !== currentMode) {
+          currentMode = mode;
+          tui.requestRender();
+        }
+      }
+
       let diffRefreshInFlight = false;
       async function refreshDiff() {
         if (diffRefreshInFlight) return;
@@ -673,6 +717,7 @@ export default function (pi: ExtensionAPI) {
 
       const timer = setInterval(() => {
         void refreshDiff();
+        refreshMode();
       }, 1000);
 
       // Periodic quota refresh every 5 minutes (fetchQuota handles its own cache)
@@ -810,6 +855,7 @@ export default function (pi: ExtensionAPI) {
             gitDiffRemoved: diffRemoved,
             prStatus,
             ciStatus,
+            mode: currentMode,
             settings: state.settings,
             theme,
             quotaUsage: state.quotaUsage,
