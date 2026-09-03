@@ -1060,9 +1060,12 @@ export async function maybeOfferStatsService(freshlyInstalled, yes, profilesMode
     // serves stale assets (e.g. missing new panels after an upgrade).
     if (profilesMode) {
       // Re-bake PI_STATS_PROFILES_DIR into the plist/unit first, in case
-      // the profile set changed since last install.
+      // the profile set changed since last install. Preserve the existing
+      // port/host so a user override (e.g. --port 3848 to dodge a port
+      // already taken by another process) survives the refresh.
       console.log("==> pi-omp-stats service install (refresh profile discovery)");
-      const ins = spawnSync("pi-omp-stats", ["service", "install"], {
+      const preserve = preserveStatsServicePortHost();
+      const ins = spawnSync("pi-omp-stats", ["service", "install", ...preserve], {
         stdio: "inherit",
         env: serviceEnv,
       });
@@ -1078,6 +1081,34 @@ export async function maybeOfferStatsService(freshlyInstalled, yes, profilesMode
       console.error("  service restart failed; rerun pi-omp-stats service restart");
     else console.log("  pi-omp-stats service restarted with the latest build.");
     return;
+  }
+
+  // Preserve a user-set dashboard port/host across the service re-install.
+  // Reads the existing systemd unit (or launchd plist) for `--port`/`--host`
+  // args so ./install.sh --all doesn't reset a non-default (e.g. 3848) back
+  // to the default 3847 and collide with another process. Returns CLI args.
+  function preserveStatsServicePortHost() {
+    const candidates = [
+      join(homedir(), ".config/systemd/user/pi-omp-stats.service"),
+      join(homedir(), ".config/systemd/user/pi-omp-stats.service.d/"),
+      join(homedir(), "Library/LaunchAgents/dev.pi.omp-stats.plist"),
+      join(homedir(), "Library/LaunchAgents/pi-omp-stats.plist"),
+    ];
+    for (const file of candidates) {
+      let text = "";
+      try {
+        text = readFileSync(file, "utf8");
+      } catch {
+        continue;
+      }
+      const portMatch = text.match(/--port"?\s*"?(\d+)/);
+      const hostMatch = text.match(/--host"?\s*"?([^\s"]+)/);
+      const args = [];
+      if (portMatch) args.push("--port", portMatch[1]);
+      if (hostMatch) args.push("--host", hostMatch[1]);
+      if (args.length) return args;
+    }
+    return [];
   }
 
   if (yes) {
