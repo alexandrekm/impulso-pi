@@ -57,6 +57,8 @@ import {
   insertCompactionStats,
   insertGuardEvents,
   insertMemoryEvents,
+  insertSubagentRuns,
+  getSubagentRunDashboard,
   insertMessageStats,
   insertToolCalls,
   insertUserMessageStats,
@@ -109,6 +111,7 @@ function applyParseResult(
   if (result.compactions.length > 0) insertCompactionStats(result.compactions);
   if (result.memoryEvents.length > 0) insertMemoryEvents(result.memoryEvents);
   if (result.guardEvents.length > 0) insertGuardEvents(result.guardEvents);
+  if (result.subagentRuns.length > 0) insertSubagentRuns(result.subagentRuns);
   if (result.folder) {
     // Relabel all of this file's rows (old + new) with the header-derived
     // folder. Indexed UPDATE; idempotent, and fixes rows persisted before
@@ -649,4 +652,11 @@ export async function getGuardList(opts: {
 export async function getGuardSessions() {
   await initDb();
   return listGuardSessions();
+}
+
+/** Bounded terminal metadata from the passive pi-subagents recorder. */
+export async function getSubagentDashboardStats(range?: string | null) {
+  await initDb();
+  const { cutoff } = getTimeRangeConfig(range);
+  return getSubagentRunDashboard(cutoff);
 }

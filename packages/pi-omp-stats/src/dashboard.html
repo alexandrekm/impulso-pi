@@ -1078,6 +1078,21 @@
               <path d="M8 14h8" /></svg
             >Payloads
           </button>
+          <button data-tab="subagents">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="9" cy="8" r="3" />
+              <path d="M3 21v-2a6 6 0 0 1 12 0v2" />
+              <path d="M16 3.5a3 3 0 0 1 0 5.8" />
+              <path d="M21 21v-2a6 6 0 0 0-3.5-5.5" /></svg
+            >Subagents
+          </button>
           <div class="nav-label">Memory</div>
           <button data-tab="compaction">
             <svg
@@ -1197,7 +1212,8 @@
         errorsList = null,
         compaction = null,
         memories = null,
-        guards = null;
+        guards = null,
+        subagents = null;
       let costRange = "7d"; // independent window for the "Cost over time" chart
       let profile = "all";
       let charts = {};
@@ -1220,6 +1236,7 @@
         guards: "Guards",
         compaction: "Compaction",
         memories: "Observational Memory",
+        subagents: "Subagents",
       };
 
       function fmtNum(n) {
@@ -1853,6 +1870,9 @@
           } else if (tab === "compaction") {
             compaction = await api("/api/stats/compaction?range=" + range());
             renderCompaction();
+          } else if (tab === "subagents") {
+            subagents = await api("/api/stats/subagents?range=" + range());
+            renderSubagents();
           } else if (tab === "memories") {
             await loadMemories();
           } else if (tab === "guards") {
@@ -1971,6 +1991,37 @@
             fmtNum(h.requests),
           ]),
           ["", "num", "num", "num", "num"],
+        );
+      }
+
+      /* ---------------- Subagents panel ---------------- */
+
+      function renderSubagents() {
+        const s = subagents.summary;
+        const terminal = s.completed + s.failed + s.stopped + s.partial + s.rejected;
+        const successRate = terminal > 0 ? s.completed / terminal : 0;
+        const cards = `
+    ${card("Runs", fmtNum(s.totalRuns), fmtPct(successRate) + " completed", "var(--blue)")}
+    ${card("Median duration", fmtDur(s.medianDurationMs), fmtDur(s.totalDurationMs) + " total", "var(--mauve)")}
+    ${card("Child tokens", fmtNum(s.totalTokens), "terminal run totals", "var(--peach)")}
+    ${card("Child cost", fmtCost(s.totalCost), "terminal run totals", "var(--green)")}
+    ${card("Stopped", fmtNum(s.stopped), fmtNum(s.failed) + " failed · " + fmtNum(s.partial) + " partial", "var(--teal)")}
+  `;
+        main.innerHTML = `<div class="cards">${cards}</div>
+    <div class="section-title">By role, model, and context</div>
+    <div id="subagents-table"></div>
+    <div class="kpi-note" style="padding:2px 0 0">Only bounded terminal metadata is recorded: no delegated prompts, responses, transcripts, or artifact paths.</div>`;
+        main.querySelector("#subagents-table").innerHTML = table(
+          ["Role", "Model", "Context", "Runs", "Child tokens", "Child cost"],
+          subagents.breakdown.map((row) => [
+            `<span class="model" style="color:var(--accent)">${row.role}</span>`,
+            row.model,
+            row.context,
+            fmtNum(row.runs),
+            fmtNum(row.totalTokens),
+            fmtCost(row.totalCost),
+          ]),
+          ["", "", "", "num", "num", "num"],
         );
       }
 
@@ -3146,7 +3197,7 @@
       $("#profile-select").addEventListener("change", (event) => {
         profile = event.target.value;
         stats = behavior = tools = providers = recent = errorsList = null;
-        compaction = memories = null;
+        compaction = memories = subagents = guards = null;
         memSelectedId = null;
         refreshAll();
       });

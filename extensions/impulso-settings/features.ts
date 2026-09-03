@@ -212,6 +212,25 @@ export const FEATURES: Feature[] = [
     spec: "npm:@juicesharp/rpiv-ask-user-question",
   },
   {
+    id: "pi-subagents",
+    tab: "tools",
+    group: "Subagents",
+    label: "Scout-first subagents",
+    description:
+      "Background delegation runtime with one fresh, read-only scout role and optional best-effort Orca progress tabs. npm:pi-subagents@0.64.0. Reload or start a new session after changing this.",
+    kind: "package",
+    spec: "npm:pi-subagents@0.64.0",
+  },
+  {
+    id: "subagent-telemetry",
+    tab: "tools",
+    group: "Subagents",
+    label: "Subagent telemetry recorder",
+    description:
+      "Passive local recorder for bounded run metadata in the parent session; powers the local pi-omp-stats Subagents API. Reload after changing this.",
+    kind: "local",
+  },
+  {
     id: "vision-handoff",
     tab: "tools",
     group: "Tools",

@@ -98,7 +98,8 @@ export function classify(key) {
   if (key.startsWith("git:")) return "git";
   if (key.startsWith("extensions/")) return "file";
   if (key.startsWith("skills/")) return "skill";
-  throw new Error(`Unknown resource key (not npm:/git:/extensions//skills/): ${key}`);
+  if (key.startsWith("agents/")) return "agent";
+  throw new Error(`Unknown resource key (not npm:/git:/extensions//skills//agents/): ${key}`);
 }
 
 /** Whether the key is an installable package (npm: or git:), not a synced file/skill. */
@@ -125,6 +126,7 @@ export function relDestPath(key, entry) {
   if (isPackageKind(kind))
     throw new Error(`relDestPath: package resource "${key}" has no file dest`);
   if (kind === "file") return entry?.dest || join("extensions", basename(key));
+  if (kind === "agent") return entry?.dest || join("agents", basename(key));
   return join("skills", basename(key.replace(/\/$/, "")));
 }
 
@@ -245,8 +247,10 @@ export function validateProfiles(profiles, repoDir) {
       }
       const dest = resources[key]?.dest;
       if (dest !== undefined) {
-        if (kind !== "file") {
-          errors.push(`resource "${key}" .dest is only allowed on extensions/ file resources`);
+        if (kind !== "file" && kind !== "agent") {
+          errors.push(
+            `resource "${key}" .dest is only allowed on extensions/ or agents/ file resources`,
+          );
         } else if (
           typeof dest !== "string" ||
           !dest ||

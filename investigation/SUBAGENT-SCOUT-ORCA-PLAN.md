@@ -198,11 +198,7 @@ it into the active profile directory.
    name: scout
    description: Read-only codebase reconnaissance with evidence and a compact
      handoff for the parent.
-   tools:
-     - read
-     - grep
-     - find
-     - ls
+   tools: read, grep, find, ls, contact_supervisor
    systemPromptMode: replace
    inheritProjectContext: true
    inheritGlobalContext: false
@@ -217,14 +213,18 @@ it into the active profile directory.
    steps to the parent. Do not modify the workspace or delegate work.
    ```
 
-   `tools` is a strict **invocable tool** allowlist. Do not list `bash`,
-   `write`, `edit`, or `subagent`; those tools therefore are unavailable to
-   the child. `maxSubagentDepth` is a defense-in-depth ceiling, while the
-   absence of `subagent` is what prevents actual nested dispatch. Normal Pi
-   extensions still load by default; preflight must confirm that the profile's
-   FFF/hashline overrides resolve the four named tools as expected. If we later
-   need to isolate extensions too, add an explicit `extensions` allowlist only
-   after verifying the read/search providers it must retain.
+   `tools` is a strict **invocable tool** allowlist. The runtime coordination
+   bridge may also provide `contact_supervisor`; keep it as the one intentional
+   non-filesystem capability. It is only for necessary clarification, a material
+   blocker, or a concise material progress update—never for authority escalation
+   or to broaden the assignment. Do not list `bash`, `write`, `edit`, or
+   `subagent`; those tools therefore are unavailable to the child.
+   `maxSubagentDepth` is a defense-in-depth ceiling, while the absence of
+   `subagent` prevents actual nested dispatch. Normal Pi extensions still load
+   by default; preflight must confirm that FFF/hashline resolve the four named
+   read/search tools as expected. If we later need to isolate extensions too,
+   add an explicit `extensions` allowlist only after verifying the providers it
+   must retain.
 
 6. **Skills are selected, not copied or implicitly transferred from the
    parent.** `inheritSkills: false` means the generic scout receives no Pi
@@ -290,8 +290,9 @@ add an explicit skill only when a repeatable scout responsibility depends on
 it.
 
 **Exit criterion:** inspecting the child tool list shows `read`, `grep`,
-`find`, and `ls` only—no `bash`, `edit`, `write`, or nested-subagent tool; the
-child's available-skills section is empty for the generic scout.
+`find`, `ls`, and the intentional coordination-only `contact_supervisor`—no
+`bash`, `edit`, `write`, or nested-subagent tool; the child's available-skills
+section is empty for the generic scout.
 
 ### Phase 4 — expose the feature in `/settings`
 

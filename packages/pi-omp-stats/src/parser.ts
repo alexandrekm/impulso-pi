@@ -45,6 +45,7 @@ import type {
   Usage,
   UserMessageLink,
   UserMessageStats,
+  SubagentRunStats,
 } from "./types.js";
 
 /* -------------------------------------------------------------------------- */
@@ -56,6 +57,9 @@ const OM_OBSERVATIONS_RECORDED = "om.observations.recorded";
 const OM_REFLECTIONS_RECORDED = "om.reflections.recorded";
 const OM_OBSERVATIONS_DROPPED = "om.observations.dropped";
 const OM_FOLDED = "om.folded";
+
+/** Terminal records written by extensions/subagent-telemetry. */
+const SUBAGENT_RUN_V1 = "impulso.subagent-run.v1";
 
 /* -------------------------------------------------------------------------- */
 /* Sessions dir resolution (Diff 2 — no pi imports)                            */
@@ -759,6 +763,86 @@ function extractMemoryEvents(
   return out;
 }
 
+/** Extract a terminal, privacy-bounded pi-subagents run record. Unknown schema
+ * versions and malformed payloads are ignored fail-closed. */
+function extractSubagentRun(sessionFile: string, entry: SessionEntry): SubagentRunStats | null {
+  const e = entry as SessionEntry & { customType?: unknown; data?: unknown };
+  if (e.type !== "custom" || e.customType !== SUBAGENT_RUN_V1 || !isPlainRecord(e.data))
+    return null;
+  const data = e.data;
+  const source = isPlainRecord(data.source) ? data.source : null;
+  if (
+    data.schemaVersion !== 1 ||
+    source?.package !== "pi-subagents" ||
+    typeof source.version !== "string" ||
+    typeof data.runId !== "string" ||
+    typeof data.role !== "string" ||
+    typeof data.mode !== "string" ||
+    typeof data.startedAt !== "number" ||
+    !Number.isFinite(data.startedAt)
+  )
+    return null;
+  const state = data.state;
+  if (
+    state !== "complete" &&
+    state !== "failed" &&
+    state !== "partial" &&
+    state !== "stopped" &&
+    state !== "rejected"
+  )
+    return null;
+  const context =
+    data.context === "fresh" || data.context === "fork" || data.context === "mixed"
+      ? data.context
+      : "unknown";
+  const finite = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
+  // pi-subagents may store totalTokens as {input,output,total} and totalCost
+  // as {inputTokens,outputTokens,costUsd}; the telemetry extension sometimes
+  // records plain numbers. Extract the aggregate value from either shape.
+  const aggregate = (value: unknown): number | null => {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (!isPlainRecord(value)) return null;
+    return finite(value.total) ?? finite(value.costUsd) ?? finite(value.total) ?? null;
+  };
+  // Fallback: extract token/cost totals from pi-subagents' results[].usage
+  // shape when top-level totalTokens/totalCost are absent.
+  const results = Array.isArray(data.results) ? data.results.filter(isPlainRecord) : [];
+  const firstUsage =
+    results.length > 0 && isPlainRecord(results[0].usage) ? results[0].usage : null;
+  const tokensFromUsage = firstUsage
+    ? (finite(firstUsage.input) ?? 0) + (finite(firstUsage.output) ?? 0)
+    : null;
+  const costFromUsage = firstUsage ? finite(firstUsage.cost) : null;
+  const turnsFromUsage = firstUsage ? finite(firstUsage.turns) : null;
+  return {
+    sessionFile,
+    runId: data.runId,
+    role: data.role,
+    mode: data.mode,
+    context,
+    async: data.async === true,
+    state,
+    startedAt: data.startedAt,
+    endedAt: finite(data.endedAt),
+    durationMs: finite(data.durationMs),
+    totalTokens: aggregate(data.totalTokens) ?? tokensFromUsage,
+    totalCost: aggregate(data.totalCost) ?? costFromUsage,
+    turns: finite(data.turns) ?? turnsFromUsage,
+    tools: finite(data.tools),
+    timedOut: data.timedOut === true,
+    stopped: data.stopped === true,
+    model:
+      typeof data.model === "string"
+        ? data.model
+        : results[0] && typeof results[0].model === "string"
+          ? results[0].model
+          : null,
+    sourceVersion: source.version,
+    lifecycleArtifactVersion: finite(data.lifecycleArtifactVersion) ?? 0,
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Public API                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -786,6 +870,7 @@ export async function parseSessionFile(
     memoryEvents: [],
     guardEvents: [],
     newOffset: fromOffset,
+    subagentRuns: [],
   };
 
   let bytes: Uint8Array;
@@ -810,6 +895,7 @@ export async function parseSessionFile(
   const compactions: CompactionStats[] = [];
   const memoryEvents: MemoryEventStats[] = [];
   const guardEvents: GuardEventStats[] = [];
+  const subagentRuns: SubagentRunStats[] = [];
   // toolCallId → command string for tool calls carrying a `command` argument
   // (bash). Populated from assistant toolCall blocks so a later blocked
   // toolResult can be attributed to the exact command that was blocked.
@@ -917,9 +1003,11 @@ export async function parseSessionFile(
       if (folded.length > 0) memoryEvents.push(...folded);
       continue;
     }
-    // `custom` entry: observational-memory records its observations /
-    // reflections / drops here. Other custom types are ignored.
+    // `custom` entry: the privacy-bounded subagent recorder and
+    // observational-memory records. Unknown custom entries are ignored.
     if (entry.type === "custom") {
+      const run = extractSubagentRun(sessionPath, entry);
+      if (run) subagentRuns.push(run);
       const events = extractMemoryEvents(sessionPath, folder, entry);
       if (events.length > 0) memoryEvents.push(...events);
       continue;
@@ -935,6 +1023,7 @@ export async function parseSessionFile(
     compactions,
     memoryEvents,
     guardEvents,
+    subagentRuns,
     folder,
     newOffset: start + read,
   };

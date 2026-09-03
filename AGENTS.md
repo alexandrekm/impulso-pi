@@ -126,6 +126,7 @@ Resource key forms:
 | `extensions/<feature>/<file>.ts` | `<profile>/extensions/<file>` |
 | `extensions/<feature>/<file>.json` | `<profile>/extensions/<file>` |
 | `skills/<name>/` (trailing slash) | `<profile>/skills/<name>/` |
+| `agents/<name>.md` | `<profile>/agents/<name>.md` |
 | `npm:<pkg>` | appended to `<profile>/settings.json` `packages[]` |
 | `git:<host>/<owner>/<repo>` | appended to `<profile>/settings.json` `packages[]` |
 
