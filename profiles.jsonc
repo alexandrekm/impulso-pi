@@ -337,6 +337,16 @@
     // profile gets it.
     "skills/pi-development/": { "tags": ["core"] },
 
+    // scout: on-demand pointer skill. Unlike the datadog/glean skills, the
+    // scout *subagent* already exists as agents/scout.md (synced above) — this
+    // skill exists only so the on-demand-skills keyword trigger ("scout") can
+    // inject a hint telling the model to delegate to that subagent. The skill
+    // file holds a short pointer; the authoritative contract stays in
+    // agents/scout.md. disable-model-invocation: true keeps it out of the
+    // always-on <available_skills> block (zero context cost until triggered).
+    // Core so every profile gets the hint.
+    "skills/scout/": { "tags": ["core"] },
+
     // pi-provider-litellm (balcsida): LiteLLM proxy native Provider extension.
     // Discovers models from a self-hosted LiteLLM proxy and registers them
     // under pi providers (default provider name `litellm`; aliases possible
