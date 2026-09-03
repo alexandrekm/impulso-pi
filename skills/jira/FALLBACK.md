@@ -1,6 +1,6 @@
 # Jira REST API Fallbacks
 
-Load this file only when `acli` is unavailable or fails, or for operations `acli` doesn't support (sprint-add, story points, createmeta, transition ID discovery).
+Load this file only when `acli` is unavailable or fails, or for operations `acli` doesn't support (sprint-add, story points, createmeta, transition ID discovery, setting/changing an epic parent on an existing work item).
 
 ## Prerequisites
 
@@ -44,6 +44,19 @@ curl -s -X PUT "https://k2labs.atlassian.net/rest/api/2/issue/<KEY>" \
   -H "Content-Type: application/json" \
   -d '{"fields":{"description":"<updated description>"}}'
 ```
+
+## Set / change epic parent (existing ticket)
+
+`acli jira workitem edit` has **no `--parent` flag** — not even via `--from-json` (`json: unknown field "parent"`). `--parent` exists only on `workitem create`. `workitem link create` is the wrong tool too — it makes "Blocks/Relates"-style links, not epic parentage. One-shot REST:
+
+```bash
+curl -s -X PUT "https://k2labs.atlassian.net/rest/api/2/issue/<KEY>" \
+  -u "${JIRA_EMAIL}:${ATLASSIAN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"fields":{"parent":{"key":"<EPIC_KEY>"}}}' -w "\nHTTP %{http_code}\n"
+```
+
+Empty body + HTTP 204 = success. **Verify via REST** (`GET /rest/api/2/issue/<KEY>?fields=parent`) — `acli jira workitem view --json` omits `parent` from its default field set, so it reports the old/no parent unless you pass `--fields "*all"`. To *remove* a parent, send `"parent": null`.
 
 ## Transition (discover + execute)
 

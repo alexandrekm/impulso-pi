@@ -103,6 +103,8 @@ If no suitable epic exists (or the user picks "None of these"), ask the user whi
 
 ### 3. Create the ticket under the epic
 
+`--parent` exists only on `workitem create`. If the ticket **already exists** (found instead of created) and needs to be moved under the epic, `workitem edit` can't do it — use the REST one-shot in `skill://jira/FALLBACK.md` ("Set / change epic parent").
+
 #### Story / Task
 
 ```bash
