@@ -259,6 +259,14 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
   pi providers (default `litellm`, aliases via `litellm.providers` in
   settings.json); supports `/login litellm`, LiteLLM MCP tools, and LiteLLM
   Skills Gateway prompt injection
+- `extensions/cache-ttl/` — prompt-cache TTL control. pi only exposes
+  extended prompt caching via the `PI_CACHE_RETENTION` env var (no
+  settings.json key); this extension reads `<configDir>/cache-ttl.json`
+  (`{ "retention": "short" | "long" }`) at load and sets the env var when
+  `long` is selected (Anthropic 1h vs 5m, OpenAI 24h vs in-memory, Bedrock
+  1h). Default `short` leaves the env untouched and preserves/restores any
+  shell-provided value. Toggled in `/settings` → Providers → Prompt
+  caching (a `config` feature); `/reload` applies.
 - `npm:@narumitw/pi-btw` — `/btw` side-thread command: ask context-aware
   questions in a separate thread without derailing the main conversation
   (`/btw <question>` starts one; `/btw` opens a manager; `Ctrl+R` brings
