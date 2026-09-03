@@ -405,6 +405,16 @@
     // LITELLM_API_KEY env vars. https://pi.dev/packages/pi-provider-litellm
     "npm:pi-provider-litellm": { "tags": ["core"] },
 
+    // cache-ttl: prompt-cache TTL control. pi only exposes extended prompt
+    // caching via the PI_CACHE_RETENTION env var (no settings.json key); this
+    // extension reads <configDir>/cache-ttl.json ({ "retention": "short" |
+    // "long" }) at load and sets the env var when "long" is selected —
+    // Anthropic ttl:"1h" (vs 5m default), OpenAI prompt_cache_retention:
+    // "24h" (vs in-memory), Bedrock CacheTTL.ONE_HOUR. Default is "short"
+    // (env untouched; a shell-provided value is preserved/restored). Toggle
+    // in /settings → Providers → Prompt caching; /reload applies.
+    "extensions/cache-ttl/cache-ttl.ts": { "tags": ["core"] },
+
     // jira: resolve/find/create/manage Jira tickets via `acli` (with REST
     // fallbacks in FALLBACK.md and a full command reference in REFERENCE.md).
     // jira-authoring: create well-structured tickets under existing epics
