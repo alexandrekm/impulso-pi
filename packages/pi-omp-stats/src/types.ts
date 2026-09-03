@@ -161,6 +161,31 @@ export interface SessionOtherEntry {
 
 export type SessionEntry = SessionHeader | SessionMessageEntry | SessionOtherEntry;
 
+/** Bounded lifecycle metadata emitted by impulso's passive pi-subagents recorder.
+ * It deliberately excludes delegated prompts, child output, transcripts, and
+ * filesystem paths. */
+export interface SubagentRunStats {
+  sessionFile: string;
+  runId: string;
+  role: string;
+  mode: string;
+  context: "fresh" | "fork" | "mixed" | "unknown";
+  async: boolean;
+  state: "complete" | "failed" | "partial" | "stopped" | "rejected";
+  startedAt: number;
+  endedAt: number | null;
+  durationMs: number | null;
+  totalTokens: number | null;
+  totalCost: number | null;
+  turns: number | null;
+  tools: number | null;
+  timedOut: boolean;
+  stopped: boolean;
+  model: string | null;
+  sourceVersion: string;
+  lifecycleArtifactVersion: number;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Extracted stats (ported from omp-stats types.ts)                           */
 /* -------------------------------------------------------------------------- */
@@ -349,6 +374,8 @@ export interface ParseSessionResult {
   /** Observations / reflections / drops extracted from `om.*` custom entries,
    * plus memories carried through a compaction via `om.folded`. */
   memoryEvents: MemoryEventStats[];
+  /** Terminal pi-subagents run records extracted from custom entries. */
+  subagentRuns: SubagentRunStats[];
   /** Best-known folder/cwd for this session (header cwd, else lossy path decode). */
   folder?: string;
   newOffset: number;

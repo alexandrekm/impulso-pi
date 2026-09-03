@@ -35,6 +35,7 @@ import {
   getCostSeriesForRange,
   getTimeSeriesForRange,
   getToolDashboardStats,
+  getSubagentDashboardStats,
   getAvailableProfiles,
   getTotalMessageCount,
   selectProfile,
@@ -134,6 +135,8 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
     return sendJson(res, 200, await getBehaviorDashboardStats(range));
   if (pathname === "/api/stats/tools")
     return sendJson(res, 200, await getToolDashboardStats(range));
+  if (pathname === "/api/stats/subagents")
+    return sendJson(res, 200, await getSubagentDashboardStats(range));
   if (pathname === "/api/stats/providers")
     return sendJson(res, 200, await getProviderDashboardStats(range));
   if (pathname === "/api/stats/compaction")

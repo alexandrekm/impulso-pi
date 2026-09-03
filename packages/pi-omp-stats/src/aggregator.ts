@@ -52,6 +52,8 @@ import {
   initDb,
   insertCompactionStats,
   insertMemoryEvents,
+  insertSubagentRuns,
+  getSubagentRunDashboard,
   insertMessageStats,
   insertToolCalls,
   insertUserMessageStats,
@@ -101,6 +103,7 @@ function applyParseResult(
   if (result.toolResults.length > 0) updateToolResults(result.toolResults);
   if (result.compactions.length > 0) insertCompactionStats(result.compactions);
   if (result.memoryEvents.length > 0) insertMemoryEvents(result.memoryEvents);
+  if (result.subagentRuns.length > 0) insertSubagentRuns(result.subagentRuns);
   if (result.folder) {
     // Relabel all of this file's rows (old + new) with the header-derived
     // folder. Indexed UPDATE; idempotent, and fixes rows persisted before
@@ -599,4 +602,11 @@ export async function getMemoryDetail(id: number) {
 export async function getMemorySessions() {
   await initDb();
   return listMemorySessions();
+}
+
+/** Bounded terminal metadata from the passive pi-subagents recorder. */
+export async function getSubagentDashboardStats(range?: string | null) {
+  await initDb();
+  const { cutoff } = getTimeRangeConfig(range);
+  return getSubagentRunDashboard(cutoff);
 }

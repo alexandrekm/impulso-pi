@@ -9,6 +9,10 @@
     "glean": {
       "keywords": ["glean", "go-link", "go link"],
       "hint": "Use the Glean skill at {path} — load it with the `read` tool for how to interact with Glean via the `glean` CLI (search company knowledge, chat with Glean Assistant, look up people/orgs, manage collections/shortcuts/pins/agents)."
+    },
+    "scout": {
+      "keywords": ["scout", "recon", "reconnoiter"],
+      "hint": "Use the Scout skill at {path} — the user said \"scout\": delegate read-only reconnaissance to the `scout` subagent (agent: scout, fresh async read-only) and read agents/scout.md for the contract. It cannot edit, run bash, or spawn children; the parent stays the sole writer."
     }
   }
 }

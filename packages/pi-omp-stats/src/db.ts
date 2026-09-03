@@ -52,6 +52,7 @@ import type {
   ToolUsageStats,
   UserMessageLink,
   UserMessageStats,
+  SubagentRunStats,
 } from "./types.js";
 import type { AgentTypeStats } from "./shared-types.js";
 
@@ -265,6 +266,35 @@ export async function initDb(): Promise<DatabaseSync> {
 		CREATE INDEX IF NOT EXISTS idx_memory_events_relevance ON memory_events(relevance);
 		CREATE INDEX IF NOT EXISTS idx_memory_events_session ON memory_events(session_file);
 		CREATE INDEX IF NOT EXISTS idx_memory_events_memory_id ON memory_events(memory_id);
+
+
+		-- Passive pi-subagents lifecycle records. No task text, child output, or
+		-- artifact path is stored: these are aggregate-safe terminal metadata only.
+		CREATE TABLE IF NOT EXISTS subagent_runs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_file TEXT NOT NULL,
+			run_id TEXT NOT NULL,
+			role TEXT NOT NULL,
+			mode TEXT NOT NULL,
+			context TEXT NOT NULL,
+			async INTEGER NOT NULL,
+			state TEXT NOT NULL,
+			started_at INTEGER NOT NULL,
+			ended_at INTEGER,
+			duration_ms INTEGER,
+			total_tokens INTEGER,
+			total_cost REAL,
+			turns INTEGER,
+			tools INTEGER,
+			timed_out INTEGER NOT NULL DEFAULT 0,
+			stopped INTEGER NOT NULL DEFAULT 0,
+			model TEXT,
+			source_version TEXT NOT NULL,
+			lifecycle_artifact_version INTEGER NOT NULL,
+			UNIQUE(session_file, run_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_subagent_runs_started_at ON subagent_runs(started_at);
+		CREATE INDEX IF NOT EXISTS idx_subagent_runs_role ON subagent_runs(role);
 	`);
 
   // Schema-version sentinel: when new extraction tables are added (or any
@@ -273,7 +303,7 @@ export async function initDb(): Promise<DatabaseSync> {
   // files once — the dedup guards make the re-inserts idempotent, and parsing
   // is cheap. Without this, a pre-existing DB would never backfill the new
   // compaction/memory tables from files whose mtime is unchanged.
-  const SCHEMA_VERSION = "3-compaction-reason";
+  const SCHEMA_VERSION = "4-subagent-runs";
   const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
     { value: string } | undefined;
   if (db && (!row || row.value !== SCHEMA_VERSION)) {
@@ -682,6 +712,153 @@ export function insertMemoryEvents(events: MemoryEventStats[]): number {
     }
   });
   return inserted;
+}
+
+/** Insert terminal pi-subagents run records. A start and terminal custom entry
+ * share one run id; the parser emits only terminals, and this upsert makes a
+ * full backfill or resync idempotent. */
+export function insertSubagentRuns(runs: SubagentRunStats[]): number {
+  if (!db || runs.length === 0) return 0;
+  const stmt = db.prepare(`
+		INSERT INTO subagent_runs (
+			session_file, run_id, role, mode, context, async, state, started_at, ended_at,
+			duration_ms, total_tokens, total_cost, turns, tools, timed_out, stopped,
+			model, source_version, lifecycle_artifact_version
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(session_file, run_id) DO UPDATE SET
+			state = excluded.state, ended_at = excluded.ended_at,
+			duration_ms = excluded.duration_ms, total_tokens = excluded.total_tokens,
+			total_cost = excluded.total_cost, turns = excluded.turns, tools = excluded.tools,
+			timed_out = excluded.timed_out, stopped = excluded.stopped, model = excluded.model
+	`);
+  let inserted = 0;
+  tx(() => {
+    for (const run of runs) {
+      const result = stmt.run(
+        run.sessionFile,
+        run.runId,
+        run.role,
+        run.mode,
+        run.context,
+        run.async ? 1 : 0,
+        run.state,
+        run.startedAt,
+        run.endedAt,
+        run.durationMs,
+        run.totalTokens,
+        run.totalCost,
+        run.turns,
+        run.tools,
+        run.timedOut ? 1 : 0,
+        run.stopped ? 1 : 0,
+        run.model,
+        run.sourceVersion,
+        run.lifecycleArtifactVersion,
+      );
+      if (Number(result.changes) > 0) inserted++;
+    }
+  });
+  return inserted;
+}
+
+export function getSubagentRunDashboard(cutoff?: number | null) {
+  const empty = {
+    totalRuns: 0,
+    completed: 0,
+    failed: 0,
+    stopped: 0,
+    partial: 0,
+    rejected: 0,
+    totalDurationMs: 0,
+    medianDurationMs: null as number | null,
+    totalTokens: 0,
+    totalCost: 0,
+  };
+  if (!db)
+    return {
+      summary: empty,
+      breakdown: [] as Array<{
+        role: string;
+        model: string;
+        context: string;
+        runs: number;
+        totalTokens: number;
+        totalCost: number;
+      }>,
+    };
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const where = hasCutoff ? "WHERE started_at >= ?" : "";
+  const row = (
+    hasCutoff
+      ? db
+          .prepare(
+            `SELECT COUNT(*) AS total_runs, SUM(state = 'complete') AS completed, SUM(state = 'failed') AS failed, SUM(state = 'stopped') AS stopped, SUM(state = 'partial') AS partial, SUM(state = 'rejected') AS rejected, SUM(COALESCE(duration_ms, 0)) AS total_duration_ms, SUM(COALESCE(total_tokens, 0)) AS total_tokens, SUM(COALESCE(total_cost, 0)) AS total_cost FROM subagent_runs ${where}`,
+          )
+          .get(cutoff)
+      : db
+          .prepare(
+            `SELECT COUNT(*) AS total_runs, SUM(state = 'complete') AS completed, SUM(state = 'failed') AS failed, SUM(state = 'stopped') AS stopped, SUM(state = 'partial') AS partial, SUM(state = 'rejected') AS rejected, SUM(COALESCE(duration_ms, 0)) AS total_duration_ms, SUM(COALESCE(total_tokens, 0)) AS total_tokens, SUM(COALESCE(total_cost, 0)) AS total_cost FROM subagent_runs`,
+          )
+          .get()
+  ) as Record<string, number | null>;
+  const durations = (
+    hasCutoff
+      ? db
+          .prepare(
+            `SELECT duration_ms FROM subagent_runs ${where} AND duration_ms IS NOT NULL ORDER BY duration_ms`,
+          )
+          .all(cutoff)
+      : db
+          .prepare(
+            "SELECT duration_ms FROM subagent_runs WHERE duration_ms IS NOT NULL ORDER BY duration_ms",
+          )
+          .all()
+  ) as Array<{ duration_ms: number }>;
+  const breakdown = (
+    hasCutoff
+      ? db
+          .prepare(
+            `SELECT role, COALESCE(model, 'unknown') AS model, context, COUNT(*) AS runs, SUM(COALESCE(total_tokens, 0)) AS total_tokens, SUM(COALESCE(total_cost, 0)) AS total_cost FROM subagent_runs ${where} GROUP BY role, model, context ORDER BY runs DESC`,
+          )
+          .all(cutoff)
+      : db
+          .prepare(
+            "SELECT role, COALESCE(model, 'unknown') AS model, context, COUNT(*) AS runs, SUM(COALESCE(total_tokens, 0)) AS total_tokens, SUM(COALESCE(total_cost, 0)) AS total_cost FROM subagent_runs GROUP BY role, model, context ORDER BY runs DESC",
+          )
+          .all()
+  ) as Array<{
+    role: string;
+    model: string;
+    context: string;
+    runs: number;
+    total_tokens: number;
+    total_cost: number;
+  }>;
+  const medianDurationMs = durations.length
+    ? durations[Math.floor((durations.length - 1) / 2)]!.duration_ms
+    : null;
+  return {
+    summary: {
+      totalRuns: row.total_runs ?? 0,
+      completed: row.completed ?? 0,
+      failed: row.failed ?? 0,
+      stopped: row.stopped ?? 0,
+      partial: row.partial ?? 0,
+      rejected: row.rejected ?? 0,
+      totalDurationMs: row.total_duration_ms ?? 0,
+      medianDurationMs,
+      totalTokens: row.total_tokens ?? 0,
+      totalCost: row.total_cost ?? 0,
+    },
+    breakdown: breakdown.map((item) => ({
+      role: item.role,
+      model: item.model,
+      context: item.context,
+      runs: item.runs,
+      totalTokens: item.total_tokens ?? 0,
+      totalCost: item.total_cost ?? 0,
+    })),
+  };
 }
 
 /* -------------------------------------------------------------------------- */
