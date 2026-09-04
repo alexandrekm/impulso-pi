@@ -40,7 +40,7 @@ Draft a short message:
 <one-line summary of what changed — from the diff, not just the title>
 ```
 
-**Show the exact message and target channel to the user and wait for confirmation before sending.** Adjust tone/content if they ask.
+**Confirm via the `ask_user_question` tool before sending** — never send without it. Show the exact message text and target channel in the question, with options like "Send" / "Edit message" / "Cancel". On "Edit message", apply the user's changes and confirm again the same way. Only proceed to §4 after an explicit "Send".
 
 ## 4. Send
 
