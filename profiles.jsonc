@@ -385,6 +385,17 @@
     // profile gets it.
     "skills/pi-development/": { "tags": ["core"] },
 
+    // show-me: user-invocation prompt template (/show-me) — explains the
+    // current topic visually with concise diagrams, code-shape sketches, and
+    // focused HTML artifacts. Vendored from humanlayer/skills' show-me SKILL.md,
+    // deliberately NOT a skill: as a prompt template under prompts/ it only ever
+    // expands when the user types /show-me — it never enters the system prompt,
+    // the <available_skills> block, or mode gating. Core so every profile gets
+    // it. Not in /settings (features.ts has no prompt kind): prompt templates in
+    // the agent dir aren't toggleable via settings.json — remove the resource
+    // entry to uninstall.
+    "prompts/show-me.md": { "tags": ["core"] },
+
     // scout: on-demand pointer skill. Unlike the datadog/glean skills, the
     // scout *subagent* already exists as agents/scout.md (synced above) — this
     // skill exists only so the on-demand-skills keyword trigger ("scout") can
