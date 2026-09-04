@@ -1,10 +1,10 @@
 # Troubleshooting
 
-Load this file when something in the main flow doesn't go as expected. Rule details live in `SKILL.md` §0.
+Load this file when something in the main flow doesn't go as expected. Rule details live in the /create-pr prompt template §0.
 
 ## Pre-commit hook failures (step 6)
 
-Commit succeeds → report hash + message, proceed to step 7 in `SKILL.md`.
+Commit succeeds → report hash + message, proceed to step 7 in the /create-pr prompt template.
 
 Pre-commit fails:
 1. Show which hooks failed + output
@@ -27,7 +27,7 @@ Remote branch diverged → inform user, ask force-push or reconcile. Never force
 | Thought | Reality |
 |---------|---------|
 | "I'll add the Jira ticket later" | No. Resolve it first — needed for commits, branch, and PR. |
-| "Commit format is close enough" | Close enough will be blocked by commitlint. Match the rules in `SKILL.md` §0 exactly. |
+| "Commit format is close enough" | Close enough will be blocked by commitlint. Match the rules in the /create-pr prompt template §0 exactly. |
 | "Skip the pre-commit retry" | Run it — catches auto-fixable issues like trailing whitespace. |
 | "Push and fix the PR body later" | Present PR content for review first. Always. |
 | "Small change, skip the template" | Every PR uses the template. No exceptions. |

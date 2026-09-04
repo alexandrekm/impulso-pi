@@ -206,10 +206,12 @@
     "extensions/on-demand-skills/": { "tags": ["core"] },
     // modes: per-profile skill mode switch (code | doc) layered on top of
     // profiles. A mode gates which synced skills reach the system prompt each
-    // turn — e.g. code mode shows jira/create-pr/commit and hides
+    // turn — e.g. code mode shows jira/commit and hides
     // gws-docs-authoring; doc mode shows gws-docs-authoring and hides the
-    // PR/commit flow. Skills not in the gated map (address-pr-comments,
-    // datadog, glean) stay always-on. Toggled with /mode code|doc|toggle;
+    // PR/commit skills. Skills not in the gated map (datadog, glean) stay
+    // always-on. Command-only flows like /create-pr and
+    // /address-pr-comments are prompt templates, unaffected by modes.
+    // Toggled with /mode code|doc|toggle;
     // state in <configDir>/mode.json, applies next message (no /reload).
     // Doc mode also surfaces the gws skills (the gws extension reads mode.json).
     // Work-only for now. Config: extensions/modes/config.json. Toggled in
@@ -370,12 +372,14 @@
     // address-pr-comments: one-pass workflow to fetch, evaluate, and act on
     // every PR review comment (Copilot/bots + human) — assess each, batch-apply
     // approved fixes, commit (Conventional Commits + Jira scope), reply to and
-    // resolve every thread, then report. disable-model-invocation: true in the
-    // frontmatter hides it from the system prompt, so the agent never loads it
-    // on its own — invoke explicitly with /skill:address-pr-comments. Core so
-    // every profile gets it. Ported from impulso-omp's skill of the same name;
-    // the OMP `ask` tool calls were adapted to pi's `ask_user_question` schema.
+    // resolve every thread, then report. Now a prompt template — invoke with
+    // /address-pr-comments. This skill entry keeps only the hidden
+    // troubleshooting companion (TROUBLESHOOTING.md, loaded via `read` on
+    // failure); its SKILL.md is a stub. Core so every profile gets it.
+    // Ported from impulso-omp's skill of the same name; the OMP `ask` tool
+    // calls were adapted to pi's `ask_user_question` schema.
     "skills/address-pr-comments/": { "tags": ["core"] },
+    "prompts/address-pr-comments.md": { "tags": ["core"] },
 
     // pi-development: on-demand instructions for modifying pi or its supported
     // customization surfaces (extensions, skills, themes, TUI, SDK, providers,
@@ -384,6 +388,17 @@
     // documentation locations, required reading, and topic index. Core so every
     // profile gets it.
     "skills/pi-development/": { "tags": ["core"] },
+
+    // show-me: user-invocation prompt template (/show-me) — explains the
+    // current topic visually with concise diagrams, code-shape sketches, and
+    // focused HTML artifacts. Vendored from humanlayer/skills' show-me SKILL.md,
+    // deliberately NOT a skill: as a prompt template under prompts/ it only ever
+    // expands when the user types /show-me — it never enters the system prompt,
+    // the <available_skills> block, or mode gating. Core so every profile gets
+    // it. Not in /settings (features.ts has no prompt kind): prompt templates in
+    // the agent dir aren't toggleable via settings.json — remove the resource
+    // entry to uninstall.
+    "prompts/show-me.md": { "tags": ["core"] },
 
     // scout: on-demand pointer skill. Unlike the datadog/glean skills, the
     // scout *subagent* already exists as agents/scout.md (synced above) — this
@@ -447,11 +462,13 @@
     // (Conventional Commits, uppercase Jira-key scope, 200-char lengths,
     // no-special-chars subject) verified against folder-inference repos'
     // commitlint.config.js, plus branch naming and Jira ticket linkage via
-    // the jira skill. disable-model-invocation: true hides it from the
-    // system prompt — invoke explicitly with /skill:create-pr. Ported from
-    // impulso-omp's mtv-commit-and-pr skill, renamed to drop the mtv-
-    // prefix and made command-only like address-pr-comments.
+    // the jira skill. Now a prompt template (prompts/create-pr.md, below) —
+    // invoke with /create-pr. This skill entry keeps only the hidden
+    // troubleshooting companion (TROUBLESHOOTING.md, loaded via `read` on
+    // failure); its SKILL.md is a stub. Ported from impulso-omp's
+    // mtv-commit-and-pr skill, renamed to drop the mtv- prefix.
     "skills/create-pr/": { "tags": ["work"] },
+    "prompts/create-pr.md": { "tags": ["work"] },
     // commit: make a single commitlint-compliant commit on Motive repos.
     // Model-invocable (no disable-model-invocation) so it shows up in
     // <available_skills> and the agent loads it on its own whenever it runs
@@ -474,9 +491,9 @@
     // repos. Same shape as create-pr but stripped down — Conventional
     // Commits for the message + PR title, a short what/why PR body, no Jira,
     // no strict commitlint, no enforced branch naming beyond "get off the
-    // protected branch". disable-model-invocation: true hides it from the
-    // system prompt — invoke explicitly with /skill:create-pr-personal.
-    "skills/create-pr-personal/": { "tags": ["personal"] },
+    // protected branch". Now a prompt template — invoke with
+    // /create-pr-personal.
+    "prompts/create-pr-personal.md": { "tags": ["personal"] },
     // border-on-user-messages: draws a `┌─ You ─┐` / `│ … │` / `└───┘`
     // box around every user message in the TUI transcript so your own
     // messages are easy to spot amid assistant/tool output. Patches

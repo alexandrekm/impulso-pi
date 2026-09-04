@@ -99,7 +99,10 @@ export function classify(key) {
   if (key.startsWith("extensions/")) return "file";
   if (key.startsWith("skills/")) return "skill";
   if (key.startsWith("agents/")) return "agent";
-  throw new Error(`Unknown resource key (not npm:/git:/extensions//skills//agents/): ${key}`);
+  if (key.startsWith("prompts/")) return "prompt";
+  throw new Error(
+    `Unknown resource key (not npm:/git:/extensions//skills//agents//prompts/): ${key}`,
+  );
 }
 
 /** Whether the key is an installable package (npm: or git:), not a synced file/skill. */
@@ -118,7 +121,8 @@ export function resourceExists(repoDir, key) {
 /**
  * Destination of a non-npm resource, relative to the profile dir. File
  * resources may declare an explicit "dest" (e.g. a nested extension config
- * path); otherwise files flatten to extensions/<basename> and skills to
+ * path); otherwise files flatten to extensions/<basename>, agents to
+ * agents/<basename>, prompts to prompts/<basename>, and skills to
  * skills/<name>.
  */
 export function relDestPath(key, entry) {
@@ -127,6 +131,7 @@ export function relDestPath(key, entry) {
     throw new Error(`relDestPath: package resource "${key}" has no file dest`);
   if (kind === "file") return entry?.dest || join("extensions", basename(key));
   if (kind === "agent") return entry?.dest || join("agents", basename(key));
+  if (kind === "prompt") return entry?.dest || join("prompts", basename(key));
   return join("skills", basename(key.replace(/\/$/, "")));
 }
 
@@ -247,9 +252,9 @@ export function validateProfiles(profiles, repoDir) {
       }
       const dest = resources[key]?.dest;
       if (dest !== undefined) {
-        if (kind !== "file" && kind !== "agent") {
+        if (kind !== "file" && kind !== "agent" && kind !== "prompt") {
           errors.push(
-            `resource "${key}" .dest is only allowed on extensions/ or agents/ file resources`,
+            `resource "${key}" .dest is only allowed on extensions/, agents/ or prompts/ file resources`,
           );
         } else if (
           typeof dest !== "string" ||

@@ -680,6 +680,28 @@ function migrateLegacyDroidStyling(t) {
   console.log(`  [migrated]    removed pi-droid-styling and footer-status-widgets`);
 }
 
+// create-pr / create-pr-personal were converted from command-only skills to
+// prompt templates (prompts/create-pr.md, prompts/create-pr-personal.md).
+// create-pr's skill dir keeps a hidden troubleshooting companion and is still
+// synced — only create-pr-personal's skill dir is fully retired. Remove the
+// stale skill copy + manifest rows; the prompt template itself syncs normally.
+const LEGACY_CREATE_PR_PERSONAL_DIR = "skills/create-pr-personal";
+const LEGACY_CREATE_PR_PERSONAL_MANIFEST_KEY = "skills/create-pr-personal/";
+
+function migrateLegacyCreatePrPersonal(t) {
+  const map = manifestRead(t.dir);
+  const legacyDir = join(t.dir, LEGACY_CREATE_PR_PERSONAL_DIR);
+  const hasDir = existsSync(legacyDir);
+  const hasManifest = map.has(LEGACY_CREATE_PR_PERSONAL_MANIFEST_KEY);
+  if (!hasDir && !hasManifest) return;
+  if (hasDir) rmSync(legacyDir, { recursive: true, force: true });
+  map.delete(LEGACY_CREATE_PR_PERSONAL_MANIFEST_KEY);
+  manifestWrite(t.dir, map);
+  console.log(
+    `  [migrated]    removed skills/create-pr-personal (now prompts/create-pr-personal.md)`,
+  );
+}
+
 // Merge settings from profiles.jsonc into a target's settings.json. Two
 // sources, with deliberately different semantics:
 //
@@ -1252,6 +1274,7 @@ async function main() {
       console.log(`==> install -> ${t.base ? "base" : t.name} (${t.dir})`);
       migrateLegacyPermissionSystem(t);
       migrateLegacyDroidStyling(t);
+      migrateLegacyCreatePrPersonal(t);
       doInstallFiles(t, profiles);
       doInstallSettings(t, profiles);
       migrateLegacyPayloads(t);
