@@ -286,6 +286,9 @@ export interface ToolResultLink {
   toolCallId: string;
   resultChars: number;
   isError: boolean;
+  /** Result entry timestamp (ms); duration is derived in db.ts against the
+   *  call's assistant-entry timestamp. */
+  timestamp: number;
 }
 
 /* -------------------------------------------------------------------------- */

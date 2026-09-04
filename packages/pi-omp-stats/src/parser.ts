@@ -455,6 +455,7 @@ function extractToolResultLink(
     toolCallId: msg.toolCallId,
     resultChars,
     isError: msg.isError === true,
+    timestamp: coerceEntryTimestamp(undefined, entry),
   };
 }
 

@@ -52,6 +52,7 @@ import {
   getToolStats,
   getToolStatsByModel,
   getToolTimeSeries,
+  getSearchCallRows,
   getTimeSeries,
   initDb,
   insertCompactionStats,
@@ -87,6 +88,7 @@ import type {
   BehaviorDashboardStats,
   DashboardStats,
   ProviderDashboardStats,
+  SearchMixStats,
   ToolDashboardStats,
 } from "./shared-types.js";
 import type {
@@ -482,6 +484,70 @@ export async function getToolDashboardStats(range?: string | null): Promise<Tool
     byTool: getToolStats(cutoff ?? undefined),
     byToolModel: getToolStatsByModel(cutoff ?? undefined),
     series: getToolTimeSeries(modelSeriesDays, cutoff, modelSeriesBucketMs),
+    searchMix: computeSearchMix(cutoff ?? undefined),
+  };
+}
+
+/**
+ * zvec vs exact-search mix + per-tool wait times + zvec fallback rate.
+ * A "fallback" is a zvec_search call whose assistant turn (entry_id) also
+ * contains a grep/find call at a later timestamp in the same session — the
+ * model didn't settle for the semantic result and re-searched exactly.
+ */
+function computeSearchMix(cutoff?: number): SearchMixStats {
+  const rows = getSearchCallRows(cutoff);
+  const perToolMap = new Map<
+    string,
+    { calls: number; errors: number; durSum: number; durCount: number }
+  >();
+  for (const r of rows) {
+    const agg = perToolMap.get(r.toolName) ?? { calls: 0, errors: 0, durSum: 0, durCount: 0 };
+    agg.calls++;
+    if (r.isError) agg.errors++;
+    if (r.durationMs != null) {
+      agg.durSum += r.durationMs;
+      agg.durCount++;
+    }
+    perToolMap.set(r.toolName, agg);
+  }
+  // Fallback detection: group by (session, entry); a zvec_search followed
+  // by grep/find in the same group is a fallback.
+  const byTurn = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const key = `${r.sessionFile} ${r.entryId}`;
+    const arr = byTurn.get(key) ?? [];
+    arr.push(r);
+    byTurn.set(key, arr);
+  }
+  let zvecCalls = 0;
+  let zvecFallbacks = 0;
+  for (const r of rows) if (r.toolName === "zvec_search") zvecCalls++;
+  for (const arr of byTurn.values()) {
+    const sorted = [...arr].sort((a, b) => a.timestamp - b.timestamp);
+    for (const r of sorted) {
+      if (r.toolName !== "zvec_search") continue;
+      if (
+        sorted.some(
+          (o) => o.timestamp > r.timestamp && (o.toolName === "grep" || o.toolName === "find"),
+        )
+      ) {
+        zvecFallbacks++;
+      }
+    }
+  }
+  return {
+    zvecCalls,
+    zvecFallbacks,
+    fallbackRate: zvecCalls > 0 ? zvecFallbacks / zvecCalls : 0,
+    perTool: [...perToolMap.entries()]
+      .map(([tool, agg]) => ({
+        tool,
+        calls: agg.calls,
+        avgDurationMs: agg.durCount > 0 ? Math.round(agg.durSum / agg.durCount) : null,
+        totalDurationMs: agg.durSum,
+        errorRate: agg.calls > 0 ? agg.errors / agg.calls : 0,
+      }))
+      .sort((a, b) => b.calls - a.calls),
   };
 }
 

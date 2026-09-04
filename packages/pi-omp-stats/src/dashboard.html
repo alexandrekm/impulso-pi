@@ -1846,8 +1846,9 @@
             document.getElementById("folders-table").innerHTML = renderFolderTree(stats.byFolder);
           } else if (tab === "tools") {
             tools = await api("/api/stats/tools?range=" + range());
-            main.innerHTML = `<div class="chart-wrap"><h3>Tool calls over time</h3><canvas id="tools-chart"></canvas></div><div class="section-title">Per tool</div><div id="tools-table"></div>`;
+            main.innerHTML = `<div class="chart-wrap"><h3>Tool calls over time</h3><canvas id="tools-chart"></canvas></div><div class="section-title">Per tool</div><div id="tools-table"></div><div class="section-title">Search mix</div><div id="search-mix"></div>`;
             renderToolsTable(tools.byTool);
+            renderSearchMix(tools.searchMix);
             drawStackedArea("tools-chart", tools.series, "calls", "Calls");
           } else if (tab === "behavior") {
             behavior = await api("/api/stats/behavior?range=" + range());
@@ -1889,6 +1890,8 @@
             "Tool",
             "Calls",
             "Errors",
+            "Avg dur",
+            "Total dur",
             "Args chars",
             "Result chars",
             "Tok share",
@@ -1899,14 +1902,46 @@
             `<span class="model">${t.tool}</span>`,
             fmtNum(t.calls),
             fmtNum(t.errors),
+            fmtDur(t.avgDurationMs),
+            fmtDur(t.totalDurationMs),
             fmtNum(t.argsChars),
             fmtNum(t.resultChars),
             fmtNum(t.totalTokensShare),
             fmtCost(t.costShare),
             fmtDate(t.lastUsed),
           ]),
-          ["", "num", "num", "num", "num", "num", "num", "num"],
+          ["", "num", "num", "num", "num", "num", "num", "num", "num", "num"],
         );
+      }
+
+      // zvec vs exact search: adoption mix, per-tool wait, and the zvec
+      // fallback rate (turns where grep/find followed a zvec_search — the
+      // model didn't settle for the semantic result).
+      function renderSearchMix(mix) {
+        const el = main.querySelector("#search-mix");
+        if (!mix || !mix.perTool || mix.perTool.length === 0) {
+          el.innerHTML = `<div class="empty">no search tool calls in range</div>`;
+          return;
+        }
+        const cards = `
+    ${card("zvec_search calls", fmtNum(mix.zvecCalls), "semantic search usage", "var(--mauve, #cba6f7)")}
+    ${card("Fallback rate", fmtPct(mix.fallbackRate), `${fmtNum(mix.zvecFallbacks)} zvec_search turns followed by grep/find in the same turn`, mix.fallbackRate > 0.4 ? "var(--red)" : "var(--green)")}
+    ${card("Search wait", fmtDur(mix.perTool.reduce((s, t) => s + (t.totalDurationMs || 0), 0)), "total time agents waited on search tools", "var(--blue)")}`;
+        const rows = table(
+          ["Tool", "Calls", "Avg dur", "Total dur", "Error rate"],
+          mix.perTool.map((t) => [
+            `<span class="model">${t.tool}</span>`,
+            fmtNum(t.calls),
+            fmtDur(t.avgDurationMs),
+            fmtDur(t.totalDurationMs),
+            fmtPct(t.errorRate),
+          ]),
+          ["", "num", "num", "num", "num"],
+        );
+        el.innerHTML =
+          `<div class="cards">${cards}</div>` +
+          rows +
+          `<div class="kpi-note" style="padding:2px 0 0">duration = time from the assistant's tool call to its persisted result (includes queue time for parallel calls; capped at 1h so human pauses don't skew it). fallback = a grep/find call after zvec_search in the same assistant turn — a high rate means semantic results aren't trusted.</div>`;
       }
 
       function renderBehavior() {
