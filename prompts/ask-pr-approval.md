@@ -40,7 +40,7 @@ Draft a short message:
 <one-line summary of what changed — from the diff, not just the title>
 ```
 
-**Confirm via the `ask_user_question` tool before sending** — never send without it. Show the exact message text and target channel in the question, with options like "Send" / "Edit message" / "Cancel". On "Edit message", apply the user's changes and confirm again the same way. Only proceed to §4 after an explicit "Send".
+**Confirm via the `ask_user_question` tool before sending** — never send without it. Show the exact message text and target channel in the question, with options "Confirm" / "Deny" / "Another channel". On "Another channel", ask which channel (custom-answer row), re-resolve its ID per §1, and confirm again the same way. On "Deny", stop without posting. Only proceed to §4 after an explicit "Confirm".
 
 ## 4. Send
 
