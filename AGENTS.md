@@ -328,6 +328,13 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
   the `tool_call` hook). Reuses `command-guard/engine.ts` (core) for shell
   peeling/splitting. Toggled in `/settings` → Tools & Safety → Commit guard.
 
+- `skills/slack/` — Slack read/search/send via the `slackcli` CLI,
+  authenticated as the user's browser session (no Slack app needed). Auth
+  needs Brave and a locally patched binary; install/recovery steps in
+  `skills/slack/SETUP.md`. Skill enforces ask-before-writing; no workspace
+  IDs hardcoded — resolved live from the local config. The binary is
+  installed manually (`~/.local/bin`), not via install.sh.
+
 ## Prerequisites
 
 ```bash

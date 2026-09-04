@@ -487,6 +487,11 @@
     // (the Docs API's insertInlineImage needs a publicly fetchable URL).
     // Use for Docs one-pagers, TDDs, design docs built programmatically.
     "skills/gws-docs-authoring/": { "tags": ["work"] },
+
+    // slack: read/search/send Slack messages via the `slackcli` CLI,
+    // authenticated as the user's browser session. Install/auth/recovery:
+    // skills/slack/SETUP.md (patched binary + Brave required).
+    "skills/slack/": { "tags": ["work"] },
     // create-pr-personal: lightweight commit + PR workflow for personal
     // repos. Same shape as create-pr but stripped down — Conventional
     // Commits for the message + PR title, a short what/why PR body, no Jira,
