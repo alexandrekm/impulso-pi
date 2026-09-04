@@ -24,9 +24,10 @@
 // `disableModelInvocation` flag is set true on the discovered skill object) in
 // any mode not in its allowed list. Hiding is prompt-only: it removes the skill
 // from the <available_skills> auto-context block; command-only skills
-// (disable-model-invocation: true in their frontmatter, like create-pr) are
+// (disable-model-invocation: true in their frontmatter) are
 // never in that block anyway, so gating them is a harmless no-op on the prompt
-// but documents intent.
+// but documents intent. Command-only flows like /create-pr are now prompt
+// templates under prompts/, which bypass skill gating entirely.
 //
 // Doc mode also brings in the Google Workspace (`gws`) skills (Docs/Sheets/
 // Drive/Gmail): the gws extension reads mode.json directly and injects them

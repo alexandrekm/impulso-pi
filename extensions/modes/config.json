@@ -5,7 +5,6 @@
     "gws-docs-authoring": ["doc"],
     "jira": ["code"],
     "jira-authoring": ["code"],
-    "commit": ["code"],
-    "create-pr": ["code"]
+    "commit": ["code"]
   }
 }

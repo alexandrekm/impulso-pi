@@ -1,10 +1,7 @@
 ---
-name: create-pr-personal
-description: Commit and create a PR on personal repos using Conventional Commits. Simple workflow — no Jira, no strict commitlint, just a clean conventional commit and a PR describing what was done and why.
-disable-model-invocation: true
-author: alexandre.mendonca
-tags: [git, commit, pr, github, conventional-commits]
+description: Commit your changes and open a PR on personal repos using Conventional Commits — no Jira, no strict commitlint
 ---
+
 
 # Create PR (personal)
 
@@ -13,7 +10,7 @@ commit and PR title, and writes a short PR body describing what changed and why.
 No ticket linkage, no branch-naming enforcement beyond "get off the protected
 branch" — keep it simple.
 
-Announce at start: "I'm using the create-pr-personal skill to commit and create your PR."
+Announce at start: "I'm using the /create-pr-personal command to commit and create your PR."
 
 ## 0. Conventional Commits
 
@@ -160,3 +157,5 @@ Pass the body explicitly via `--body-file` with the content you composed — don
 ## 9. Report
 
 Output the PR URL. Done.
+
+<!-- Vendored from skills/create-pr-personal/SKILL.md as a pi prompt template (user-invocation command /create-pr-personal). -->

@@ -400,7 +400,7 @@ export const FEATURES: Feature[] = [
     group: "Modes",
     label: "Skill modes (code / doc)",
     description:
-      "Per-profile mode that gates which skills reach the system prompt. /mode code|doc|toggle; code = full dev workflow (jira, create-pr, commit), doc = Google Docs authoring + glean + datadog + gws skills (Docs/Sheets/Drive/Gmail, injected in doc mode). State in mode.json, applies next message. Work-only.",
+      "Per-profile mode that gates which skills reach the system prompt. /mode code|doc|toggle; code = full dev workflow (jira, commit), doc = Google Docs authoring + glean + datadog + gws skills (Docs/Sheets/Drive/Gmail, injected in doc mode). /create-pr is a prompt template, unaffected by modes. State in mode.json, applies next message. Work-only.",
     kind: "local",
   },
   // ── Orca & Misc ────────────────────────────────────────────────────────
