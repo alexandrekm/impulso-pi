@@ -964,15 +964,19 @@ function deployPpiAuto() {
 }
 
 // ---- standalone global tools (NOT pi resources) ---------------------------
-// Reads profiles.tools: a map of name -> { path } for standalone npm packages
-// that live in this repo and should be installed globally (npm i -g). Separate
-// from the profile resource sync — these are not synced into any profile dir.
-// Always rebuilds + reinstalls: a plain version-string comparison isn't safe
-// here because these packages are checked out from git, not published — a
-// `git pull`/merge can change the source without bumping `version`, leaving a
-// stale `dist/` behind if we skip the rebuild. `npm install` (dist/ via
-// `prepare`) and `npm install -g .` are both cheap/idempotent when nothing
-// changed, so we just always run them.
+// Reads profiles.tools: a map of name -> { path? } for standalone npm packages
+// that should be installed globally (npm i -g). Two forms:
+//   { "path": "packages/foo" } — a package checked out in this repo: always
+//     rebuilt (`prepare`) + reinstalled, because a plain version-string
+//     comparison isn't safe for git-checked-out packages — a `git pull`/merge
+//     can change the source without bumping `version`, leaving a stale `dist/`
+//     behind if we skip the rebuild. `npm install` (dist/ via `prepare`) and
+//     `npm install -g .` are both cheap/idempotent when nothing changed.
+//   {} (no path) — an external npm registry package (e.g. @zvec/zvec-grep):
+//     installed straight from the registry with `npm i -g <name>` (also
+//     cheap/idempotent; npm resolves it against the installed version).
+// Separate from the profile resource sync — these are not synced into any
+// profile dir.
 export function installStandaloneTools(profiles) {
   const tools = profiles.tools || {};
   const entries = Object.entries(tools);
@@ -986,7 +990,26 @@ export function installStandaloneTools(profiles) {
   const globalRoot = globalRootRes.status === 0 ? globalRootRes.stdout.trim() : null;
 
   for (const [name, tool] of entries) {
-    const dir = join(REPO_DIR, tool.path || name);
+    if (!tool.path) {
+      // External npm registry package: install straight from npm. Not
+      // pushed to freshlyInstalled — the pi-omp-stats service offer only
+      // applies to the local repo package.
+      console.log(`==> tool -> ${name} (global install from npm registry)`);
+      const regRes = spawnSync("npm", ["install", "-g", name, "--no-audit", "--no-fund"], {
+        stdio: ["inherit", "inherit", "pipe"],
+      });
+      if (regRes.status !== 0) {
+        console.error("");
+        hintNpmPermissionError((regRes.stderr && regRes.stderr.toString()) || "", {
+          command: `  ${name}: 'npm install -g ${name}'`,
+        });
+        console.error(`  ${name}: skipped (global install failed)`);
+        continue;
+      }
+      console.log(`  ${name}: installed`);
+      continue;
+    }
+    const dir = join(REPO_DIR, tool.path);
     const pkgPath = join(dir, "package.json");
     if (!existsSync(pkgPath)) {
       console.error(`  ${name}: no package.json at ${dir}, skipping`);
