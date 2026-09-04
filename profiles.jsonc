@@ -381,6 +381,22 @@
     "skills/address-pr-comments/": { "tags": ["core"] },
     "prompts/address-pr-comments.md": { "tags": ["core"] },
 
+    // review-pr: interactive reviewer-side PR review — fetches a PR by
+    // required number/URL argument, runs a show-me visual walkthrough of the
+    // PR content FIRST (reads prompts/show-me.md), then a findings pass
+    // (severity + file:line + proposed comment), triages each finding via
+    // ask_user_question (line comment / general body / skip / reword),
+    // drafts the full review, and posts ONE `gh api .../reviews` call
+    // (COMMENT/APPROVE/REQUEST_CHANGES + comments[]) only after explicit
+    // confirmation. Prompt template — invoke with /review-pr <n|url>. The
+    // skill entry keeps only the hidden troubleshooting companion
+    // (TROUBLESHOOTING.md, loaded via `read` on failure); its SKILL.md is a
+    // stub. Core so every profile gets it. Not in /settings: prompt
+    // templates aren't toggleable via settings.json (features.ts has no
+    // prompt kind) — remove the resource entries to uninstall.
+    "skills/review-pr/": { "tags": ["core"] },
+    "prompts/review-pr.md": { "tags": ["core"] },
+
     // pi-development: on-demand instructions for modifying pi or its supported
     // customization surfaces (extensions, skills, themes, TUI, SDK, providers,
     // models, packages, prompts, settings, and keybindings). The custom system
