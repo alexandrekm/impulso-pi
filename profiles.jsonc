@@ -487,6 +487,11 @@
     // (the Docs API's insertInlineImage needs a publicly fetchable URL).
     // Use for Docs one-pagers, TDDs, design docs built programmatically.
     "skills/gws-docs-authoring/": { "tags": ["work"] },
+
+    // slack: read/search/send Slack messages via the `slackcli` CLI,
+    // authenticated as the user's browser session. Install/auth/recovery:
+    // skills/slack/SETUP.md (patched binary + Brave required).
+    "skills/slack/": { "tags": ["work"] },
     // create-pr-personal: lightweight commit + PR workflow for personal
     // repos. Same shape as create-pr but stripped down — Conventional
     // Commits for the message + PR title, a short what/why PR body, no Jira,
@@ -494,6 +499,12 @@
     // protected branch". Now a prompt template — invoke with
     // /create-pr-personal.
     "prompts/create-pr-personal.md": { "tags": ["personal"] },
+
+    // ask-pr-approval: /ask-pr-approval posts the current PR to the team
+    // Slack channel for review via slackcli (the slack skill). The channel
+    // name comes from the SLACK_PR_CHANNEL env var (local shell config,
+    // never in git).
+    "prompts/ask-pr-approval.md": { "tags": ["work"] },
     // border-on-user-messages: draws a `┌─ You ─┐` / `│ … │` / `└───┘`
     // box around every user message in the TUI transcript so your own
     // messages are easy to spot amid assistant/tool output. Patches
