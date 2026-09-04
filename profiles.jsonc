@@ -206,10 +206,12 @@
     "extensions/on-demand-skills/": { "tags": ["core"] },
     // modes: per-profile skill mode switch (code | doc) layered on top of
     // profiles. A mode gates which synced skills reach the system prompt each
-    // turn — e.g. code mode shows jira/create-pr/commit and hides
+    // turn — e.g. code mode shows jira/commit and hides
     // gws-docs-authoring; doc mode shows gws-docs-authoring and hides the
-    // PR/commit flow. Skills not in the gated map (address-pr-comments,
-    // datadog, glean) stay always-on. Toggled with /mode code|doc|toggle;
+    // PR/commit skills. Skills not in the gated map (datadog, glean) stay
+    // always-on. Command-only flows like /create-pr and
+    // /address-pr-comments are prompt templates, unaffected by modes.
+    // Toggled with /mode code|doc|toggle;
     // state in <configDir>/mode.json, applies next message (no /reload).
     // Doc mode also surfaces the gws skills (the gws extension reads mode.json).
     // Work-only for now. Config: extensions/modes/config.json. Toggled in
@@ -370,12 +372,14 @@
     // address-pr-comments: one-pass workflow to fetch, evaluate, and act on
     // every PR review comment (Copilot/bots + human) — assess each, batch-apply
     // approved fixes, commit (Conventional Commits + Jira scope), reply to and
-    // resolve every thread, then report. disable-model-invocation: true in the
-    // frontmatter hides it from the system prompt, so the agent never loads it
-    // on its own — invoke explicitly with /skill:address-pr-comments. Core so
-    // every profile gets it. Ported from impulso-omp's skill of the same name;
-    // the OMP `ask` tool calls were adapted to pi's `ask_user_question` schema.
+    // resolve every thread, then report. Now a prompt template — invoke with
+    // /address-pr-comments. This skill entry keeps only the hidden
+    // troubleshooting companion (TROUBLESHOOTING.md, loaded via `read` on
+    // failure); its SKILL.md is a stub. Core so every profile gets it.
+    // Ported from impulso-omp's skill of the same name; the OMP `ask` tool
+    // calls were adapted to pi's `ask_user_question` schema.
     "skills/address-pr-comments/": { "tags": ["core"] },
+    "prompts/address-pr-comments.md": { "tags": ["core"] },
 
     // pi-development: on-demand instructions for modifying pi or its supported
     // customization surfaces (extensions, skills, themes, TUI, SDK, providers,

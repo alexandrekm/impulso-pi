@@ -20,7 +20,7 @@
 //
 // Gating is declared in ./config.json under `gated`: a map of skill name -> the
 // modes in which it is visible. A skill NOT listed in `gated` is always visible
-// (e.g. address-pr-comments, datadog, glean). A skill listed is hidden (its
+// (e.g. datadog, glean). A skill listed is hidden (its
 // `disableModelInvocation` flag is set true on the discovered skill object) in
 // any mode not in its allowed list. Hiding is prompt-only: it removes the skill
 // from the <available_skills> auto-context block; command-only skills
