@@ -193,6 +193,27 @@ export interface ToolUsageStats {
   outputTokensShare: number;
   costShare: number;
   lastUsed: number;
+  /** Avg per-call wait (assistant entry → tool result entry), null when no
+   *  call in range has a measured duration. */
+  avgDurationMs: number | null;
+  totalDurationMs: number;
+}
+
+/** zvec vs exact-search mix, per-tool wait time, and zvec fallback rate. */
+export interface SearchMixStats {
+  zvecCalls: number;
+  /** zvec_search calls followed by a grep/find call later in the same user
+   *  turn (before the next user message) — the model didn't settle for the
+   *  semantic result and re-searched exactly. */
+  zvecFallbacks: number;
+  fallbackRate: number;
+  perTool: Array<{
+    tool: string;
+    calls: number;
+    avgDurationMs: number | null;
+    totalDurationMs: number;
+    errorRate: number;
+  }>;
 }
 
 export interface ToolModelStats extends ToolUsageStats {
@@ -211,6 +232,7 @@ export interface ToolDashboardStats {
   byTool: ToolUsageStats[];
   byToolModel: ToolModelStats[];
   series: ToolTimeSeriesPoint[];
+  searchMix: SearchMixStats;
 }
 
 /* Providers. Only the portable subset is implemented; the omp auth-broker

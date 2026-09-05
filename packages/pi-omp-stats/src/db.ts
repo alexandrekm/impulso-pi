@@ -192,6 +192,7 @@ export async function initDb(): Promise<DatabaseSync> {
 			calls_in_turn INTEGER NOT NULL DEFAULT 1,
 			args_chars INTEGER NOT NULL DEFAULT 0,
 			result_chars INTEGER,
+			duration_ms INTEGER,
 			is_error INTEGER,
 			UNIQUE(session_file, tool_call_id)
 		);
@@ -326,7 +327,11 @@ export async function initDb(): Promise<DatabaseSync> {
   // files once — the dedup guards make the re-inserts idempotent, and parsing
   // is cheap. Without this, a pre-existing DB would never backfill the new
   // compaction/memory/guard/subagent tables from files whose mtime is unchanged.
-  const SCHEMA_VERSION = "5-guard-subagent-events";
+  // 6→7: same schema, but the first v6 release still guarded tool-result
+  // updates on `result_chars IS NULL`, so the v6 offset-reset re-parse
+  // repopulated offsets without backfilling duration_ms. v7 forces one more
+  // full re-parse under the widened `duration_ms IS NULL` guard.
+  const SCHEMA_VERSION = "7-tool-duration-backfill";
   const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
     { value: string } | undefined;
   if (db && (!row || row.value !== SCHEMA_VERSION)) {
@@ -346,6 +351,7 @@ export async function initDb(): Promise<DatabaseSync> {
     addColumn("reason", "ALTER TABLE compaction_stats ADD COLUMN reason TEXT");
     addColumn("will_retry", "ALTER TABLE compaction_stats ADD COLUMN will_retry INTEGER");
     addColumn("tokens_after", "ALTER TABLE compaction_stats ADD COLUMN tokens_after INTEGER");
+    addColumn("duration_ms", "ALTER TABLE tool_calls ADD COLUMN duration_ms INTEGER");
     // The reason index can't be in the initial CREATE block (the column may
     // not exist yet on a v2 DB), so create it here after the ALTERs.
     db.exec("CREATE INDEX IF NOT EXISTS idx_compaction_stats_reason ON compaction_stats(reason)");
@@ -627,8 +633,27 @@ export function insertToolCalls(calls: ToolCallStats[]): number {
 
 export function updateToolResults(links: ToolResultLink[]): number {
   if (!db || links.length === 0) return 0;
+  // Duration: the toolResult entry's ISO timestamp minus the assistant
+  // entry's tool-call timestamp. Entry timestamps are only written when an
+  // entry is persisted, so a long human pause mid-turn would inflate the
+  // first pending call's delta — cap at 1h and discard negatives instead.
+  // With several parallel calls in one turn the delta is per-call queue
+  // time, not pure execution time (still the right signal for "how long did
+  // the agent wait on this tool").
+  //
+  // Guard: fill any row whose duration_ms is still NULL. This covers both
+  // fresh calls (row inserted by the toolCall message, result not yet seen)
+  // and the schema-v6 backfill, which re-parses historical sessions whose
+  // result_chars was already populated. Re-running on an already-measured
+  // row is impossible (duration set), and rows whose delta was capped to
+  // NULL just recompute the same NULL — the deltas are deterministic, so
+  // nothing is ever overwritten with a different value.
+  const TOOL_DURATION_CAP_MS = 3_600_000;
   const stmt = db.prepare(
-    "UPDATE tool_calls SET result_chars = ?, is_error = ? WHERE session_file = ? AND tool_call_id = ? AND result_chars IS NULL",
+    `UPDATE tool_calls SET result_chars = ?, is_error = ?,
+       duration_ms = CASE WHEN ? - timestamp BETWEEN 0 AND ${TOOL_DURATION_CAP_MS}
+                          THEN ? - timestamp ELSE NULL END
+     WHERE session_file = ? AND tool_call_id = ? AND duration_ms IS NULL`,
   );
   let updated = 0;
   tx(() => {
@@ -636,6 +661,8 @@ export function updateToolResults(links: ToolResultLink[]): number {
       const result = stmt.run(
         link.resultChars,
         link.isError ? 1 : 0,
+        link.timestamp,
+        link.timestamp,
         link.sessionFile,
         link.toolCallId,
       );
@@ -1520,7 +1547,9 @@ const TOOL_AGGREGATE_COLUMNS = `
 	SUM(COALESCE(m.total_tokens, 0) * 1.0 / t.calls_in_turn) as total_tokens_share,
 	SUM(COALESCE(m.output_tokens, 0) * 1.0 / t.calls_in_turn) as output_tokens_share,
 	SUM(COALESCE(m.cost_total, 0) / t.calls_in_turn) as cost_share,
-	MAX(t.timestamp) as last_used
+	MAX(t.timestamp) as last_used,
+	AVG(t.duration_ms) as avg_duration_ms,
+	SUM(COALESCE(t.duration_ms, 0)) as total_duration_ms
 `;
 
 interface ToolAggregateRow {
@@ -1535,6 +1564,8 @@ interface ToolAggregateRow {
   output_tokens_share: number | null;
   cost_share: number | null;
   last_used: number;
+  avg_duration_ms: number | null;
+  total_duration_ms: number | null;
 }
 
 function rowToToolUsage(row: ToolAggregateRow): ToolUsageStats {
@@ -1548,6 +1579,8 @@ function rowToToolUsage(row: ToolAggregateRow): ToolUsageStats {
     outputTokensShare: row.output_tokens_share ?? 0,
     costShare: row.cost_share ?? 0,
     lastUsed: row.last_used,
+    avgDurationMs: row.avg_duration_ms != null ? Math.round(row.avg_duration_ms) : null,
+    totalDurationMs: row.total_duration_ms ?? 0,
   };
 }
 
@@ -2717,4 +2750,64 @@ export function listGuardSessions(): string[] {
     .prepare("SELECT DISTINCT session_file FROM guard_events ORDER BY session_file")
     .all() as unknown as Array<{ session_file: string }>;
   return rows.map((r) => r.session_file);
+}
+
+/** Per-call rows for search-related tools, in per-session insertion order
+ *  (rowid = parse order = JSONL order; session files are append-only) so the
+ *  search-mix aggregator can detect cross-turn "exact search after
+ *  zvec_search" fallbacks. */
+export interface SearchCallRow {
+  sessionFile: string;
+  entryId: string;
+  toolName: string;
+  timestamp: number;
+  durationMs: number | null;
+  isError: boolean;
+}
+
+const SEARCH_TOOLS = ["zvec_search", "grep", "find", "zvec_status", "zvec_index"];
+
+export function getSearchCallRows(cutoff?: number): SearchCallRow[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT session_file, entry_id, tool_name, timestamp, duration_ms, is_error
+		FROM tool_calls
+		WHERE tool_name IN (${SEARCH_TOOLS.map(() => "?").join(", ")})
+		${hasCutoff ? "AND timestamp >= ?" : ""}
+		ORDER BY session_file, id
+	`;
+  const binds = hasCutoff ? [...SEARCH_TOOLS, cutoff] : SEARCH_TOOLS;
+  const rows = db.prepare(sql).all(...binds) as unknown as Array<{
+    session_file: string;
+    entry_id: string;
+    tool_name: string;
+    timestamp: number;
+    duration_ms: number | null;
+    is_error: number | null;
+  }>;
+  return rows.map((row) => ({
+    sessionFile: row.session_file,
+    entryId: row.entry_id,
+    toolName: row.tool_name,
+    timestamp: row.timestamp,
+    durationMs: row.duration_ms,
+    isError: row.is_error === 1,
+  }));
+}
+
+/** User-message timestamps per session (insertion order) — the turn
+ *  boundaries used by the search-mix fallback detector. */
+export function getUserTurnTimestamps(): Map<string, number[]> {
+  const out = new Map<string, number[]>();
+  if (!db) return out;
+  const rows = db
+    .prepare("SELECT session_file, timestamp FROM user_messages ORDER BY session_file, id")
+    .all() as unknown as Array<{ session_file: string; timestamp: number }>;
+  for (const row of rows) {
+    const arr = out.get(row.session_file) ?? [];
+    arr.push(row.timestamp);
+    out.set(row.session_file, arr);
+  }
+  return out;
 }

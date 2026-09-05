@@ -66,6 +66,11 @@ export interface Feature {
    *  yields a `provider/id` string that is split into the two sub-keys
    *  (and `""` clears provider/id while preserving `thinking`). */
   modelKey?: string;
+  /** For `config` enum: write the selected value as a JSON number instead of
+   *  a string (for packages whose config schema requires a numeric type,
+   *  e.g. pi-zvec-grep's defaultLimit). Values are still declared as
+   *  strings for the cycler; keep "" first to mean "key absent". */
+  numeric?: boolean;
 }
 
 export interface Tab {
@@ -120,6 +125,40 @@ export const FEATURES: Feature[] = [
     description:
       "Query the team's internal docs Knowledge Base (Bedrock) before the web. Work-only. Needs KB_GATEWAY_URL + KB_GATEWAY_KEY.",
     kind: "local",
+  },
+  {
+    id: "zvec-grep",
+    tab: "search",
+    group: "Semantic search",
+    label: "zvec-grep hybrid search",
+    description:
+      "Local-first hybrid semantic+keyword search (zvec_search / zvec_index / zvec_status tools, /zg command) over a per-workspace index. Complements FFF: exact strings stay on grep/find, meaning-based questions go to zvec_search. Needs the global zg CLI (installed by install.sh). npm:@luminascale/pi-zvec-grep.",
+    kind: "package",
+    spec: "npm:@luminascale/pi-zvec-grep",
+  },
+  {
+    id: "zvec-autoindex",
+    tab: "search",
+    group: "Semantic search",
+    label: "Auto index on start",
+    description:
+      "On session start, run zg status and build/update the workspace index in the background when missing or stale (fire-and-forget, never blocks startup). First build in a workspace can take a while and downloads the local embedding model once. Written to <configDir>/pi-zvec-grep/config.json; per-workspace overrides via /zg settings.",
+    kind: "config",
+    configFile: "pi-zvec-grep/config.json",
+    key: "autoIndex",
+  },
+  {
+    id: "zvec-limit",
+    tab: "search",
+    group: "Semantic search",
+    label: "Default search limit",
+    description:
+      "Default max hits per zvec_search query group when the tool call passes no explicit limit (an explicit limit always wins; zg caps at 50). <configDir>/pi-zvec-grep/config.json.",
+    kind: "config",
+    configFile: "pi-zvec-grep/config.json",
+    key: "defaultLimit",
+    values: ["", "5", "7", "10", "15", "20"],
+    numeric: true,
   },
 
   // ── Observability ──────────────────────────────────────────────────────
@@ -834,7 +873,7 @@ export function setFeatureState(f: Feature, value: string): void {
       // "" is the "same as main / use default" sentinel: remove the key.
       delete data[f.key!];
     } else {
-      data[f.key!] = value;
+      data[f.key!] = f.numeric ? Number(value) : value;
     }
     writeConfigFile(f.configFile!, data);
     return;

@@ -52,6 +52,8 @@ import {
   getToolStats,
   getToolStatsByModel,
   getToolTimeSeries,
+  getSearchCallRows,
+  getUserTurnTimestamps,
   getTimeSeries,
   initDb,
   insertCompactionStats,
@@ -87,6 +89,7 @@ import type {
   BehaviorDashboardStats,
   DashboardStats,
   ProviderDashboardStats,
+  SearchMixStats,
   ToolDashboardStats,
 } from "./shared-types.js";
 import type {
@@ -482,6 +485,79 @@ export async function getToolDashboardStats(range?: string | null): Promise<Tool
     byTool: getToolStats(cutoff ?? undefined),
     byToolModel: getToolStatsByModel(cutoff ?? undefined),
     series: getToolTimeSeries(modelSeriesDays, cutoff, modelSeriesBucketMs),
+    searchMix: computeSearchMix(cutoff ?? undefined),
+  };
+}
+
+/**
+ * zvec vs exact-search mix + per-tool wait times + zvec fallback rate.
+ *
+ * Fallback = a zvec_search followed by a grep/find call later in the same
+ * user turn (i.e. before the next user message). The fallback is necessarily
+ * cross-entry: the model can only judge a search result in a subsequent
+ * assistant entry, and calls within one entry share a timestamp — so
+ * detection walks each session's search rows in insertion order, with user
+ * messages as turn boundaries. Each pending zvec_search counts at most one
+ * fallback (the first grep/find that follows it).
+ */
+function computeSearchMix(cutoff?: number): SearchMixStats {
+  const rows = getSearchCallRows(cutoff);
+  const perToolMap = new Map<
+    string,
+    { calls: number; errors: number; durSum: number; durCount: number }
+  >();
+  for (const r of rows) {
+    const agg = perToolMap.get(r.toolName) ?? { calls: 0, errors: 0, durSum: 0, durCount: 0 };
+    agg.calls++;
+    if (r.isError) agg.errors++;
+    if (r.durationMs != null) {
+      agg.durSum += r.durationMs;
+      agg.durCount++;
+    }
+    perToolMap.set(r.toolName, agg);
+  }
+
+  const userTurns = getUserTurnTimestamps();
+  const bySession = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const arr = bySession.get(r.sessionFile) ?? [];
+    arr.push(r);
+    bySession.set(r.sessionFile, arr);
+  }
+  let zvecCalls = 0;
+  let zvecFallbacks = 0;
+  for (const [session, srows] of bySession) {
+    const bounds = userTurns.get(session) ?? [];
+    let bi = 0;
+    let pendingZvec = 0;
+    for (const r of srows) {
+      if (r.toolName === "zvec_search") zvecCalls++;
+      // A user message strictly before this call ends the previous turn.
+      while (bi < bounds.length && bounds[bi] < r.timestamp) {
+        bi++;
+        pendingZvec = 0;
+      }
+      if (r.toolName === "zvec_search") {
+        pendingZvec++;
+      } else if ((r.toolName === "grep" || r.toolName === "find") && pendingZvec > 0) {
+        zvecFallbacks += pendingZvec;
+        pendingZvec = 0;
+      }
+    }
+  }
+  return {
+    zvecCalls,
+    zvecFallbacks,
+    fallbackRate: zvecCalls > 0 ? zvecFallbacks / zvecCalls : 0,
+    perTool: [...perToolMap.entries()]
+      .map(([tool, agg]) => ({
+        tool,
+        calls: agg.calls,
+        avgDurationMs: agg.durCount > 0 ? Math.round(agg.durSum / agg.durCount) : null,
+        totalDurationMs: agg.durSum,
+        errorRate: agg.calls > 0 ? agg.errors / agg.calls : 0,
+      }))
+      .sort((a, b) => b.calls - a.calls),
   };
 }
 

@@ -552,15 +552,40 @@
     // https://www.npmjs.com/package/@narumitw/pi-btw
     "npm:@narumitw/pi-btw": { "tags": ["core"] },
 
+    // pi-zvec-grep (MikkelKappelPersson): zvec-grep (zg) hybrid search as
+    // native pi tools — zvec_search (BM25+vector+ripgrep fusion over a local
+    // per-workspace index), zvec_index, zvec_status, plus the /zg command.
+    // Additive: it does NOT override find/grep — tool descriptions route
+    // exact-string search to FFF/rg and reserve zvec_search for semantic,
+    // location-unknown questions. Requires the global `zg` CLI, installed
+    // via the "tools" section below. User config (autoIndex, defaultLimit)
+    // lives at <configDir>/pi-zvec-grep/config.json — seeded by the file
+    // resource below with autoIndex on, and toggled in /settings → Search.
+    // https://github.com/MikkelKappelPersson/pi-zvec-grep
+    "npm:@luminascale/pi-zvec-grep": { "tags": ["core"] },
+    "extensions/pi-zvec-grep/config.json": {
+      "tags": ["core"],
+      "dest": "pi-zvec-grep/config.json",
+    },
+
     // Future tagged resources, e.g.:
     // "skills/home-lab/": { "tags": ["personal"] },
   },
   // Standalone global CLI tools (NOT pi resources). These are regular npm
-  // packages that live in this repo and are installed globally (npm i -g) by
-  // ./install.sh, separate from the profile resource sync above. They are not
-  // synced into any profile dir and are not loaded by pi. `path` is relative
-  // to the repo root; `bin` is informational (read from package.json).
+  // packages installed globally (npm i -g) by ./install.sh, separate from
+  // the profile resource sync above. They are not synced into any profile
+  // dir and are not loaded by pi. Two forms:
+  //   "name": { "path": "packages/foo" }  — package checked out in this repo;
+  //     always rebuilt (`prepare`) then installed from the local dir, since a
+  //     git pull can change the source without bumping the version.
+  //   "@scope/pkg": {}                   — external npm registry package;
+  //     installed straight from the registry (no local build).
+  // `path` is relative to the repo root; `bin` is informational (read from
+  // package.json).
   "tools": {
     "pi-omp-stats": { "path": "packages/pi-omp-stats" },
+    // zvec-grep CLI (`zg`) — required by npm:@luminascale/pi-zvec-grep
+    // above. External npm package: installed globally from the registry.
+    "@zvec/zvec-grep": {},
   },
 }
