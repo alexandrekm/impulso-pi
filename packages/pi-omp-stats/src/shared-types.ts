@@ -201,9 +201,10 @@ export interface ToolUsageStats {
 
 /** zvec vs exact-search mix, per-tool wait time, and zvec fallback rate. */
 export interface SearchMixStats {
-  /** zvec_search calls whose assistant turn (entry) also contains a later
-   *  grep/find call — the model fell back to exact search in the same turn. */
   zvecCalls: number;
+  /** zvec_search calls followed by a grep/find call later in the same user
+   *  turn (before the next user message) — the model didn't settle for the
+   *  semantic result and re-searched exactly. */
   zvecFallbacks: number;
   fallbackRate: number;
   perTool: Array<{

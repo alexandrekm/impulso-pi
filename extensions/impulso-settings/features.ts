@@ -158,6 +158,7 @@ export const FEATURES: Feature[] = [
     configFile: "pi-zvec-grep/config.json",
     key: "defaultLimit",
     values: ["", "5", "7", "10", "15", "20"],
+    numeric: true,
   },
 
   // ── Observability ──────────────────────────────────────────────────────

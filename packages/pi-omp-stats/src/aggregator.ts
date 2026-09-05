@@ -53,6 +53,7 @@ import {
   getToolStatsByModel,
   getToolTimeSeries,
   getSearchCallRows,
+  getUserTurnTimestamps,
   getTimeSeries,
   initDb,
   insertCompactionStats,
@@ -490,9 +491,14 @@ export async function getToolDashboardStats(range?: string | null): Promise<Tool
 
 /**
  * zvec vs exact-search mix + per-tool wait times + zvec fallback rate.
- * A "fallback" is a zvec_search call whose assistant turn (entry_id) also
- * contains a grep/find call at a later timestamp in the same session — the
- * model didn't settle for the semantic result and re-searched exactly.
+ *
+ * Fallback = a zvec_search followed by a grep/find call later in the same
+ * user turn (i.e. before the next user message). The fallback is necessarily
+ * cross-entry: the model can only judge a search result in a subsequent
+ * assistant entry, and calls within one entry share a timestamp — so
+ * detection walks each session's search rows in insertion order, with user
+ * messages as turn boundaries. Each pending zvec_search counts at most one
+ * fallback (the first grep/find that follows it).
  */
 function computeSearchMix(cutoff?: number): SearchMixStats {
   const rows = getSearchCallRows(cutoff);
@@ -510,28 +516,32 @@ function computeSearchMix(cutoff?: number): SearchMixStats {
     }
     perToolMap.set(r.toolName, agg);
   }
-  // Fallback detection: group by (session, entry); a zvec_search followed
-  // by grep/find in the same group is a fallback.
-  const byTurn = new Map<string, typeof rows>();
+
+  const userTurns = getUserTurnTimestamps();
+  const bySession = new Map<string, typeof rows>();
   for (const r of rows) {
-    const key = `${r.sessionFile} ${r.entryId}`;
-    const arr = byTurn.get(key) ?? [];
+    const arr = bySession.get(r.sessionFile) ?? [];
     arr.push(r);
-    byTurn.set(key, arr);
+    bySession.set(r.sessionFile, arr);
   }
   let zvecCalls = 0;
   let zvecFallbacks = 0;
-  for (const r of rows) if (r.toolName === "zvec_search") zvecCalls++;
-  for (const arr of byTurn.values()) {
-    const sorted = [...arr].sort((a, b) => a.timestamp - b.timestamp);
-    for (const r of sorted) {
-      if (r.toolName !== "zvec_search") continue;
-      if (
-        sorted.some(
-          (o) => o.timestamp > r.timestamp && (o.toolName === "grep" || o.toolName === "find"),
-        )
-      ) {
-        zvecFallbacks++;
+  for (const [session, srows] of bySession) {
+    const bounds = userTurns.get(session) ?? [];
+    let bi = 0;
+    let pendingZvec = 0;
+    for (const r of srows) {
+      if (r.toolName === "zvec_search") zvecCalls++;
+      // A user message strictly before this call ends the previous turn.
+      while (bi < bounds.length && bounds[bi] < r.timestamp) {
+        bi++;
+        pendingZvec = 0;
+      }
+      if (r.toolName === "zvec_search") {
+        pendingZvec++;
+      } else if ((r.toolName === "grep" || r.toolName === "find") && pendingZvec > 0) {
+        zvecFallbacks += pendingZvec;
+        pendingZvec = 0;
       }
     }
   }

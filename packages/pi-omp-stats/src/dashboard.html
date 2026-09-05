@@ -1941,7 +1941,7 @@
         el.innerHTML =
           `<div class="cards">${cards}</div>` +
           rows +
-          `<div class="kpi-note" style="padding:2px 0 0">duration = time from the assistant's tool call to its persisted result (includes queue time for parallel calls; capped at 1h so human pauses don't skew it). fallback = a grep/find call after zvec_search in the same assistant turn — a high rate means semantic results aren't trusted.</div>`;
+          `<div class="kpi-note" style="padding:2px 0 0">duration = time from the assistant's tool call to its persisted result (includes queue time for parallel calls; capped at 1h so human pauses don't skew it). fallback = a grep/find call after zvec_search later in the same user turn (before the next user message) — a high rate means semantic results aren't trusted.</div>`;
       }
 
       function renderBehavior() {

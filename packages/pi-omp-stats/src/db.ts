@@ -327,7 +327,11 @@ export async function initDb(): Promise<DatabaseSync> {
   // files once — the dedup guards make the re-inserts idempotent, and parsing
   // is cheap. Without this, a pre-existing DB would never backfill the new
   // compaction/memory/guard/subagent tables from files whose mtime is unchanged.
-  const SCHEMA_VERSION = "6-tool-duration";
+  // 6→7: same schema, but the first v6 release still guarded tool-result
+  // updates on `result_chars IS NULL`, so the v6 offset-reset re-parse
+  // repopulated offsets without backfilling duration_ms. v7 forces one more
+  // full re-parse under the widened `duration_ms IS NULL` guard.
+  const SCHEMA_VERSION = "7-tool-duration-backfill";
   const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
     { value: string } | undefined;
   if (db && (!row || row.value !== SCHEMA_VERSION)) {
@@ -636,12 +640,20 @@ export function updateToolResults(links: ToolResultLink[]): number {
   // With several parallel calls in one turn the delta is per-call queue
   // time, not pure execution time (still the right signal for "how long did
   // the agent wait on this tool").
+  //
+  // Guard: fill any row whose duration_ms is still NULL. This covers both
+  // fresh calls (row inserted by the toolCall message, result not yet seen)
+  // and the schema-v6 backfill, which re-parses historical sessions whose
+  // result_chars was already populated. Re-running on an already-measured
+  // row is impossible (duration set), and rows whose delta was capped to
+  // NULL just recompute the same NULL — the deltas are deterministic, so
+  // nothing is ever overwritten with a different value.
   const TOOL_DURATION_CAP_MS = 3_600_000;
   const stmt = db.prepare(
     `UPDATE tool_calls SET result_chars = ?, is_error = ?,
        duration_ms = CASE WHEN ? - timestamp BETWEEN 0 AND ${TOOL_DURATION_CAP_MS}
                           THEN ? - timestamp ELSE NULL END
-     WHERE session_file = ? AND tool_call_id = ? AND result_chars IS NULL`,
+     WHERE session_file = ? AND tool_call_id = ? AND duration_ms IS NULL`,
   );
   let updated = 0;
   tx(() => {
@@ -2740,9 +2752,10 @@ export function listGuardSessions(): string[] {
   return rows.map((r) => r.session_file);
 }
 
-/** Per-call rows for search-related tools, oldest→newest per session so the
- *  search-mix aggregator can detect "exact search right after zvec_search"
- *  fallbacks within the same assistant turn (entry_id). */
+/** Per-call rows for search-related tools, in per-session insertion order
+ *  (rowid = parse order = JSONL order; session files are append-only) so the
+ *  search-mix aggregator can detect cross-turn "exact search after
+ *  zvec_search" fallbacks. */
 export interface SearchCallRow {
   sessionFile: string;
   entryId: string;
@@ -2762,7 +2775,7 @@ export function getSearchCallRows(cutoff?: number): SearchCallRow[] {
 		FROM tool_calls
 		WHERE tool_name IN (${SEARCH_TOOLS.map(() => "?").join(", ")})
 		${hasCutoff ? "AND timestamp >= ?" : ""}
-		ORDER BY session_file, entry_id, timestamp, tool_call_id
+		ORDER BY session_file, id
 	`;
   const binds = hasCutoff ? [...SEARCH_TOOLS, cutoff] : SEARCH_TOOLS;
   const rows = db.prepare(sql).all(...binds) as unknown as Array<{
@@ -2781,4 +2794,20 @@ export function getSearchCallRows(cutoff?: number): SearchCallRow[] {
     durationMs: row.duration_ms,
     isError: row.is_error === 1,
   }));
+}
+
+/** User-message timestamps per session (insertion order) — the turn
+ *  boundaries used by the search-mix fallback detector. */
+export function getUserTurnTimestamps(): Map<string, number[]> {
+  const out = new Map<string, number[]>();
+  if (!db) return out;
+  const rows = db
+    .prepare("SELECT session_file, timestamp FROM user_messages ORDER BY session_file, id")
+    .all() as unknown as Array<{ session_file: string; timestamp: number }>;
+  for (const row of rows) {
+    const arr = out.get(row.session_file) ?? [];
+    arr.push(row.timestamp);
+    out.set(row.session_file, arr);
+  }
+  return out;
 }
