@@ -67,6 +67,15 @@
         },
       },
     },
+
+    // pi-provider-litellm: unless litellm.skills.enabled is false, the
+    // package registers three LiteLLM Skills Gateway tools
+    // (litellm_skill_list/create/delete) and injects a skills block into the
+    // system prompt. We don't use the proxy's skill registry, so seed it
+    // off. Fill-only: flipping it back on in settings.json survives syncs.
+    "litellm": {
+      "skills": { "enabled": false },
+    },
   },
 
   "profiles": {
@@ -83,7 +92,15 @@
     // pi-subagents owns all child-process lifecycle. The exact release was
     // preflighted against Pi 0.84.4: scout uses a strict read/search tool
     // allowlist, starts fresh, and Orca is only a best-effort observer.
-    "npm:pi-subagents@0.64.0": { "tags": ["core"] },
+    // prune: hide the package's bundled council-mode / pi-subagents skills
+    // from <available_skills> — we delegate to scout only, and pi auto-loads
+    // every skill a package ships with no per-skill blacklist, so install.sh
+    // deletes these dirs from the installed package on every sync (updates
+    // can't resurrect them).
+    "npm:pi-subagents@0.64.0": {
+      "tags": ["core"],
+      "prune": ["skills/council-mode", "skills/pi-subagents"],
+    },
     "extensions/subagent-telemetry/subagent-telemetry.ts": {
       "tags": ["core"],
       "dest": "extensions/subagent-telemetry/index.ts",

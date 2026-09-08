@@ -243,6 +243,17 @@ export const FEATURES: Feature[] = [
     spec: "npm:pi-provider-litellm",
   },
   {
+    id: "litellm-skills-gateway",
+    tab: "providers",
+    group: "LiteLLM",
+    label: "Skills Gateway tools",
+    description:
+      "Register litellm_skill_list/create/delete tools and inject the proxy's skill registry into the system prompt. Seeded off via profiles.jsonc settingsDefaults (we don't use the proxy's skills). /reload to apply.",
+    kind: "pi-setting",
+    key: "litellm.skills.enabled",
+    defaultValue: "on",
+  },
+  {
     id: "cache-ttl",
     tab: "providers",
     group: "Prompt caching",

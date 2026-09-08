@@ -568,6 +568,38 @@ function executeNpmInstalls(selected, items, names) {
   }
 }
 
+// ---- package pruning -------------------------------------------------------
+
+// pi auto-registers every skill/prompt a package declares in its manifest and
+// offers no per-item blacklist. A package resource in profiles.jsonc may
+// declare "prune": [<paths relative to the installed package root>] to have
+// those paths deleted from <target>/npm/node_modules/<pkg>/ on every sync —
+// idempotent, and re-applied after any pi install/update, so upgrades don't
+// resurrect pruned files. (npm: only; git: package dir naming isn't stable
+// enough to target.)
+function prunePackagePaths(t, profiles) {
+  for (const [key, entry] of Object.entries(profiles.resources ?? {})) {
+    if (classify(key) !== "npm") continue;
+    const prune = entry?.prune;
+    if (!Array.isArray(prune) || prune.length === 0) continue;
+    // Strip a version pin: "pi-subagents@0.64.0" -> "pi-subagents",
+    // "@scope/name@1.2.3" -> "@scope/name" ([^@/]+ keeps the scope's @).
+    const pkgName = pkgNameFromSpec(key).replace(/@[^@/]+$/, "");
+    const pkgDir = join(t.dir, "npm", "node_modules", pkgName);
+    if (!existsSync(pkgDir)) continue;
+    for (const rel of prune) {
+      if (typeof rel !== "string" || rel.includes("..") || rel.startsWith("/")) {
+        console.log(`  [prune skip]   ${key}: unsafe prune path ${JSON.stringify(rel)}`);
+        continue;
+      }
+      const p = join(pkgDir, rel);
+      if (!existsSync(p)) continue;
+      rmSync(p, { recursive: true, force: true });
+      console.log(`  [pruned]       ${pkgName}/${rel}  ->  ${t.base ? "base" : t.name}`);
+    }
+  }
+}
+
 // ---- settings sync ---------------------------------------------------------
 
 // ---- legacy payload migration -------------------------------------------
@@ -1300,6 +1332,7 @@ async function main() {
       migrateLegacyCreatePrPersonal(t);
       doInstallFiles(t, profiles);
       doInstallSettings(t, profiles);
+      prunePackagePaths(t, profiles);
       migrateLegacyPayloads(t);
     }
     // 6. Deploy ppi-auto wrapper (only if work profile is being installed,
