@@ -135,6 +135,15 @@ Resource key forms:
 `git:` is for packages not published to npm (e.g. pi-droid-styling). Update
 checks only apply to `npm:` (git packages have no registry version).
 
+An `npm:` resource may also set an optional `"prune": [<paths relative to
+the installed package root>]` — install.sh deletes those paths from
+`<target>/npm/node_modules/<pkg>/` on **every** sync (idempotent), so pi
+package updates can't resurrect them. Use it to hide package-shipped
+resources pi force-loads with no per-item blacklist. Currently:
+`npm:pi-subagents@0.64.0` prunes `skills/council-mode` and
+`skills/pi-subagents` (we delegate to the scout subagent only; pi
+auto-registers every skill a package's `pi.skills` manifest declares).
+
 File resources may set an optional `"dest"` (path relative to the profile
 dir) to land at a nested path — e.g. an extension's config file. If several
 selected keys share a `dest`, tag-specific (non-core) keys beat core ones;
@@ -162,7 +171,12 @@ deliberately different semantics:
   clobbering per-user tuning. Currently used for `observational-memory`
   compaction thresholds (`compactAfterTokensMode: "ratio"`,
   `compactAfterTokensRatio: 0.9`) so the proactive auto-compaction trigger
-  doesn't fire at the default 81k-token threshold on large-context models.
+  doesn't fire at the default 81k-token threshold on large-context models,
+  and for `litellm.skills.enabled: false`, which stops pi-provider-litellm
+  from registering the LiteLLM Skills Gateway tools
+  (`litellm_skill_list/create/delete`) and injecting the proxy's skill
+  registry into the system prompt (toggleable at /settings → Providers →
+  LiteLLM → Skills Gateway tools).
   The `/settings` "Compaction trigger mode" toggle can still flip it back to
   `calibrated` — install only fills these when absent, never resets them.
 

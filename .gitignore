@@ -155,3 +155,6 @@ vite.config.ts.timestamp-*
 
 # pi-subagents Orca observer runtime artifacts (per-worktree, best-effort)
 /.pi
+
+# Local zvec-grep search index (machine-specific, regenerable)
+.zvec-grep/
