@@ -26,7 +26,7 @@
 import { DatabaseSync } from "node:sqlite";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { resolveStatsDir } from "./parser.js";
+import { resolveStatsDir, PLAUSIBLE_MAX_TPS } from "./parser.js";
 import type {
   AgentType,
   BehaviorModelStats,
@@ -331,7 +331,15 @@ export async function initDb(): Promise<DatabaseSync> {
   // updates on `result_chars IS NULL`, so the v6 offset-reset re-parse
   // repopulated offsets without backfilling duration_ms. v7 forces one more
   // full re-parse under the widened `duration_ms IS NULL` guard.
-  const SCHEMA_VERSION = "7-tool-duration-backfill";
+  // 7→8: assistant-message `duration` is now derived (entry persist
+  // timestamp − message start timestamp) for pi-written sessions, and the
+  // message upsert fills NULL duration/ttft on conflict — v8 forces one
+  // full re-parse so historical rows backfill their derived durations.
+  // 8→9: the v8 derivation trusted the delta blindly; providers that set
+  // the message timestamp at completion (cursor-native) produced ~10ms
+  // "durations". v9 nulls implausibly fast rows (>PLAUSIBLE_MAX_TPS implied)
+  // and re-parses so the guarded derivation refills them (or leaves NULL).
+  const SCHEMA_VERSION = "9-derived-duration-plausibility";
   const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
     { value: string } | undefined;
   if (db && (!row || row.value !== SCHEMA_VERSION)) {
@@ -355,6 +363,14 @@ export async function initDb(): Promise<DatabaseSync> {
     // The reason index can't be in the initial CREATE block (the column may
     // not exist yet on a v2 DB), so create it here after the ALTERs.
     db.exec("CREATE INDEX IF NOT EXISTS idx_compaction_stats_reason ON compaction_stats(reason)");
+    // v9: drop implausibly fast durations written by the v8 backfill —
+    // same predicate the parser now applies, so the offset-reset re-parse
+    // recomputes them (deterministically) under the plausibility guard.
+    db.exec(
+      `UPDATE messages SET duration = NULL ` +
+        `WHERE duration IS NOT NULL AND duration > 0 AND output_tokens > 0 ` +
+        `AND (output_tokens * 1000.0 / duration) > ${PLAUSIBLE_MAX_TPS}`,
+    );
     db.exec("DELETE FROM file_offsets");
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)").run(
       SCHEMA_VERSION,
@@ -464,8 +480,10 @@ export function resetAllFileOffsets(): void {
 /**
  * Insert message stats. Forked/branched sessions deep-copy a parent's
  * entries into a new JSONL — same `entry_id`, `timestamp`, model, tokens — so
- * the `WHERE NOT EXISTS` guard skips duplicates across the lineage
- * (first-write-wins). Same-file re-syncs hit the `ON CONFLICT` upsert.
+ * (first-write-wins). Same-file re-syncs hit the `ON CONFLICT` upsert, which
+ * additionally fills a NULL duration/ttft from the newly parsed row — this
+ * is what backfills derived durations on the schema-v8 offset-reset
+ * re-parse (deltas are deterministic, so nothing is ever overwritten).
  */
 export function insertMessageStats(stats: MessageStats[]): number {
   if (!db || stats.length === 0) return 0;
@@ -483,8 +501,12 @@ export function insertMessageStats(stats: MessageStats[]): number {
 			WHERE entry_id = ? AND timestamp = ? AND session_file <> ?
 		)
 		ON CONFLICT(session_file, entry_id) DO UPDATE SET
-			premium_requests = excluded.premium_requests
-		WHERE messages.premium_requests < excluded.premium_requests
+			premium_requests = MAX(messages.premium_requests, excluded.premium_requests),
+			duration = COALESCE(messages.duration, excluded.duration),
+			ttft = COALESCE(messages.ttft, excluded.ttft)
+		WHERE (messages.duration IS NULL AND excluded.duration IS NOT NULL)
+			OR (messages.ttft IS NULL AND excluded.ttft IS NOT NULL)
+			OR messages.premium_requests < excluded.premium_requests
 	`);
 
   let inserted = 0;
@@ -1031,6 +1053,15 @@ function buildAggregatedStats(rows: AggregatedStatsRow[]) {
   };
 }
 
+/* Time-weighted output rate over completed requests: total output tokens
+ * divided by total time spent producing them. Robust to outliers in both
+ * directions (a per-request mean is dragged by 0-token aborts and by
+ * timestamp artifacts), and matches how a "model speed" number is usually
+ * quoted. Failed/aborted requests are excluded — they produce no output
+ * but can hang for minutes. NULL when no eligible rows (NULLIF). */
+const TOKENS_PER_SECOND_SQL = `SUM(CASE WHEN duration > 0 AND stop_reason NOT IN ('error', 'aborted') THEN output_tokens ELSE 0 END) * 1000.0
+	/ NULLIF(SUM(CASE WHEN duration > 0 AND stop_reason NOT IN ('error', 'aborted') THEN duration ELSE 0 END), 0) as avg_tokens_per_second`;
+
 const AGGREGATE_COLUMNS = `
 	COUNT(*) as total_requests,
 	SUM(CASE WHEN stop_reason = 'error' THEN 1 ELSE 0 END) as failed_requests,
@@ -1046,7 +1077,7 @@ const AGGREGATE_COLUMNS = `
 	SUM(cost_no_cache_input) as total_no_cache_input_cost,
 	AVG(duration) as avg_duration,
 	AVG(ttft) as avg_ttft,
-	AVG(CASE WHEN duration > 0 THEN output_tokens * 1000.0 / duration ELSE NULL END) as avg_tokens_per_second,
+	${TOKENS_PER_SECOND_SQL},
 	MIN(timestamp) as first_timestamp,
 	MAX(timestamp) as last_timestamp
 `;
@@ -1223,7 +1254,7 @@ export function getModelPerformanceSeries(
 		SELECT (timestamp / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket, model, provider,
 			COUNT(*) as requests,
 			AVG(ttft) as avg_ttft,
-			AVG(CASE WHEN duration > 0 THEN output_tokens * 1000.0 / duration ELSE NULL END) as avg_tokens_per_second
+			${TOKENS_PER_SECOND_SQL}
 		FROM messages
 		${hasCutoff ? "WHERE timestamp >= ?" : ""}
 		GROUP BY bucket, model, provider
@@ -1674,7 +1705,7 @@ export function getStatsByProvider(cutoff?: number | null): ProviderAggregate[] 
 			SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens) as total_tokens,
 			SUM(cost_total) as total_cost,
 			SUM(premium_requests) as total_premium_requests,
-			AVG(CASE WHEN duration > 0 THEN output_tokens * 1000.0 / duration ELSE NULL END) as avg_tokens_per_second
+			${TOKENS_PER_SECOND_SQL}
 		FROM messages
 		${hasCutoff ? "WHERE timestamp >= ?" : ""}
 		GROUP BY provider

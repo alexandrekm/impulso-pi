@@ -1491,6 +1491,124 @@
         });
       }
 
+      /* Horizontal bars: models ranked by avg output rate (fastest first). */
+      function drawModelSpeedChart(rows) {
+        if (!chartReady || typeof Chart === "undefined" || !rows) return;
+        const data = rows
+          .filter((m) => m.avgTokensPerSecond != null)
+          .sort((a, b) => b.avgTokensPerSecond - a.avgTokensPerSecond)
+          .slice(0, 12);
+        if (data.length === 0) return;
+        const ctx = ensureChart("model-speed-chart");
+        if (!ctx) return;
+        const palette = PALETTE();
+        charts["model-speed-chart"] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: data.map((m) => m.model),
+            datasets: [
+              {
+                label: "Output tok/s",
+                data: data.map((m) => m.avgTokensPerSecond),
+                backgroundColor: data.map((_, i) => palette[i % palette.length] + "b3"),
+                borderColor: data.map((_, i) => palette[i % palette.length]),
+                borderWidth: 1,
+                borderRadius: 4,
+              },
+            ],
+          },
+          options: (() => {
+            const o = baseChartOpts();
+            o.indexAxis = "y";
+            o.scales.x.title = {
+              display: true,
+              text: "output tokens / s (per-request avg)",
+              color: cssVar("--dim"),
+            };
+            o.scales.y.ticks = { color: cssVar("--muted"), font: { size: 12 }, autoSkip: false };
+            o.plugins.legend = { display: false };
+            o.plugins.tooltip.callbacks = {
+              afterLabel: (item) => {
+                const m = data[item.dataIndex];
+                return (
+                  "latency " +
+                  fmtDur(m.avgDuration) +
+                  " · ttft " +
+                  fmtDur(m.avgTtft) +
+                  " · " +
+                  fmtNum(m.totalRequests) +
+                  " reqs"
+                );
+              },
+            };
+            return o;
+          })(),
+        });
+      }
+
+      /* Horizontal bars: models ranked by avg duration, with TTFT for reference. */
+      function drawModelLatencyChart(rows) {
+        if (!chartReady || typeof Chart === "undefined" || !rows) return;
+        const data = rows
+          .filter((m) => m.avgDuration != null)
+          .sort((a, b) => b.avgDuration - a.avgDuration)
+          .slice(0, 12);
+        if (data.length === 0) return;
+        const ctx = ensureChart("model-latency-chart");
+        if (!ctx) return;
+        const dur = cssVar("--blue"),
+          ttft = cssVar("--mauve");
+        charts["model-latency-chart"] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: data.map((m) => m.model),
+            datasets: [
+              {
+                label: "Avg duration",
+                data: data.map((m) => (m.avgDuration != null ? m.avgDuration / 1000 : null)),
+                backgroundColor: dur + "b3",
+                borderColor: dur,
+                borderWidth: 1,
+                borderRadius: 4,
+              },
+              // Only draw the TTFT series when at least one model has it
+              // (pi sessions never record it; omp sessions do).
+              ...(data.some((m) => m.avgTtft != null)
+                ? [
+                    {
+                      label: "Avg TTFT",
+                      data: data.map((m) => (m.avgTtft != null ? m.avgTtft / 1000 : null)),
+                      backgroundColor: ttft + "b3",
+                      borderColor: ttft,
+                      borderWidth: 1,
+                      borderRadius: 4,
+                    },
+                  ]
+                : []),
+            ],
+          },
+          options: (() => {
+            const o = baseChartOpts();
+            o.indexAxis = "y";
+            o.scales.x.title = {
+              display: true,
+              text: "seconds (per-request avg)",
+              color: cssVar("--dim"),
+            };
+            o.scales.y.ticks = { color: cssVar("--muted"), font: { size: 12 }, autoSkip: false };
+            o.plugins.tooltip.callbacks = {
+              afterLabel: (item) => {
+                const m = data[item.dataIndex];
+                return (
+                  fmtNum(m.totalRequests) + " reqs · " + fmtNum(m.totalOutputTokens) + " out tok"
+                );
+              },
+            };
+            return o;
+          })(),
+        });
+      }
+
       function drawCostByModel(points) {
         if (!chartReady || typeof Chart === "undefined" || !points || points.length === 0) return;
         const buckets = [...new Set(points.map((p) => p.timestamp))].sort((a, b) => a - b);
@@ -1676,6 +1794,8 @@
             "Cache %",
             "Savings",
             "Cost",
+            "Latency",
+            "TTFT",
             "Tok/s",
           ],
           rows.map((m) => [
@@ -1690,9 +1810,27 @@
             fmtPct(m.cacheRate),
             fmtPct(m.cacheSavings),
             fmtCost(m.totalCost),
+            fmtDur(m.avgDuration),
+            fmtDur(m.avgTtft),
             m.avgTokensPerSecond != null ? m.avgTokensPerSecond.toFixed(1) : "—",
           ]),
-          ["", "", "num", "num", "num", "num", "num", "num", "num", "num", "num", "num"],
+          [
+            "",
+            "",
+            "num",
+            "num",
+            "num",
+            "num",
+            "num",
+            "num",
+            "num",
+            "num",
+            "num",
+            "num",
+            "num",
+            "num",
+            "num",
+          ],
         );
       }
 
@@ -1837,9 +1975,27 @@
             await loadOverview();
           } else if (tab === "models") {
             if (!stats) stats = await api("/api/stats?range=" + range());
-            main.innerHTML = `<div class="chart-wrap"><h3>Requests by model over time</h3><canvas id="model-chart"></canvas></div><div class="section-title">Per model</div><div id="models-table"></div>`;
+            const speed = stats.byModel
+              .filter((m) => m.avgTokensPerSecond != null)
+              .sort((a, b) => b.avgTokensPerSecond - a.avgTokensPerSecond);
+            const ttft = stats.byModel
+              .filter((m) => m.avgTtft != null)
+              .sort((a, b) => a.avgTtft - b.avgTtft);
+            const speedCards = `
+    ${card("Fastest", speed.length ? speed[0].avgTokensPerSecond.toFixed(1) + " tok/s" : "—", speed.length ? speed[0].model : "no data", "var(--green)")}
+    ${card("Slowest", speed.length ? speed[speed.length - 1].avgTokensPerSecond.toFixed(1) + " tok/s" : "—", speed.length ? speed[speed.length - 1].model : "no data", "var(--red)")}
+    ${card("Snappiest TTFT", ttft.length ? fmtDur(ttft[0].avgTtft) : "—", ttft.length ? ttft[0].model : "no data", "var(--yellow)")}
+  `;
+            main.innerHTML = `<div class="cards">${speedCards}</div>
+    <div class="chart-wrap"><h3>Requests by model over time</h3><canvas id="model-chart"></canvas></div>
+    <div class="chart-wrap"><h3>Speed — output tokens / s</h3><canvas id="model-speed-chart"></canvas></div>
+    <div class="chart-wrap"><h3>Latency — avg duration &amp; TTFT</h3><canvas id="model-latency-chart"></canvas></div>
+    <div class="section-title">Per model</div><div id="models-table"></div>
+    <div class="kpi-note" style="padding:2px 0 0">tok/s = total output tokens ÷ total time over completed requests (errors/aborts excluded). duration = request wall time — for pi sessions it's derived from session timestamps (message start → persisted), so a mid-request suspend inflates it. TTFT needs per-message timing only omp writes; pi sessions show —. Charts show the top 12 per metric.</div>`;
             renderModelTable("#models-table", stats.byModel);
             drawStackedArea("model-chart", stats.modelSeries, "requests", "Requests");
+            drawModelSpeedChart(stats.byModel);
+            drawModelLatencyChart(stats.byModel);
           } else if (tab === "folders") {
             if (!stats) stats = await api("/api/stats?range=" + range());
             main.innerHTML = `<div class="section-title">Folder tree</div><div id="folders-table"></div>`;

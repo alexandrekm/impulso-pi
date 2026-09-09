@@ -224,23 +224,30 @@ CDN by default. For a **zero-CDN** build, drop a local copy of Chart.js at
 `./chart.min.js` first and only falls back to the CDN if it is absent. Tables
 render even when Chart.js is unavailable.
 
-Sections: **Overview** (metric cards + time-series), **Models**, **Folders**,
-**Tools**, **Behavior** (port of omp's "rage" analytics), **Costs**,
-**Providers**, **Requests**, **Errors**, **Compaction** (compaction frequency,
-context-size-at-trigger histogram, fromHook split, by-trigger-reason table,
-summary-generation cost),
-**Observational Memory** (memory production, relevance distribution, live
-pool-token growth vs the 20k default, and a searchable/filterable memory
-browser listing individual observations/reflections with their 12-hex
-`memoryId` — the same id `recall()` takes — and a detail pane), and
-**Guards** (commit-guard / command-guard blocks: totals, blocks-per-day
-chart, by-kind and by-model tables, and a searchable, paginated list of the
-blocked commands with their reasons).
+Sections: **Overview** (metric cards + time-series), **Models** (fastest/
+slowest/snappiest-TTFT cards, a speed chart ranking models by output
+tokens/s, a latency chart of avg duration & TTFT, and a per-model table
+with Latency / TTFT / Tok/s columns), **Folders**, **Tools**, **Behavior**
+(port of omp's "rage" analytics), **Costs**, **Providers**, **Requests**,
+**Errors**, **Compaction** (compaction frequency, context-size-at-trigger
+histogram, fromHook split, by-trigger-reason table, summary-generation
+cost), **Observational Memory** (memory production, relevance
+distribution, live pool-token growth vs the 20k default, and a
+searchable/filterable memory browser listing individual
+observations/reflections with their 12-hex `memoryId` — the same id
+`recall()` takes — and a detail pane), and **Guards** (commit-guard /
+command-guard blocks: totals, blocks-per-day chart, by-kind and by-model
+tables, and a searchable, paginated list of the blocked commands with
+their reasons).
 
-> **Note on latency/TTFT:** as of this port, earendil-works pi does not record
-> `duration` / `ttft` on assistant messages, so the Avg Latency, Avg TTFT, and
-> Tokens/s cards render as `-` for that lineage. The columns are retained and
-> will populate for forks that do emit them.
+> **Note on latency/TTFT:** earendil-works pi does not record `duration` /
+> `ttft` on assistant messages, so both are **derived** where possible:
+> `duration` = entry persist timestamp − message start timestamp (the
+> message timestamp is set when the provider stream starts). Deltas that
+> imply an impossible output rate (providers that stamp the message at
+> completion, e.g. cursor-native) are discarded, and `ttft` cannot be
+> derived at all — it stays `-` for pi-written sessions and populates only
+> for forks that emit it (omp).
 
 ## Security
 
