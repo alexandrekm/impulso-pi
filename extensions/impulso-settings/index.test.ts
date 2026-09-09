@@ -10,6 +10,11 @@ import { tmpdir } from "node:os";
 const CONFIG_DIR = mkdtempSync(join(tmpdir(), "impulso-cfg-"));
 process.env.PI_CODING_AGENT_DIR = CONFIG_DIR;
 
+/** Deterministically flush activate()'s pick-promise continuation: the
+ * .then callback is a microtask, and setImmediate runs only after the
+ * microtask queue drains — no dependence on runner speed. */
+const settle = () => new Promise<void>((r) => setImmediate(r));
+
 const { ImpulsoSettingsView: ImpulsoSettingsViewClass, default: factory } =
   await import("./index.ts");
 import type { ImpulsoSettingsView } from "./index.ts";
@@ -125,7 +130,7 @@ describe("ImpulsoSettingsView.activate", () => {
     );
     const feature = focusFeature(view, (f) => !!f.picker);
     (view as unknown as { activate: () => void }).activate();
-    await new Promise((r) => setTimeout(r, 10));
+    await settle();
     assert.equal(getFeatureState(feature), "picked-model");
     assert.equal((view as unknown as { dirty: boolean }).dirty, true);
   });
@@ -140,7 +145,7 @@ describe("ImpulsoSettingsView.activate", () => {
     const feature = focusFeature(view, (f) => !!f.picker);
     const before = getFeatureState(feature);
     (view as unknown as { activate: () => void }).activate();
-    await new Promise((r) => setTimeout(r, 10));
+    await settle();
     assert.equal(getFeatureState(feature), before);
   });
 
