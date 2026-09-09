@@ -5,6 +5,7 @@
     "gws-docs-authoring": ["doc"],
     "jira": ["code"],
     "jira-authoring": ["code"],
-    "commit": ["code"]
+    "commit": ["code"],
+    "unslop": ["doc"]
   }
 }

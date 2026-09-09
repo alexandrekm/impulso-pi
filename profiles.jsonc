@@ -520,6 +520,13 @@
     // (the Docs API's insertInlineImage needs a publicly fetchable URL).
     // Use for Docs one-pagers, TDDs, design docs built programmatically.
     "skills/gws-docs-authoring/": { "tags": ["work"] },
+    // unslop: cut AI tells from writing (puffery, AI vocabulary, em-dash
+    // overuse, chatbot phrases, jargon; add human voice). Vendored from
+    // https://github.com/backnotprop/pstack (skills/unslop, MIT) — a
+    // single self-contained SKILL.md, no deps. Work-only, and gated to doc
+    // mode via extensions/modes/config.json so it stays out of the prompt
+    // in code mode.
+    "skills/unslop/": { "tags": ["work"] },
 
     // slack: read/search/send Slack messages via the `slackcli` CLI,
     // authenticated as the user's browser session. Install/auth/recovery:
