@@ -2127,7 +2127,7 @@
         const b = s.periodBefore;
         const a = s.periodAfter;
         const delta = (after, before, invert) => {
-          if (!before || !after || before === 0 || after === 0) return "";
+          if (before == null || after == null || before === 0 || after === 0) return "";
           const pct = ((after - before) / before) * 100;
           const good = invert ? pct < 0 : pct > 0;
           const color = Math.abs(pct) < 1 ? "var(--dim)" : good ? "var(--green)" : "var(--red)";
@@ -2148,49 +2148,42 @@
     <div id="search-adoption-sessions"></div>
     <div class="kpi-note" style="padding:2px 0 0">sessions split at ${s.sinceLabel} by their first user message (the zvec enablement: broken home index dropped, indexes rebuilt per workspace, scout allowlisted). wall-clock = first→last user message, capped at 12h. exact search = grep/find/multi_grep; zvec = zvec_search/status/index, scout-subagent usage included. fewer turns / less wall-clock / fewer tokens after = investigations got cheaper. pass ?since=&lt;epoch-ms|iso-date&gt; to move the cutoff.</div>
   `;
-        const compareRow = (label, before, after, invert) => [
+        const compareRow = (label, fmt, before, after, invert) => [
           label,
-          before,
-          after,
+          fmt(before),
+          fmt(after),
           delta(after, before, invert) || "—",
         ];
         main.querySelector("#search-adoption-compare").innerHTML = table(
           ["Metric", "Before", "After", "Δ"],
           [
-            compareRow("Sessions", fmtNum(b.sessions), fmtNum(a.sessions), false),
-            compareRow("Avg turns / session", b.avgTurns.toFixed(1), a.avgTurns.toFixed(1), true),
-            compareRow(
-              "Avg wall-clock (min)",
-              fmtNum(b.avgWallClockMin),
-              fmtNum(a.avgWallClockMin),
-              true,
-            ),
-            compareRow("Avg tokens / session", fmtNum(b.avgTokens), fmtNum(a.avgTokens), true),
+            compareRow("Sessions", fmtNum, b.sessions, a.sessions, false),
+            compareRow("Avg turns / session", (v) => v.toFixed(1), b.avgTurns, a.avgTurns, true),
+            compareRow("Avg wall-clock (min)", fmtNum, b.avgWallClockMin, a.avgWallClockMin, true),
+            compareRow("Avg tokens / session", fmtNum, b.avgTokens, a.avgTokens, true),
             compareRow(
               "Avg exact-search calls / session",
-              b.avgSearchCalls.toFixed(1),
-              a.avgSearchCalls.toFixed(1),
+              (v) => v.toFixed(1),
+              b.avgSearchCalls,
+              a.avgSearchCalls,
               true,
             ),
             compareRow(
               "Avg zvec calls / session",
-              b.avgZvecCalls.toFixed(2),
-              a.avgZvecCalls.toFixed(2),
+              (v) => v.toFixed(2),
+              b.avgZvecCalls,
+              a.avgZvecCalls,
               false,
             ),
             compareRow(
               "zvec adoption (% sessions)",
-              b.zvecAdoptionPct.toFixed(0) + "%",
-              a.zvecAdoptionPct.toFixed(0) + "%",
+              (v) => v.toFixed(0) + "%",
+              b.zvecAdoptionPct,
+              a.zvecAdoptionPct,
               false,
             ),
-            compareRow(
-              "zvec_search avg wait",
-              fmtDur(b.avgZvecSearchMs),
-              fmtDur(a.avgZvecSearchMs),
-              true,
-            ),
-            compareRow("zvec errors", fmtNum(b.zvecErrors), fmtNum(a.zvecErrors), true),
+            compareRow("zvec_search avg wait", fmtDur, b.avgZvecSearchMs, a.avgZvecSearchMs, true),
+            compareRow("zvec errors", fmtNum, b.zvecErrors, a.zvecErrors, true),
           ],
           ["", "num", "num", "num"],
         );
