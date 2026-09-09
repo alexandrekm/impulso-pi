@@ -1,6 +1,6 @@
 ---
 name: scout
-description: Read-only codebase reconnaissance with evidence and a compact handoff for the parent.
+description: Read-only reconnaissance with a compact, evidence-based handoff. Use for investigations that will likely span multiple files, unknown locations, or design rationale (call chains, where-is-X-handled questions, change-surface mapping before edits); do quick 1-2 call lookups inline instead.
 tools: read, grep, find, ls, zvec_search, zvec_status, contact_supervisor
 systemPromptMode: replace
 inheritProjectContext: true
