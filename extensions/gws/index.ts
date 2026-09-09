@@ -7,12 +7,13 @@
 // discovery locations, so pi never loads them by default — they stay out of
 // context entirely until doc mode is active.
 //
-// The toggle is the `modes` extension's `/mode doc` command (state in
-// <configDir>/mode.json). There is no separate `/gws` command or settings
-// toggle: doc mode *is* the gws toggle. This extension reads mode.json fresh
-// on every turn inside `before_agent_start`, so switching modes takes effect
-// on the next user message — no `/reload` needed. On profiles without the
-// modes extension (mode.json absent), this extension is inert.
+// The toggle is the `modes` extension's `/mode doc` command. There is no
+// separate `/gws` command or settings toggle: doc mode *is* the gws toggle.
+// The modes extension keeps the mode in-memory per session and broadcasts it
+// on pi.events ("modes:changed", { mode }) on session_start and on every
+// /mode change; this extension tracks that broadcast, so switching modes
+// takes effect on the next user message — no `/reload` needed. On profiles
+// without the modes extension (no broadcasts), this extension is inert.
 //
 // When mode === "doc", this extension:
 //   1. parses the 5 primary SKILL.md files (shared + docs/sheets/drive/gmail)
@@ -39,33 +40,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-const CONFIG_DIR = process.env.PI_CODING_AGENT_DIR || dirname(dirname(MODULE_DIR));
-const MODE_PATH = join(CONFIG_DIR, "mode.json");
 const SKILLS_DIR = join(MODULE_DIR, "skills");
 
 // Primary skills surfaced in the system prompt. The granular helper
 // sub-skills live on disk as siblings and are reached via relative links
 // from these — no need to list them all (keeps context minimal).
 const PRIMARY_SKILLS = ["gws-shared", "gws-docs", "gws-sheets", "gws-drive", "gws-gmail"] as const;
-
-// ─────────────────────────────────────────────────────────────────────────
-// Mode state (<configDir>/mode.json) — owned by the `modes` extension.
-// ─────────────────────────────────────────────────────────────────────────
-
-interface ModeState {
-  mode?: string;
-}
-
-// True iff the current mode is "doc" (the gws-injecting mode). mode.json
-// absent (no modes extension on this profile) → false → inert.
-function isDocMode(): boolean {
-  try {
-    const data = JSON.parse(readFileSync(MODE_PATH, "utf8")) as ModeState;
-    return data.mode === "doc";
-  } catch {
-    return false;
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // SKILL.md frontmatter parsing (name + description only)
@@ -186,9 +166,18 @@ function formatSkillsBlock(skills: ParsedSkill[]): string {
 // ─────────────────────────────────────────────────────────────────────────
 
 export default function (pi: any): void {
+  // Doc-mode state, tracked from the modes extension's pi.events broadcasts
+  // (session_start announces the default; /mode announces changes). Defaults
+  // to false: with no modes extension on this profile there are no
+  // broadcasts and this extension stays inert.
+  let docMode = false;
+  pi.events.on("modes:changed", (data: any) => {
+    docMode = data?.mode === "doc";
+  });
+
   // Inject the gws skills into the system prompt when doc mode is active.
   pi.on("before_agent_start", async (event: any) => {
-    if (!isDocMode()) return;
+    if (!docMode) return;
     const skills = primarySkills();
     if (skills.length === 0) return;
 

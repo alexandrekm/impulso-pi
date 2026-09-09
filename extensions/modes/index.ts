@@ -12,11 +12,16 @@
 //   /mode doc         switch to doc mode
 //   /mode toggle      flip code <-> doc
 //
-// State persists in <configDir>/mode.json ({ mode: "code" | "doc" }) but is
-// reset to the config `default` (code) on every session_start — the mode is
-// per-session, not a sticky cross-session preference. The mode is read
-// fresh on every turn inside `before_agent_start`, so switching takes
-// effect on the next user message — no `/reload` needed.
+// State is in-memory, per session: a module-level variable, never written
+// to disk. (The old design persisted to <configDir>/mode.json — a file
+// shared by every session of the profile, so /mode in one window silently
+// flipped the mode in all the others.) Every session starts in the config
+// `default` (code): session_start resets it, so the mode is per-session,
+// not a sticky cross-session preference. The mode is read fresh on every
+// turn inside `before_agent_start`, so switching takes effect on the next
+// user message — no `/reload` needed. The current mode is broadcast on
+// pi.events as "modes:changed" ({ mode }) — on session_start and on every
+// /mode change — for the gws extension and the footer.
 //
 // Gating is declared in ./config.json under `gated`: a map of skill name -> the
 // modes in which it is visible. A skill NOT listed in `gated` is always visible
@@ -30,9 +35,10 @@
 // templates under prompts/, which bypass skill gating entirely.
 //
 // Doc mode also brings in the Google Workspace (`gws`) skills (Docs/Sheets/
-// Drive/Gmail): the gws extension reads mode.json directly and injects them
-// when mode === "doc", so there is no separate /gws toggle — /mode doc *is*
-// the gws switch. This extension only owns skill gating + the mode state.
+// Drive/Gmail): the gws extension listens for "modes:changed" on pi.events
+// and injects them when mode === "doc", so there is no separate /gws
+// toggle — /mode doc *is* the gws switch. This extension only owns skill
+// gating + the (in-memory, per-session) mode state.
 // Composes with the system-prompt extension (which rebuilds the whole prompt
 // from event.systemPromptOptions.skills) and the gws extension (which injects
 // gws-* skills into that same array): we mutate opts.skills in place so any
@@ -40,13 +46,11 @@
 // <available_skills> block(s) in event.systemPrompt so a prompt that was
 // assembled before us (or with system-prompt disabled) is corrected too.
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-const CONFIG_DIR = process.env.PI_CODING_AGENT_DIR || dirname(dirname(MODULE_DIR));
-const STATE_PATH = join(CONFIG_DIR, "mode.json");
 const CONFIG_PATH = join(MODULE_DIR, "config.json");
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -83,28 +87,24 @@ function readConfig(): ModeConfig {
   return cachedConfig;
 }
 
-interface ModeState {
-  mode?: string;
-}
+// In-memory per-session mode. null until first read (→ config default).
+// Deliberately NOT persisted: each pi process is one session, and a shared
+// state file leaks /mode changes across concurrently running sessions.
+let sessionMode: string | null = null;
 
 function readMode(): string {
-  const cfg = readConfig();
-  try {
-    const data = JSON.parse(readFileSync(STATE_PATH, "utf8")) as ModeState;
-    const mode = data.mode;
-    if (mode && cfg.modes.includes(mode)) return mode;
-  } catch {
-    // no state file yet
-  }
-  return cfg.default;
+  if (sessionMode === null) sessionMode = readConfig().default;
+  return sessionMode;
 }
 
-function writeMode(mode: string): void {
+function setMode(pi: any, mode: string): void {
+  sessionMode = mode;
+  // Broadcast for other extensions (gws, pi-dynamic-footer). Defensive
+  // optional chaining: the mode itself still applies without the broadcast.
   try {
-    mkdirSync(CONFIG_DIR, { recursive: true });
-    writeFileSync(STATE_PATH, JSON.stringify({ mode }, null, 2) + "\n", "utf8");
+    pi.events?.emit?.("modes:changed", { mode });
   } catch {
-    // Non-fatal: in-memory behaviour still works for the session.
+    // Non-fatal: gating still works; listeners just miss the update.
   }
 }
 
@@ -169,12 +169,13 @@ export function rewriteSkillsBlocks(prompt: string, skills: any[]): string {
 export default function (pi: any): void {
   if (!isFeatureEnabled("modes")) return;
 
-  // A session always starts in the default mode (code). mode.json is
+  // A session always starts in the default mode (code). The mode is
   // within-session state, not a cross-session preference: /mode is for
   // temporarily flipping mid-session, and the next session starts clean.
+  // Resetting here (not just lazily) also covers /new and /reload, where
+  // pi may reuse this module instance in the same process.
   pi.on("session_start", async () => {
-    const cfg = readConfig();
-    if (readMode() !== cfg.default) writeMode(cfg.default);
+    setMode(pi, readConfig().default);
   });
 
   // Gate the discovered skills for the current mode on every turn.
@@ -224,10 +225,10 @@ export default function (pi: any): void {
       } else if (action === "" || action === "toggle") {
         const idx = cfg.modes.indexOf(mode);
         mode = cfg.modes[(idx + 1) % cfg.modes.length];
-        writeMode(mode);
+        setMode(pi, mode);
       } else if (cfg.modes.includes(action)) {
         mode = action;
-        writeMode(mode);
+        setMode(pi, mode);
       } else {
         ctx.ui.notify(`Usage: /mode [${cfg.modes.join("|")}|toggle|status]`, "error");
         return;

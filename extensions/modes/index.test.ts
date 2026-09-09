@@ -1,21 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-// modes resolves <configDir>/mode.json at import time; ./config.json (repo)
+// PI_CODING_AGENT_DIR points at a throwaway dir so the feature-flag check
+// (impulso-settings.json) never reads the real profile. ./config.json (repo)
 // supplies the real gating table: modes ["code","doc"], gated gws-docs-authoring
-// (doc) and jira/jira-authoring/commit (code).
+// (doc) and jira/jira-authoring/commit (code). Mode state is in-memory.
 const CONFIG_DIR = mkdtempSync(join(tmpdir(), "impulso-cfg-"));
 process.env.PI_CODING_AGENT_DIR = CONFIG_DIR;
 
 const { formatSkillsBlock, rewriteSkillsBlocks, default: factory } = await import("./index.ts");
-
-const statePath = join(CONFIG_DIR, "mode.json");
-const mode = () =>
-  existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")).mode : "(none)";
 
 describe("formatSkillsBlock", () => {
   test("empty when nothing is visible", () => {
@@ -82,11 +79,16 @@ describe("factory", () => {
         handler: (args: string, ctx: never) => Promise<void>;
       }
     >();
+    const emitted: { channel: string; data: unknown }[] = [];
     factory({
       on: (n: string, h: (e: unknown, c?: unknown) => unknown) => handlers.set(n, h),
       registerCommand: (n: string, d: never) => commands.set(n, d),
+      events: {
+        emit: (channel: string, data: unknown) => emitted.push({ channel, data }),
+        on: () => {},
+      },
     });
-    return { handlers, commands };
+    return { handlers, commands, emitted };
   }
 
   const notifySpy = () => {
@@ -94,22 +96,26 @@ describe("factory", () => {
     return { calls, ui: { notify: (msg: string, level: string) => calls.push({ msg, level }) } };
   };
 
-  test("session_start resets a non-default mode to the default", async () => {
-    writeFileSync(statePath, JSON.stringify({ mode: "doc" }));
-    const { handlers } = makePi();
-    await handlers.get("session_start")!({});
-    assert.equal(mode(), "code");
+  test("session_start resets a non-default mode to the default and broadcasts it", async () => {
+    const { handlers, commands, emitted } = makePi();
+    const { ui } = notifySpy();
+    await commands.get("mode")!.handler("doc", { ui } as never); // → doc
+    assert.deepEqual(emitted.at(-1), { channel: "modes:changed", data: { mode: "doc" } });
 
-    // Already default → file untouched (no rewrite).
     await handlers.get("session_start")!({});
-    assert.equal(mode(), "code");
+    assert.deepEqual(emitted.at(-1), { channel: "modes:changed", data: { mode: "code" } });
+
+    const spy = notifySpy();
+    await commands.get("mode")!.handler("status", { ui: spy.ui } as never);
+    assert.match(spy.calls.at(-1)!.msg, /Current mode: code/);
   });
 
   test("before_agent_start gates skills per mode and rewrites the prompt block", async () => {
-    const { handlers } = makePi();
+    const { handlers, commands } = makePi();
     const h = handlers.get("before_agent_start")!;
-
-    writeFileSync(statePath, JSON.stringify({ mode: "doc" }));
+    const { ui } = notifySpy();
+    await handlers.get("session_start")!({}); // clean slate: code
+    await commands.get("mode")!.handler("doc", { ui } as never); // → doc
     const skills: {
       name: string;
       description: string;
@@ -140,28 +146,29 @@ describe("factory", () => {
   });
 
   test("/mode handler: status, toggle, explicit, invalid", async () => {
-    const { commands } = makePi();
+    const { commands, handlers, emitted } = makePi();
     const cmd = commands.get("mode")!;
     const { calls, ui } = notifySpy();
+    await handlers.get("session_start")!({}); // clean slate: code
 
-    rmSync(statePath, { force: true });
     await cmd.handler("status", { ui } as never);
     assert.match(calls.at(-1)!.msg, /Current mode: code/);
     assert.match(calls.at(-1)!.msg, /hidden: gws-docs-authoring/);
 
     await cmd.handler("toggle", { ui } as never); // code → doc
-    assert.equal(mode(), "doc");
     assert.match(calls.at(-1)!.msg, /Mode: doc/);
+    assert.deepEqual(emitted.at(-1), { channel: "modes:changed", data: { mode: "doc" } });
 
     await cmd.handler("code", { ui } as never);
-    assert.equal(mode(), "code");
+    assert.deepEqual(emitted.at(-1), { channel: "modes:changed", data: { mode: "code" } });
 
     await cmd.handler("", { ui } as never); // bare = toggle → doc
-    assert.equal(mode(), "doc");
+    assert.deepEqual(emitted.at(-1), { channel: "modes:changed", data: { mode: "doc" } });
 
     await cmd.handler("bogus", { ui } as never);
     assert.match(calls.at(-1)!.msg, /Usage: \/mode/);
-    assert.equal(mode(), "doc"); // unchanged
+    // invalid action: no state change, no new broadcast
+    assert.deepEqual(emitted.at(-1), { channel: "modes:changed", data: { mode: "doc" } });
   });
 
   test("argument completions filter by prefix", () => {

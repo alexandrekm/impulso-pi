@@ -205,8 +205,9 @@
     // Google Workspace CLI skills (docs, sheets, drive, gmail + shared +
     // granular helper sub-skills) vendored from
     // https://github.com/googleworkspace/cli under extensions/gws/skills/.
-    // Injected in doc mode: the extension reads <configDir>/mode.json and
-    // surfaces Docs/Sheets/Drive/Gmail skills when mode === "doc". No
+    // Injected in doc mode: the modes extension broadcasts the mode on
+    // pi.events ("modes:changed") and gws surfaces the Docs/Sheets/Drive/
+    // Gmail skills when mode === "doc". No
     // separate /gws command or settings toggle — `/mode doc` (from the
     // modes extension) is the gws switch. Inert on profiles without modes.
     // Core so the vendored skills ship everywhere; the trigger is work-only.
@@ -229,8 +230,10 @@
     // always-on. Command-only flows like /create-pr and
     // /address-pr-comments are prompt templates, unaffected by modes.
     // Toggled with /mode code|doc|toggle;
-    // state in <configDir>/mode.json, applies next message (no /reload).
-    // Doc mode also surfaces the gws skills (the gws extension reads mode.json).
+    // state is in-memory per session (never on disk — a shared file leaked
+    // /mode changes across concurrent sessions), applies next message (no
+    // /reload). Doc mode also surfaces the gws skills (via the pi.events
+    // "modes:changed" broadcast).
     // Work-only for now. Config: extensions/modes/config.json. Toggled in
     // /settings → Tools & Safety → Modes.
     "extensions/modes/": { "tags": ["work"] },
