@@ -228,7 +228,14 @@ reason), all parsed from session JSONL with no upstream pi change. New
 `/api/stats/compaction*` + `/api/stats/memory*` + `/api/stats/guards*`
 routes feed a Compaction panel, an Observational Memory panel (with a
 searchable memory browser), and a Guards panel (with a searchable list of
-blocked commands) in the dashboard. A schema-version sentinel in `meta`
+blocked commands) in the dashboard. The `/api/stats/search-adoption`
+route feeds the **Search Adoption** panel (zvec enablement tracking):
+per-session search-tool usage from `tool_calls`, sessions split at the
+zvec-enablement cutoff (`?since=` epoch-ms or ISO date; default 2026-09-09,
+the home-index fix) and compared on turns, wall-clock (first→last user
+message, 12h cap), tokens, and zvec vs grep/find call mix, plus a per-day
+adoption chart — answers "did investigation time drop after zvec worked".
+A schema-version sentinel in `meta`
 resets file offsets once on upgrade so the new tables backfill from existing
 sessions.
 `install.sh` always rebuilds + reinstalls the `pi-omp-stats` global bin
@@ -292,7 +299,30 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
   That file is managed from `/settings` → Tools → **pi-btw** group: a
   searchable model picker (`config`+`picker`, sourced from the registry),
   a thinking-level enum, and a remember toggle — all write to `pi-btw.json`,
-  read fresh each `/btw` so no `/reload` is needed for model changes
+ read fresh each `/btw` so no `/reload` is needed for model changes
+
+- `npm:@luminascale/pi-zvec-grep` + `extensions/pi-zvec-grep/config.json` +
+  `tools: @zvec/zvec-grep` — zvec-grep (`zg`) hybrid semantic + keyword
+  search as native pi tools (`zvec_search` / `zvec_index` / `zvec_status`,
+  `/zg` command). Additive: FFF keeps `find`/`grep` for exact strings;
+  `zvec_search` is for meaning-based / location-unknown questions.
+  Indexes live per-workspace at `<root>/.zvec-grep` (gitignored); the
+  global `zg` CLI is installed by install.sh's `tools` section. User config
+  at `<configDir>/pi-zvec-grep/config.json` — autoIndex on, toggled in
+  `/settings` → Search.
+  **Never index `$HOME`** (`zg index ~`): a home-rooted index makes every
+  `zg` call stat the entire home tree to compute freshness —
+  status/query hang for minutes from *any* cwd under `$HOME`, which
+  silently disabled zvec on every profile (2026-09; fixed by dropping the
+  index). `extensions/zvec-guard/` blocks `zvec_index` calls targeting
+  `$HOME` (index/rebuild modes; drop stays allowed as the remediation),
+  toggled in `/settings` → Search → Semantic search. Orca worktrees:
+  autoIndex builds the index at the first session start; copying the
+  parent repo's `.zvec-grep` into a new worktree (then rewriting
+  `manifest.json` rootPaths to the worktree path) gives turn-1 search —
+  zg tracks files by absolute path, so the copied index can't be
+  incrementally updated, but it is immediately searchable and autoIndex
+  rebuilds it in the background.
 
 - `extensions/impulso-settings/` — `/impulso` AND `/settings` settings page:
   an OMP-style tabbed TUI (built on `@earendil-works/pi-tui`) that lists every

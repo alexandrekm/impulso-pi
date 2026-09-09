@@ -592,6 +592,22 @@
       "dest": "pi-zvec-grep/config.json",
     },
 
+    // zvec-guard: blocks zvec_index calls that would index $HOME. A
+    // home-rooted index (~/.zvec-grep, rootPaths = $HOME recursive) makes
+    // every zg call stat the entire home tree to compute freshness —
+    // status/query appear to hang for minutes from ANY cwd under $HOME,
+    // which silently disabled zvec on every profile (2026-09). zg has no
+    // built-in opt-out (a disabled-policy manifest is treated as
+    // unindexed and gets overwritten), so the guard stops the call in pi's
+    // tool_call hook. index/rebuild on $HOME are blocked; drop stays
+    // allowed (dropping a stray home index is the remediation). Toggled in
+    // /settings → Search → Semantic search (id `zvec-guard`). Core so
+    // every profile gets it.
+    "extensions/zvec-guard/zvec-guard.ts": {
+      "tags": ["core"],
+      "dest": "extensions/zvec-guard/index.ts",
+    },
+
     // Future tagged resources, e.g.:
     // "skills/home-lab/": { "tags": ["personal"] },
   },

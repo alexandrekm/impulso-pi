@@ -144,13 +144,15 @@ Show the title and body in your response, then create the PR — no approval gat
 
 ```bash
 umask 077
-cat > /tmp/pr-body.md <<'PR_BODY_EOF'
+PR_BODY_FILE="$(mktemp /tmp/pr-body.XXXXXX)"
+cat > "$PR_BODY_FILE" <<'PR_BODY_EOF'
 <body — backticks and quotes are safe here>
 PR_BODY_EOF
-gh pr create --title "type: description" --body-file /tmp/pr-body.md
+gh pr create --title "type: description" --body-file "$PR_BODY_FILE"
+rm -f "$PR_BODY_FILE"
 ```
 
-For a multi-line body, **write it to a temp file and use `--body-file`** — never inline a heredoc (`--body "$(cat <<'EOF' … EOF)"`), which breaks on backticks and unmatched quotes in the body (the single most common `gh pr create` failure). Use a unique delimiter (e.g. `PR_BODY_EOF`) so a literal `EOF` line inside the body can't end the heredoc early.
+For a multi-line body, **write it to a temp file and use `--body-file`** — never inline a heredoc (`--body "$(cat <<'EOF' … EOF)"`), which breaks on backticks and unmatched quotes in the body (the single most common `gh pr create` failure). Use a unique delimiter (e.g. `PR_BODY_EOF`) so a literal `EOF` line inside the body can't end the heredoc early, and a **random file path** (`mktemp`, never a fixed `/tmp/pr-body.md`) so a concurrent pi session running its own create-pr can't clobber the body between write and use — that exact race shipped another session's PR body in impulso-pi#88.
 
 Pass the body explicitly via `--body-file` with the content you composed — don't rely on `gh pr create --fill`'s auto-summary.
 

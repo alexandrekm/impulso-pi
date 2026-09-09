@@ -38,6 +38,7 @@ import {
   getCostSeriesForRange,
   getTimeSeriesForRange,
   getToolDashboardStats,
+  getSearchAdoptionStats,
   getSubagentDashboardStats,
   getAvailableProfiles,
   getTotalMessageCount,
@@ -138,6 +139,8 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
     return sendJson(res, 200, await getBehaviorDashboardStats(range));
   if (pathname === "/api/stats/tools")
     return sendJson(res, 200, await getToolDashboardStats(range));
+  if (pathname === "/api/stats/search-adoption")
+    return sendJson(res, 200, await getSearchAdoptionStats(range, url.searchParams.get("since")));
   if (pathname === "/api/stats/subagents")
     return sendJson(res, 200, await getSubagentDashboardStats(range));
   if (pathname === "/api/stats/providers")

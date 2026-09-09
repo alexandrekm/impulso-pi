@@ -180,13 +180,15 @@ For a multi-line body, **write it to a temp file and use `--body-file`** — nev
 
 ```bash
 umask 077
-cat > /tmp/pr-body.md <<'PR_BODY_EOF'
+PR_BODY_FILE="$(mktemp /tmp/pr-body.XXXXXX)"
+cat > "$PR_BODY_FILE" <<'PR_BODY_EOF'
 <filled-in body — backticks and quotes are safe here>
 PR_BODY_EOF
-gh pr create --title "type(JIRA_KEY): lowercase description" --body-file /tmp/pr-body.md
+gh pr create --title "type(JIRA_KEY): lowercase description" --body-file "$PR_BODY_FILE"
+rm -f "$PR_BODY_FILE"
 ```
 
-Use a unique delimiter (e.g. `PR_BODY_EOF`) so a literal `EOF` line inside the body can't end the heredoc early.
+Use a unique delimiter (e.g. `PR_BODY_EOF`) so a literal `EOF` line inside the body can't end the heredoc early, and a **random file path** (`mktemp`, never a fixed `/tmp/pr-body.md`) so a concurrent pi session running its own create-pr can't clobber the body between write and use — that exact race shipped another session's PR body in #88.
 
 ## 12. Comment on the Jira ticket
 

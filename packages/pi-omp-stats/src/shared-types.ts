@@ -216,6 +216,52 @@ export interface SearchMixStats {
   }>;
 }
 
+/* Search adoption (zvec enablement tracking). Sessions are compared across
+ * an enablement cutoff (`since`) to answer "did investigation get cheaper
+ * after zvec was actually usable". */
+export interface SearchAdoptionPeriod {
+  label: "before" | "after";
+  sessions: number;
+  avgTurns: number;
+  avgWallClockMin: number;
+  avgTokens: number;
+  avgSearchCalls: number;
+  avgZvecCalls: number;
+  avgZvecSearchMs: number | null;
+  zvecAdoptionPct: number;
+  zvecErrors: number;
+}
+
+export interface SearchAdoptionStats {
+  /** The enablement cutoff actually used (ms epoch). */
+  since: number;
+  sinceLabel: string;
+  periodBefore: SearchAdoptionPeriod;
+  periodAfter: SearchAdoptionPeriod;
+  timeseries: Array<{
+    timestamp: number;
+    zvecSearch: number;
+    zvecErrors: number;
+    exact: number;
+  }>;
+  /** Recent sessions with per-session search-tool usage (table rows). */
+  sessions: Array<{
+    sessionFile: string;
+    folder: string;
+    startTs: number;
+    endTs: number;
+    turns: number;
+    requests: number;
+    tokens: number;
+    zvecCalls: number;
+    zvecSearchCalls: number;
+    zvecErrors: number;
+    zvecSearchAvgMs: number | null;
+    exactCalls: number;
+    period: "before" | "after";
+  }>;
+}
+
 export interface ToolModelStats extends ToolUsageStats {
   model: string;
   provider: string;
