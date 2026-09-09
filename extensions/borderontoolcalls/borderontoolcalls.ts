@@ -52,7 +52,7 @@ export default function (pi: ExtensionAPI): void {
   });
 }
 
-function installPatch(enabled: boolean, ui: UiRef): void {
+export function installPatch(enabled: boolean, ui: UiRef): void {
   const proto = ToolExecutionComponent.prototype as {
     render: ((width: number) => string[]) & { [BASE_KEY]?: (width: number) => string[] };
   };

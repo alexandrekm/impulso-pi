@@ -101,7 +101,7 @@ function readConfig(): OnDemandConfig {
 // Case-insensitive, word-boundary matcher that also accepts a trailing "s"
 // (so `dashboard` matches `dashboards`, `metric` matches `metrics`).
 // `\b…\b` keeps short keywords like `pup` from matching `puppet`/`puppy`.
-function buildMatcher(keywords: string[]): RegExp | null {
+export function buildMatcher(keywords: string[]): RegExp | null {
   const escaped = keywords
     .map((k) => k.trim().toLowerCase())
     .filter(Boolean)

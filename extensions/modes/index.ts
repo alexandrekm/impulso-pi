@@ -121,7 +121,7 @@ function escapeXml(str: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function formatSkillsBlock(skills: any[]): string {
+export function formatSkillsBlock(skills: any[]): string {
   const visible = (skills ?? []).filter((s: any) => !s.disableModelInvocation);
   if (visible.length === 0) return "";
   const lines = [
@@ -150,7 +150,7 @@ const SKILLS_BLOCK_RE =
 // Replace every existing skills chunk in the prompt with a single regenerated
 // one (or remove them all if no skills are visible). The first occurrence is
 // rewritten in place so positioning relative to the cwd line is preserved.
-function rewriteSkillsBlocks(prompt: string, skills: any[]): string {
+export function rewriteSkillsBlocks(prompt: string, skills: any[]): string {
   const block = formatSkillsBlock(skills);
   let first = true;
   return prompt.replace(SKILLS_BLOCK_RE, () => {

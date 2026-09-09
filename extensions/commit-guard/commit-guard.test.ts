@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { tmpdir } from "node:os";
+
 import { extractCommits, fullMessage, tokenize, type CommitInfo } from "./parse.ts";
 import { FORMAT_HINT, isIgnored, validateMessage } from "./rules.ts";
 
@@ -178,5 +182,240 @@ describe("validateMessage (built-in rules)", () => {
 
   test("FORMAT_HINT is a non-empty string", () => {
     assert.ok(FORMAT_HINT.length > 0);
+  });
+});
+
+describe("message-file options", () => {
+  test("-F / --file / -F<file> read the message from a file", () => {
+    const dir = mkdtempSync(join(process.cwd(), ".commit-guard-test-"));
+    try {
+      const file = join(dir, "msg.txt");
+      writeFileSync(file, "feat(AICPE-1): from file");
+      assert.equal(commit(`git commit -F "${file}"`)!.messages[0], "feat(AICPE-1): from file");
+      assert.equal(commit(`git commit --file=${file}`)!.messages[0], "feat(AICPE-1): from file");
+      assert.equal(commit(`git commit -F${file}`)!.messages[0], "feat(AICPE-1): from file");
+      assert.equal(commit(`git commit --file "${file}"`)!.messages[0], "feat(AICPE-1): from file");
+      // Relative path resolves against cwd (the repo root under npm test).
+      const rel = relative(process.cwd(), file);
+      assert.equal(commit(`git commit -F "${rel}"`)!.messages[0], "feat(AICPE-1): from file");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  test("-F on a missing file yields an empty message, not an error", () => {
+    const info = commit(`git commit -F /nonexistent-$$-${Date.now()}/msg.txt`);
+    assert.ok(info);
+    assert.deepEqual(info!.messages, [""]);
+  });
+});
+
+describe("parseOne edge cases", () => {
+  test("empty and whitespace-only input yields no commits", () => {
+    assert.equal(extractCommits("").length, 0);
+    assert.equal(extractCommits("   ").length, 0);
+  });
+  test("full path to the git binary is recognized", () => {
+    assert.equal(
+      commit(`/usr/bin/git commit -m "feat(AICPE-1): via path"`)!.messages[0],
+      "feat(AICPE-1): via path",
+    );
+  });
+  test("-- stops option parsing: later -m is a pathspec, not a message", () => {
+    const info = commit(`git commit -- -m "feat(AICPE-1): x"`);
+    assert.ok(info);
+    assert.deepEqual(info!.messages, []);
+  });
+  test("unterminated quotes tokenize to end of input", () => {
+    assert.deepEqual(tokenize(`git commit -m 'unterminated`), [
+      "git",
+      "commit",
+      "-m",
+      "unterminated",
+    ]);
+    assert.deepEqual(tokenize(`git commit -m "unterminated`), [
+      "git",
+      "commit",
+      "-m",
+      "unterminated",
+    ]);
+  });
+});
+
+describe("validateMessage line-length and format rules", () => {
+  test("rejects an over-long body line", () => {
+    const r = validateMessage(`feat(AICPE-1): ok\n\n${"y".repeat(210)}`);
+    assert.equal(r.ok, false);
+    assert.ok(r.ok === false && r.violations.some((v) => v.rule === "body-max-line-length"));
+  });
+
+  test("rejects an over-long BREAKING CHANGE footer line", () => {
+    const r = validateMessage(`feat(AICPE-1): ok\n\nBREAKING CHANGE: ${"z".repeat(210)}`);
+    assert.equal(r.ok, false);
+    assert.ok(r.ok === false && r.violations.some((v) => v.rule === "footer-max-line-length"));
+  });
+
+  test("rejects a header that does not match type(scope): subject", () => {
+    const r = validateMessage("not a commit header at all");
+    assert.equal(r.ok, false);
+    assert.ok(r.ok === false && r.violations.some((v) => v.rule === "type-empty"));
+
+    const r2 = validateMessage("");
+    assert.equal(r2.ok, false);
+    assert.ok(r2.ok === false && r2.violations.some((v) => v.rule === "type-empty"));
+  });
+
+  test("rejects a whitespace-only subject", () => {
+    const r = validateMessage("feat(AICPE-1):  ");
+    assert.equal(r.ok, false);
+    assert.ok(r.ok === false && r.violations.some((v) => v.rule === "subject-empty"));
+  });
+});
+
+// ── entry-file unit tests ──────────────────────────────────────────────────
+// The factory + validateOne live in commit-guard.ts and need the feature
+// manifest, so point PI_CODING_AGENT_DIR at a fresh temp dir BEFORE importing
+// the module (the config dir is resolved at import time).
+process.env.PI_CODING_AGENT_DIR = mkdtempSync(join(tmpdir(), "impulso-cfg-"));
+
+const {
+  commitlintConfigPresent,
+  runCommitlint,
+  validateOne,
+  default: factory,
+} = await import("./commit-guard.ts");
+
+describe("commitlintConfigPresent", () => {
+  test("detects a commitlintrc file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cg-cfg-"));
+    try {
+      writeFileSync(join(dir, ".commitlintrc.json"), "{}");
+      assert.equal(commitlintConfigPresent(dir), true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  test("detects a commitlint key in package.json", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cg-cfg-"));
+    try {
+      writeFileSync(join(dir, "package.json"), JSON.stringify({ commitlint: { extends: [] } }));
+      assert.equal(commitlintConfigPresent(dir), true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  test("a package.json without commitlint is not a config", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cg-cfg-"));
+    try {
+      writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x" }));
+      assert.equal(commitlintConfigPresent(dir), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  test("no package.json at all is not a config", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cg-cfg-"));
+    try {
+      assert.equal(commitlintConfigPresent(dir), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("runCommitlint", () => {
+  const fakeBin = (dir: string, body: string, executable = true) => {
+    const binDir = join(dir, "node_modules", ".bin");
+    mkdirSync(binDir, { recursive: true });
+    const bin = join(binDir, "commitlint");
+    writeFileSync(bin, `#!/bin/sh\n${body}\n`);
+    chmodSync(bin, executable ? 0o755 : 0o644);
+    return dir;
+  };
+
+  test("no binary → undefined (caller falls back to built-in rules)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cg-run-"));
+    try {
+      assert.equal(runCommitlint(dir, "feat(AICPE-1): x"), undefined);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  test("passing binary → ok", () => {
+    const dir = fakeBin(mkdtempSync(join(tmpdir(), "cg-run-")), "exit 0");
+    try {
+      assert.deepEqual(runCommitlint(dir, "feat(AICPE-1): x"), { ok: true });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  test("failing binary → ok:false with the report", () => {
+    const dir = fakeBin(
+      mkdtempSync(join(tmpdir(), "cg-run-")),
+      'echo "✖ subject may not be empty" >&2; exit 1',
+    );
+    try {
+      const r = runCommitlint(dir, "bad");
+      assert.ok(r && r.ok === false);
+      assert.match((r as { output: string }).output, /subject may not be empty/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  test("crashed / non-executable binary → undefined", () => {
+    const dir = fakeBin(mkdtempSync(join(tmpdir(), "cg-run-")), "exit 0", false);
+    try {
+      assert.equal(runCommitlint(dir, "feat(AICPE-1): x"), undefined);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("validateOne", () => {
+  test("blocks --no-verify", () => {
+    const r = validateOne({ messages: ["feat(AICPE-1): x"], noVerify: true, amend: false });
+    assert.ok(r?.block);
+    assert.match(r!.reason, /--no-verify/);
+  });
+  test("commits with no message (amend/merge/editor) pass through", () => {
+    assert.equal(validateOne({ messages: [], noVerify: false, amend: true }), undefined);
+  });
+  test("blocks a message violating the built-in Motive rules", () => {
+    // This repo has no runnable commitlint, so validateOne uses the built-ins.
+    const r = validateOne({ messages: ["chore: no jira scope"], noVerify: false, amend: false });
+    assert.ok(r?.block);
+    assert.match(r!.reason, /commitlint rules/);
+  });
+  test("passes a compliant message", () => {
+    assert.equal(
+      validateOne({ messages: ["feat(AICPE-1): add thing"], noVerify: false, amend: false }),
+      undefined,
+    );
+  });
+});
+
+describe("factory tool_call hook", () => {
+  const handlers = new Map<string, (event: unknown) => Promise<unknown>>();
+  factory({ on: (name: string, h: (event: unknown) => Promise<unknown>) => handlers.set(name, h) });
+  const hook = handlers.get("tool_call")!;
+
+  test("ignores non-bash tools and non-commit commands", async () => {
+    assert.equal(await hook({ toolName: "read", input: { file_path: "x" } }), undefined);
+    assert.equal(await hook({ toolName: "bash", input: { command: "git status" } }), undefined);
+  });
+  test("ignores bash calls without a command string", async () => {
+    assert.equal(await hook({ toolName: "bash", input: {} }), undefined);
+    assert.equal(await hook({ toolName: "bash" }), undefined);
+  });
+  test("blocks a violating git commit", async () => {
+    const r = await hook({ toolName: "bash", input: { command: `git commit -m "chore: bad"` } });
+    assert.ok(r && (r as { block: boolean }).block);
+  });
+  test("lets a compliant git commit through", async () => {
+    const r = await hook({
+      toolName: "bash",
+      input: { command: `git commit -m "feat(AICPE-1): fine"` },
+    });
+    assert.equal(r, undefined);
   });
 });

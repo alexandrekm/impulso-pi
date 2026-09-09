@@ -349,6 +349,84 @@ repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
   IDs hardcoded — resolved live from the local config. The binary is
   installed manually (`~/.local/bin`), not via install.sh.
 
+## Complexity gates (legibility budget)
+
+CI enforces three per-function complexity metrics over `extensions/`
+(excluding vendored, upstream-managed dirs):
+
+| Metric | Gate | Tool |
+| --- | --- | --- |
+| Cyclomatic complexity | < 22 | ESLint built-in `complexity` (max 21) |
+| Cognitive complexity | < 22 | `sonarjs/cognitive-complexity` (max 21) |
+| Halstead difficulty | < 80 | `npm run check:halstead` → `scripts/check-halstead.mjs` |
+
+All three run in CI via the existing `npm run lint` step plus one
+`npm run check:halstead` step; locally use the same two commands.
+
+- **Cyclomatic** counts independent paths (each `if`/`case`/loop/`&&`/ternary
+  adds 1). High = untestable branch soup.
+- **Cognitive** is the same count weighted for *nesting* (SonarSource): an
+  `if` inside three loops costs far more than three flat `if`s. High = code
+  a human can't hold in their head. This is the metric most directly tied
+  to legibility.
+- **Halstead difficulty** ≈ `(unique operators / 2) × (total operands / unique
+  operands)`: high means dense, heterogeneous code where every line
+  introduces new vocabulary.
+
+The Halstead script is vendored (`scripts/check-halstead.mjs`) because no
+maintained ESLint rule exists — `eslint-plugin-metrics` last shipped 2022 and
+its companion halstead plugin never published; `ts-complex` (2022) misses
+arrow functions and methods. The script scores every function-like node on
+its own body (nested functions count separately) via the TypeScript API
+already in devDependencies. Excluded dirs must stay in sync with
+`eslint.config.js` ignores and `tsconfig.json` exclude.
+
+When a function exceeds a gate: prefer extracting helpers/switch-dispatch
+over `eslint-disable` — the point of the gate is legibility, not the number.
+
+## Coverage and CRAP gates (test-quality budget)
+
+Two more CI gates tie complexity to tests:
+
+| Metric | Gate | Tool |
+| --- | --- | --- |
+| Coverage (logic modules) | ≥ 90% stmts/branches/funcs/lines | `npm run check:coverage` (c8) |
+| CRAP | < 25 | `npm run check:crap` → `scripts/check-crap.mjs` |
+
+- **Coverage** is scoped to the modules held to the bar — the `--include`
+  list in the `check:coverage` npm script (currently the guard engines,
+  the impulso-settings trio, subagent-telemetry, gws, system-prompt, and
+  the two border extensions; all ≥90% statements+branches). Thresholds
+  apply to the *aggregate* of the included files. The remaining first-party
+  modules (search_docs, modes, payload-exporter, on-demand-skills,
+  cache-ttl, feature-flag, the guard entry files, editor.ts) have tests but
+  sit below 90% branches — they're gated through CRAP (below) instead.
+  When a module clears 90%, add its `--include` and move on.
+- **CRAP** = `comp² × (1 − coverage)³ + comp` per function: complexity is
+  allowed only when paid for with tests. comp ≤ 4 passes with no tests
+  (4² + 4 = 20); comp 9 untested fails (90). Fully covered functions score
+  exactly their comp, already gated at < 22 by ESLint. The script (vendored;
+  no maintained JS tool computes CRAP) runs `npm test` under
+  `NODE_V8_COVERAGE`, merges the per-process V8 dumps, and joins per-function
+  coverage with per-function complexity from the same AST lib the Halstead
+  gate uses (`scripts/lib/ts-metrics.mjs`).
+
+The CRAP gate is a **ratchet** repo-wide over first-party extensions (the
+vendored 3rd-party dirs — orca-integration, herdr, pi-dynamic-footer — are
+excluded from all gates, and cursor/fff/hashline/pi-droid-styling/
+pi-zvec-grep are env/config shims with no logic). Every first-party
+function currently passes: `scripts/crap-exemptions.json` is **empty**. If
+a new violation appears, either write tests or regenerate the list with
+`npm run check:crap -- --update-exemptions` — the checked-in list is
+reviewable in the PR diff, the gate fails on unlisted violations AND on
+stale entries, so it only ever shrinks back to empty.
+
+Caveat: V8 reports block coverage, not branch coverage — CRAP is a risk
+heuristic, not proof of test strength; a mutation-testing gate (surviving
+mutants = 0) would be the stronger follow-up.
+
+
+
 ## Prerequisites
 
 ```bash

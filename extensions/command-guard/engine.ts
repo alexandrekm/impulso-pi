@@ -98,7 +98,10 @@ function peelXargs(s: string): string | undefined {
       i++;
       continue;
     }
-    if (!tok.startsWith("--no-") && i + 1 < tokens.length && !tokens[i + 1].startsWith("-")) {
+    // Long flags take a separate value (`--max-args 2`) except `--no-*`;
+    // short flags take one only in bare 2-char form (`-a f`, not `-n1`).
+    const takesValue = tok.startsWith("--") ? !tok.startsWith("--no-") : tok.length === 2;
+    if (takesValue && i + 1 < tokens.length && !tokens[i + 1].startsWith("-")) {
       i += 2;
       continue;
     }
@@ -150,42 +153,64 @@ export function normalize(cmd: string): string {
   return current;
 }
 
+function flushPart(parts: string[], current: string): string {
+  const s = current.trim();
+  if (s) parts.push(s);
+  return "";
+}
+
+// Length in chars of the command separator starting at `c` (0 = none).
+// Note: `|&` is bash's stderr pipe, NOT a separator.
+function separatorLength(c: string, next: string): number {
+  if ((c === "&" && next === "&") || (c === "|" && next === "|")) return 2;
+  if (c === ";" || (c === "|" && next !== "&")) return 1;
+  return 0;
+}
+
+// Handles chars that belong to the current token without command
+// semantics: single/double-quote toggling and literal content inside
+// quotes. Returns the text to append for `c`, or null when `c` is not a
+// quoting char (the caller then handles escapes/substitutions/separators).
+function quotedText(c: string, st: { inSingle: boolean; inDouble: boolean }): string | null {
+  if (c === "'" && !st.inDouble) {
+    st.inSingle = !st.inSingle;
+    return c;
+  }
+  if (st.inSingle) return c;
+  if (c === '"') {
+    st.inDouble = !st.inDouble;
+    return c;
+  }
+  return null;
+}
+
 export function splitCommands(cmd: string): string[] {
   const parts: string[] = [];
   let current = "";
-  let inSingle = false;
-  let inDouble = false;
+  const st = { inSingle: false, inDouble: false };
   let subDepth = 0;
   const runes = [...cmd];
 
   for (let i = 0; i < runes.length; i++) {
     const c = runes[i];
+    const next = i + 1 < runes.length ? runes[i + 1] : "";
 
-    if (c === "'" && !inDouble) {
-      inSingle = !inSingle;
-      current += c;
+    const quoted = quotedText(c, st);
+    if (quoted !== null) {
+      current += quoted;
       continue;
     }
-    if (inSingle) {
-      current += c;
-      continue;
-    }
-    if (c === '"') {
-      inDouble = !inDouble;
-      current += c;
-      continue;
-    }
-    if (c === "\\" && inDouble) {
-      current += c;
+    // Backslash escapes the next char inside double quotes.
+    if (c === "\\" && st.inDouble) {
       i++;
-      if (i < runes.length) current += runes[i];
+      current += c + (runes[i] ?? "");
       continue;
     }
-    if (c === "$" && i + 1 < runes.length && runes[i + 1] === "(") {
+    // Command substitution $(): track nesting; never split inside.
+    if (c === "$" && next === "(") {
       subDepth++;
-      current += c;
+      current += c + next;
       i++;
-      current += runes[i];
       continue;
     }
     if (c === ")" && subDepth > 0) {
@@ -193,35 +218,18 @@ export function splitCommands(cmd: string): string[] {
       current += c;
       continue;
     }
-
-    if (!inDouble && subDepth === 0) {
-      const next = i + 1 < runes.length ? runes[i + 1] : "";
-      if ((c === "&" && next === "&") || (c === "|" && next === "|")) {
-        const s = current.trim();
-        if (s) parts.push(s);
-        current = "";
-        i++;
-        continue;
-      }
-      if (c === "|" && next !== "&") {
-        const s = current.trim();
-        if (s) parts.push(s);
-        current = "";
-        continue;
-      }
-      if (c === ";") {
-        const s = current.trim();
-        if (s) parts.push(s);
-        current = "";
-        continue;
-      }
+    // Unquoted and outside substitution: separators split commands.
+    const len = subDepth === 0 && !st.inDouble ? separatorLength(c, next) : 0;
+    if (len > 0) {
+      current = flushPart(parts, current);
+      i += len - 1;
+      continue;
     }
 
     current += c;
   }
 
-  const tail = current.trim();
-  if (tail) parts.push(tail);
+  current = flushPart(parts, current);
   return parts.length ? parts : [cmd.trim()];
 }
 

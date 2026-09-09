@@ -59,43 +59,43 @@ interface KbRetrieveResponse {
   error?: { message?: string; type?: string };
 }
 
-function gatewayBase(): string | undefined {
-  const url = process.env.KB_GATEWAY_URL;
-  return url && url.trim() ? url.replace(/\/+$/, "") : undefined;
+export function gatewayBase(): string | undefined {
+  const url = process.env.KB_GATEWAY_URL?.trim();
+  return url ? url.replace(/\/+$/, "") : undefined;
 }
 
-function gatewayKey(): string | undefined {
+export function gatewayKey(): string | undefined {
   const key = process.env.KB_GATEWAY_KEY;
   return key && key.trim() ? key : undefined;
 }
 
-function defaultNumResults(): number {
+export function defaultNumResults(): number {
   const raw = Number.parseInt(process.env.KB_NUM_RESULTS ?? "", 10);
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_NUM_RESULTS;
 }
 
-function minScore(): number {
+export function minScore(): number {
   const v = Number.parseFloat(process.env.KB_MIN_SCORE ?? "");
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
-function sourceUri(r: KbRetrievalResult): string {
+export function sourceUri(r: KbRetrievalResult): string {
   return r.location?.s3Location?.uri ?? r.location?.webLocation?.url ?? "(unknown source)";
 }
 
-function fmtScore(score: number | undefined): string {
+export function fmtScore(score: number | undefined): string {
   if (typeof score !== "number" || !Number.isFinite(score)) return "?";
   return score.toFixed(2);
 }
 
 /** Truncate a chunk for the returned context. Long chunks are kept but capped. */
-function truncate(text: string, max = 2000): string {
+export function truncate(text: string, max = 2000): string {
   const clean = text.trim();
   return clean.length > max ? `${clean.slice(0, max)}…` : clean;
 }
 
 /** Format retrieved chunks into a single text block for the LLM. */
-function formatChunks(results: KbRetrievalResult[]): string {
+export function formatChunks(results: KbRetrievalResult[]): string {
   const lines: string[] = [];
   lines.push(
     `Found ${results.length} documentation chunk${results.length === 1 ? "" : "s"} in the Knowledge Base:`,
@@ -111,7 +111,7 @@ function formatChunks(results: KbRetrievalResult[]): string {
 }
 
 /** The "nothing useful in the KB" message, nudging the agent to websearch. */
-function noKbResultsMessage(query: string): string {
+export function noKbResultsMessage(query: string): string {
   return [
     `No documentation found in the Knowledge Base for: "${query}".`,
     "Fall back to the `websearch` tool to look this up on the web.",
@@ -119,14 +119,14 @@ function noKbResultsMessage(query: string): string {
   ].join("\n");
 }
 
-function kbNotConfiguredMessage(): string {
+export function kbNotConfiguredMessage(): string {
   return [
     "search_docs is not configured (KB_GATEWAY_URL / KB_GATEWAY_KEY not set).",
     "Use the `websearch` tool to look this up on the web instead.",
   ].join("\n");
 }
 
-async function gatewayRetrieve(
+export async function gatewayRetrieve(
   query: string,
   numResults: number,
   signal: AbortSignal | undefined,

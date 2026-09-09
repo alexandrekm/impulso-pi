@@ -263,30 +263,41 @@ export class ImpulsoSettingsView implements Component {
   }
 
   private renderValue(f: Feature, value: string, selected: boolean): string {
-    if (f.picker) {
-      const text = value === "" ? "same as main" : value;
-      return selected ? this.theme.fg("accent", text) : this.theme.fg("muted", text);
+    if (f.picker) return this.renderPickerValue(value, selected);
+    if (f.kind === "config") return this.renderConfigValue(f, value, selected);
+    return this.renderSettingValue(value, selected);
+  }
+
+  // Selected rows are accented; unselected rows use the given fg color.
+  private paint(text: string, selected: boolean, fg: string): string {
+    return selected ? this.theme.fg("accent", text) : this.theme.fg(fg, text);
+  }
+
+  // Picker rows: free-form string; "" means "same as main / use default".
+  private renderPickerValue(value: string, selected: boolean): string {
+    const text = value === "" ? "same as main" : value;
+    return this.paint(text, selected, "muted");
+  }
+
+  private renderConfigValue(f: Feature, value: string, selected: boolean): string {
+    const isBool =
+      !f.values ||
+      f.values.length === 0 ||
+      (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
+    if (isBool) {
+      const tag = value === "on" ? "● on" : "○ off";
+      return this.paint(tag, selected, value === "on" ? "muted" : "dim");
     }
-    if (f.kind === "config") {
-      const isBool =
-        !f.values ||
-        f.values.length === 0 ||
-        (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
-      if (isBool) {
-        const tag = value === "on" ? "● on" : "○ off";
-        return selected
-          ? this.theme.fg("accent", tag)
-          : this.theme.fg(value === "on" ? "muted" : "dim", tag);
-      }
-      // enum with "" = "same as main / use default" sentinel.
-      const text = value === "" ? "same as main" : value;
-      return selected ? this.theme.fg("accent", text) : this.theme.fg("muted", text);
-    }
+    // enum with "" = "same as main / use default" sentinel.
+    return this.renderPickerValue(value, selected);
+  }
+
+  private renderSettingValue(value: string, selected: boolean): string {
     const isOn = value === "on" || (value !== "off" && value !== "");
-    const tag = isOn ? "● on" : "○ off";
     // For enum values other than on/off, show the value plainly.
+    const tag = isOn ? "● on" : "○ off";
     const text = value === "" ? "same as main" : value === "on" || value === "off" ? tag : value;
-    return selected ? this.theme.fg("accent", text) : this.theme.fg(isOn ? "muted" : "dim", text);
+    return this.paint(text, selected, isOn ? "muted" : "dim");
   }
 
   private footerHint(): string {

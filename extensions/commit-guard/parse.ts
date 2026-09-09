@@ -33,6 +33,34 @@ export interface CommitInfo {
  * or double) intact, unquoting them. Backslash escapes are honored inside
  * double quotes (matching bash). Returns literal token values.
  */
+// Consume a single-quoted segment starting at s[i] === "'".
+// Returns the unquoted text and the index past the closing quote.
+function scanSingleQuoted(s: string, i: number): { i: number; text: string } {
+  i++; // opening quote
+  let text = "";
+  while (i < s.length && s[i] !== "'") text += s[i++];
+  if (i < s.length) i++; // closing quote
+  return { i, text };
+}
+
+// Consume a double-quoted segment starting at s[i] === '"'. Backslash
+// escapes are honored (matching bash). Returns unquoted text and the
+// index past the closing quote.
+function scanDoubleQuoted(s: string, i: number): { i: number; text: string } {
+  i++; // opening quote
+  let text = "";
+  while (i < s.length && s[i] !== '"') {
+    if (s[i] === "\\" && i + 1 < s.length) {
+      text += s[i + 1];
+      i += 2;
+    } else {
+      text += s[i++];
+    }
+  }
+  if (i < s.length) i++; // closing quote
+  return { i, text };
+}
+
 export function tokenize(s: string): string[] {
   const tokens: string[] = [];
   let i = 0;
@@ -46,21 +74,14 @@ export function tokenize(s: string): string[] {
       const c = s[i];
       if (c === "'") {
         quoted = true;
-        i++;
-        while (i < n && s[i] !== "'") tok += s[i++];
-        if (i < n) i++; // closing quote
+        const r = scanSingleQuoted(s, i);
+        tok += r.text;
+        i = r.i;
       } else if (c === '"') {
         quoted = true;
-        i++;
-        while (i < n && s[i] !== '"') {
-          if (s[i] === "\\" && i + 1 < n) {
-            tok += s[i + 1];
-            i += 2;
-          } else {
-            tok += s[i++];
-          }
-        }
-        if (i < n) i++; // closing quote
+        const r = scanDoubleQuoted(s, i);
+        tok += r.text;
+        i = r.i;
       } else {
         tok += s[i++];
       }
@@ -104,60 +125,59 @@ function parseOne(part: string): CommitInfo | null {
   const info: CommitInfo = { messages: [], noVerify: false, amend: false };
   let endOfOpts = false;
 
-  for (let k = 0; k < args.length;) {
+  // Apply one `git commit` option token (args[k]) to `info`, reading its
+  // value from args[k+1] when the option takes one. Returns the index of the
+  // next token; unrecognized tokens are skipped.
+  function applyOption(args: string[], k: number, info: CommitInfo): number {
     const t = args[k];
-    if (endOfOpts) {
-      k++;
-      continue;
-    }
-    if (t === "--") {
-      endOfOpts = true;
-      k++;
-      continue;
-    }
     if (t === "--no-verify" || t === "-n") {
       info.noVerify = true;
-      k++;
-      continue;
+      return k + 1;
     }
     if (t === "--amend") {
       info.amend = true;
-      k++;
-      continue;
+      return k + 1;
     }
     // -m / --message (value is the next token, or `=`-attached)
     if (t === "-m" || t === "--message") {
       if (k + 1 < args.length) info.messages.push(args[k + 1]);
-      k += 2;
-      continue;
+      return k + 2;
     }
     if (t.startsWith("--message=")) {
       info.messages.push(t.slice("--message=".length));
-      k++;
-      continue;
+      return k + 1;
     }
     if (t.startsWith("-m") && t.length > 2) {
       info.messages.push(t.slice(2));
-      k++;
-      continue;
+      return k + 1;
     }
     // -F / --file (read the message from a file)
     if (t === "-F" || t === "--file") {
       if (k + 1 < args.length) info.messages.push(readFileMessage(args[k + 1]));
-      k += 2;
-      continue;
+      return k + 2;
     }
     if (t.startsWith("--file=")) {
       info.messages.push(readFileMessage(t.slice("--file=".length)));
-      k++;
-      continue;
+      return k + 1;
     }
     if (t.startsWith("-F") && t.length > 2) {
       info.messages.push(readFileMessage(t.slice(2)));
+      return k + 1;
+    }
+    return k + 1;
+  }
+
+  for (let k = 0; k < args.length;) {
+    if (endOfOpts) {
       k++;
       continue;
     }
-    k++;
+    if (args[k] === "--") {
+      endOfOpts = true;
+      k++;
+      continue;
+    }
+    k = applyOption(args, k, info);
   }
 
   return info;

@@ -51,7 +51,7 @@ function repoToplevel(): string | undefined {
   return undefined;
 }
 
-function commitlintConfigPresent(root: string): boolean {
+export function commitlintConfigPresent(root: string): boolean {
   for (const f of COMMITLINT_CONFIG_HINTS) {
     if (existsSync(join(root, f))) return true;
   }
@@ -73,7 +73,7 @@ function commitlintConfigPresent(root: string): boolean {
  *   { ok: false, output }   — message fails; output is commitlint's report
  *   undefined               — no runnable commitlint; caller falls back
  */
-function runCommitlint(
+export function runCommitlint(
   root: string,
   message: string,
 ): { ok: true } | { ok: false; output: string } | undefined {
@@ -99,7 +99,7 @@ function block(reason: string): { block: true; reason: string } {
   return { block: true, reason };
 }
 
-function validateOne(info: CommitInfo): { block: true; reason: string } | undefined {
+export function validateOne(info: CommitInfo): { block: true; reason: string } | undefined {
   if (info.noVerify) {
     return block(
       "[commit-guard] `--no-verify` is blocked: it skips the repo's own " +

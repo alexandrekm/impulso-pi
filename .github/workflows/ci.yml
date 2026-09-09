@@ -30,10 +30,13 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run check:halstead
       - run: npm run format:check
       - run: npm run check:json
       - run: npm run check:upstream-prompt
       - run: npm test
+      - run: npm run check:coverage
+      - run: npm run check:crap
 
       - name: shellcheck
         run: |

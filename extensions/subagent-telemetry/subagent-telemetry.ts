@@ -54,7 +54,7 @@ function string(value: unknown): string | undefined {
 /** Extract a bounded, non-path session identifier from a session file path
  * (e.g. ".../2026-09-03T06-57-39-108Z_01a0660f-1324-7b8e-a1c3-e8f5ea7a24e3.jsonl").
  * Returns only the trailing UUID, never the path. */
-function boundedSessionId(value: unknown): string | undefined {
+export function boundedSessionId(value: unknown): string | undefined {
   const raw = string(value);
   if (!raw) return undefined;
   const uuid = raw.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1];
@@ -69,7 +69,7 @@ function bool(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
 }
 
-function terminalState(value: unknown): TerminalState | undefined {
+export function terminalState(value: unknown): TerminalState | undefined {
   return value === "complete" ||
     value === "failed" ||
     value === "partial" ||
@@ -83,7 +83,7 @@ function context(value: unknown): SubagentRunEntry["context"] {
   return value === "fresh" || value === "fork" || value === "mixed" ? value : "unknown";
 }
 
-function contextFromPayload(payload: RecordValue): SubagentRunEntry["context"] {
+export function contextFromPayload(payload: RecordValue): SubagentRunEntry["context"] {
   const direct = context(payload.context);
   if (direct !== "unknown") return direct;
   const results = Array.isArray(payload.results) ? payload.results.filter(isRecord) : [];
@@ -93,13 +93,13 @@ function contextFromPayload(payload: RecordValue): SubagentRunEntry["context"] {
   return contexts.size === 1 ? [...contexts][0]! : contexts.size > 1 ? "mixed" : "unknown";
 }
 
-function numericTotal(value: unknown): number | undefined {
+export function numericTotal(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (!isRecord(value)) return undefined;
   return number(value.total) ?? number(value.totalTokens);
 }
 
-function costTotal(value: unknown): number | undefined {
+export function costTotal(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (!isRecord(value)) return undefined;
   // pi-subagents terminal results use CostSummary.costUsd; tolerate the
@@ -107,7 +107,48 @@ function costTotal(value: unknown): number | undefined {
   return number(value.costUsd) ?? number(value.total);
 }
 
-function childTotals(
+// Mutable accumulator: `has` distinguishes "sum is 0 because steps", "reported", "summed values" from "nothing reported".
+type Sum = { total: number; has: boolean };
+
+function addTo(sum: Sum, value: number | undefined): void {
+  if (value !== undefined) {
+    sum.total += value;
+    sum.has = true;
+  }
+}
+
+// Extract one step's usage counters from the several payload shapes
+// pi-subagents has used (direct fields, nested tokens/cost records, or a
+// nested usage object).
+export function stepUsage(step: RecordValue): {
+  turns: number | undefined;
+  tools: number | undefined;
+  tokens: number | undefined;
+  cost: number | undefined;
+  model: string | undefined;
+} {
+  const usage = isRecord(step.usage) ? step.usage : undefined;
+  // Tokens may be at step.totalTokens (nested {input,output,total}),
+  // step.tokens (nested), or inside step.usage as input+output.
+  const tokens =
+    numericTotal(step.totalTokens) ??
+    numericTotal(step.tokens) ??
+    (usage ? (number(usage.input) ?? 0) + (number(usage.output) ?? 0) : undefined);
+  return {
+    turns: number(step.turnCount) ?? number(usage?.turns),
+    tools: number(step.toolCount),
+    tokens,
+    cost: costTotal(step.totalCost) ?? number(step.cost) ?? number(usage?.cost),
+    model: string(step.model),
+  };
+}
+
+// A top-level aggregate field wins over the sum of per-step values.
+function pick(top: number | undefined, sum: Sum): number | undefined {
+  return top ?? (sum.has ? sum.total : undefined);
+}
+
+export function childTotals(
   payload: RecordValue,
 ): Pick<SubagentRunEntry, "turns" | "tools" | "totalTokens" | "totalCost" | "model"> {
   // pi-subagents completion event has results[] with per-step usage objects
@@ -115,58 +156,33 @@ function childTotals(
   // totalCost. The telemetry extension must handle both shapes.
   const results = Array.isArray(payload.results) ? payload.results.filter(isRecord) : [];
   const steps = results.length > 0 ? results : [payload];
-  let turns = 0;
-  let tools = 0;
-  let totalTokens = 0;
-  let totalCost = 0;
-  let hasTurns = false;
-  let hasTools = false;
-  let hasTokens = false;
-  let hasCost = false;
+  const turns: Sum = { total: 0, has: false };
+  const tools: Sum = { total: 0, has: false };
+  const tokens: Sum = { total: 0, has: false };
+  const cost: Sum = { total: 0, has: false };
   let model: string | undefined;
 
   for (const step of steps) {
-    const usage = isRecord(step.usage) ? step.usage : undefined;
-    const stepTurns = number(step.turnCount) ?? number(usage?.turns);
-    const stepTools = number(step.toolCount);
-    // Tokens may be at step.totalTokens (nested {input,output,total}),
-    // step.tokens (nested), or inside step.usage as input+output.
-    const stepTokens =
-      numericTotal(step.totalTokens) ??
-      numericTotal(step.tokens) ??
-      (usage ? (number(usage.input) ?? 0) + (number(usage.output) ?? 0) : undefined);
-    // Cost may be at step.totalCost ({costUsd}), step.cost, or usage.cost.
-    const stepCost = costTotal(step.totalCost) ?? number(step.cost) ?? number(usage?.cost);
-    if (stepTurns !== undefined) {
-      turns += stepTurns;
-      hasTurns = true;
-    }
-    if (stepTools !== undefined) {
-      tools += stepTools;
-      hasTools = true;
-    }
-    if (stepTokens !== undefined) {
-      totalTokens += stepTokens;
-      hasTokens = true;
-    }
-    if (stepCost !== undefined) {
-      totalCost += stepCost;
-      hasCost = true;
-    }
-    model ??= string(step.model);
+    const u = stepUsage(step);
+    addTo(turns, u.turns);
+    addTo(tools, u.tools);
+    addTo(tokens, u.tokens);
+    addTo(cost, u.cost);
+    model ??= u.model;
   }
 
   // Top-level aggregate fields (from pi-subagents status.json shape).
-  const topTurns = number(payload.turnCount);
-  const topTools = number(payload.toolCount);
-  const topTokens = numericTotal(payload.totalTokens) ?? numericTotal(payload.tokens);
-  const topCost = costTotal(payload.totalCost) ?? number(payload.cost);
+  const pTurns = pick(number(payload.turnCount), turns);
+  const pTools = pick(number(payload.toolCount), tools);
+  const pTokens = pick(numericTotal(payload.totalTokens) ?? numericTotal(payload.tokens), tokens);
+  const pCost = pick(costTotal(payload.totalCost) ?? number(payload.cost), cost);
+  const pModel = string(payload.model) ?? model;
   return {
-    ...(topTurns !== undefined ? { turns: topTurns } : hasTurns ? { turns } : {}),
-    ...(topTools !== undefined ? { tools: topTools } : hasTools ? { tools } : {}),
-    ...(topTokens !== undefined ? { totalTokens: topTokens } : hasTokens ? { totalTokens } : {}),
-    ...(topCost !== undefined ? { totalCost: topCost } : hasCost ? { totalCost } : {}),
-    ...((string(payload.model) ?? model) ? { model: string(payload.model) ?? model } : {}),
+    ...(pTurns !== undefined ? { turns: pTurns } : {}),
+    ...(pTools !== undefined ? { tools: pTools } : {}),
+    ...(pTokens !== undefined ? { totalTokens: pTokens } : {}),
+    ...(pCost !== undefined ? { totalCost: pCost } : {}),
+    ...(pModel ? { model: pModel } : {}),
   };
 }
 

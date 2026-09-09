@@ -123,7 +123,7 @@ function buildAvailableToolsSection(
   return `${availableToolsHeading}\n${toolsList}`;
 }
 
-function buildGuidelinesSection(opts: any, selectedTools: string[]): string {
+export function buildGuidelinesSection(opts: any, selectedTools: string[]): string {
   // Deduped order matches pi: bash-only fileops, tool-provided, output style.
   const guidelines: string[] = [];
   const seen = new Set<string>();
@@ -157,7 +157,7 @@ function buildGuidelinesSection(opts: any, selectedTools: string[]): string {
 }
 
 // Reassemble the prompt from structured options + our fixed sections.
-function buildPrompt(opts: any): string {
+export function buildPrompt(opts: any): string {
   const selectedTools: string[] = opts.selectedTools ?? ["read", "bash", "edit", "write"];
   const toolSnippets: Record<string, string> = opts.toolSnippets ?? {};
 
