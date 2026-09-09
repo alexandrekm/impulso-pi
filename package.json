@@ -7,17 +7,22 @@
   "scripts": {
     "lint": "eslint extensions/",
     "typecheck": "tsc --noEmit",
+    "check:halstead": "node scripts/check-halstead.mjs",
+    "check:crap": "node scripts/check-crap.mjs",
+    "check:coverage": "c8 --check-coverage --lines 90 --statements 90 --functions 90 --branches 90 --include extensions/command-guard/engine.ts --include extensions/commit-guard/parse.ts --include extensions/commit-guard/rules.ts --include extensions/commit-guard/commit-guard.ts --include extensions/subagent-telemetry/subagent-telemetry.ts --include extensions/impulso-settings/features.ts --include extensions/impulso-settings/index.ts --include extensions/impulso-settings/picker.ts --include extensions/gws/index.ts --include extensions/system-prompt/system-prompt.ts --include extensions/borderontoolcalls/borderontoolcalls.ts --include extensions/borderonusermessages/borderonusermessages.ts --reporter=text npm test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:json": "node scripts/check-json.mjs",
     "check:upstream-prompt": "node scripts/check-upstream-prompt.mjs",
-    "test": "node --test --experimental-strip-types extensions/command-guard/*.test.ts extensions/commit-guard/*.test.ts"
+    "test": "node --test --experimental-strip-types extensions/*/*.test.ts"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.1",
     "@earendil-works/pi-tui": "^0.84.1",
     "@types/node": "^26.2.0",
+    "c8": "^12.0.0",
     "eslint": "^10.8.1",
+    "eslint-plugin-sonarjs": "^4.2.0",
     "prettier": "^3.9.6",
     "typescript": "~5.9.0",
     "typescript-eslint": "^8.67.0"

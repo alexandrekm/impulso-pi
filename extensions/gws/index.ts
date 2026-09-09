@@ -78,7 +78,7 @@ interface ParsedSkill {
   baseDir: string;
 }
 
-function unquote(value: string): string {
+export function unquote(value: string): string {
   const trimmed = value.trim();
   if (
     (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
@@ -92,8 +92,8 @@ function unquote(value: string): string {
 // Parse the YAML frontmatter block (between the first two `---` lines) for
 // `name` and `description`. Both are single-line in the gws skills. Returns
 // null if the file is missing or malformed.
-function parseSkill(skillDir: string): ParsedSkill | null {
-  const filePath = join(SKILLS_DIR, skillDir, "SKILL.md");
+export function parseSkill(skillDir: string, skillsDir: string = SKILLS_DIR): ParsedSkill | null {
+  const filePath = join(skillsDir, skillDir, "SKILL.md");
   if (!existsSync(filePath)) return null;
   const raw = readFileSync(filePath, "utf8");
   const lines = raw.split("\n");

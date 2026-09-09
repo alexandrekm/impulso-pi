@@ -194,3 +194,89 @@ describe("work config", () => {
     assert.equal(d("aws sts get-caller-identity", workCfg), "allow");
   });
 });
+
+describe("env wrapper peeling", () => {
+  test("env with assignments and flags peels to the inner command", () => {
+    assert.equal(normalize("env FOO=1 git push origin"), "git push origin");
+    assert.equal(normalize("env FOO=1 BAR=2 git push"), "git push");
+    assert.equal(normalize("env -i git push"), "git push");
+    assert.equal(normalize("env -0 git push"), "git push");
+    assert.equal(normalize("env -v git push"), "git push");
+    assert.equal(normalize("env -u FOO git push"), "git push");
+    assert.equal(normalize("env -C /tmp git push"), "git push");
+    assert.equal(normalize("env -S /bin/sh git push"), "git push");
+  });
+  test("bare env has nothing to peel", () => {
+    assert.equal(normalize("env"), "env");
+    assert.equal(normalize("env -i"), "env -i");
+    assert.equal(normalize("env FOO=1"), "env FOO=1");
+  });
+});
+
+describe("xargs wrapper peeling", () => {
+  test("xargs with flags peels to the inner command", () => {
+    assert.equal(normalize("xargs git push"), "git push");
+    assert.equal(normalize("xargs -n1 git push"), "git push");
+    assert.equal(normalize("xargs --arg=1 git push"), "git push");
+    assert.equal(normalize("xargs -a f git push"), "git push");
+    assert.equal(normalize("xargs --max-args 2 git push"), "git push");
+    assert.equal(normalize("xargs --no-replace git push"), "git push");
+  });
+  test("bare xargs has nothing to peel", () => {
+    assert.equal(normalize("xargs"), "xargs");
+    assert.equal(normalize("xargs -n1"), "xargs -n1");
+  });
+});
+
+describe("nice / nohup / time prefixes", () => {
+  test("nice with and without -n peels", () => {
+    assert.equal(normalize("nice -n 5 git push"), "git push");
+    assert.equal(normalize("nice git push"), "git push");
+  });
+  test("nohup and time peel", () => {
+    assert.equal(normalize("nohup git push"), "git push");
+    assert.equal(normalize("time git push"), "git push");
+  });
+});
+
+describe("splitCommands quoting and substitution", () => {
+  test("escaped quote inside double quotes does not split", () => {
+    assert.deepEqual(splitCommands('echo "a\\"; b" ; git status'), [
+      'echo "a\\"; b"',
+      "git status",
+    ]);
+  });
+  test("trailing backslash inside double quotes at end of input", () => {
+    assert.deepEqual(splitCommands('echo "x\\'), ['echo "x\\']);
+  });
+  test("separators inside $() never split", () => {
+    assert.deepEqual(splitCommands("echo $(ls; pwd) && git status"), [
+      "echo $(ls; pwd)",
+      "git status",
+    ]);
+    assert.deepEqual(splitCommands("echo $(deep $(nested)) | wc"), [
+      "echo $(deep $(nested))",
+      "wc",
+    ]);
+  });
+  test("bare ) outside substitution is kept in the token", () => {
+    assert.deepEqual(splitCommands("echo ) ; git status"), ["echo )", "git status"]);
+  });
+});
+
+describe("decideProgram edge cases", () => {
+  test("empty and whitespace-only commands are allowed", () => {
+    assert.equal(decideProgram("", cfg).decision, "allow");
+    assert.equal(decideProgram("   ", cfg).decision, "allow");
+  });
+});
+
+describe("pattern and flag helpers", () => {
+  test("exact (starless) patterns match the whole string only", () => {
+    assert.equal(matchesPattern("git status", "git status", "git status"), true);
+    assert.equal(matchesPattern("git status", "git status extra", "git status extra"), false);
+  });
+  test("a flag as the first token is kept as-is", () => {
+    assert.equal(flagStripped("-C /repo git push"), "-C /repo git push");
+  });
+});

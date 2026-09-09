@@ -69,7 +69,7 @@ function statePath(): string {
 // set) or the cwd basename, to make the folder recognizable at a glance.
 // Returns undefined when no session id is available (caller falls back to the
 // flat payloadDir()).
-function slugify(s: string): string {
+export function slugify(s: string): string {
   return (
     s
       .replace(/[^A-Za-z0-9._-]+/g, "-")
@@ -79,7 +79,7 @@ function slugify(s: string): string {
   );
 }
 
-function sessionSubdir(
+export function sessionSubdir(
   sessionId: string | undefined,
   label: string | undefined,
 ): string | undefined {
@@ -119,7 +119,7 @@ function updateStatus(_ui: any, _enabled: boolean): void {
   // no-op — see comment above
 }
 
-function sanitizeModel(id: string): string {
+export function sanitizeModel(id: string): string {
   return id.replace(/[/:]/g, "-");
 }
 
@@ -140,10 +140,13 @@ const ERROR_PATTERNS: { name: string; re: RegExp }[] = [
   { name: "stopReason:error", re: /"stopReason":\s*"error"/g },
   { name: "errorMessage", re: /"errorMessage":\s*"((?:\\.|[^"\\])+)"/g },
   { name: "traceback", re: /Traceback \(most recent call last\)/g },
-  { name: "python-error", re: /\b[A-Z]\w*Error:\s[^\n"]{0,120}/g },
+  // Note: in serialized JSON a preceding newline is the two-char escape `\n`
+  // (ending in the word char `n`), which defeats a plain \b word boundary —
+  // so the lookbehind accepts either that escape or a non-word char.
+  { name: "python-error", re: /(?<=\\n|[^A-Za-z0-9_])[A-Z]\w*Error:\s[^\n"]{0,120}/g },
   {
     name: "js-error",
-    re: /\b(?:TypeError|ReferenceError|SyntaxError|EvalError|RangeError|URIError):\s[^\n"]{0,120}/g,
+    re: /(?<=\\n|[^A-Za-z0-9_])(?:TypeError|ReferenceError|SyntaxError|EvalError|RangeError|URIError):\s[^\n"]{0,120}/g,
   },
   {
     name: "bash-fail",
@@ -152,7 +155,7 @@ const ERROR_PATTERNS: { name: string; re: RegExp }[] = [
 ];
 
 /** Nearest `toolName`/`toolCallId` preceding `idx` in `s` (within ~2KB). */
-function enclosingTool(s: string, idx: number): { toolName?: string; toolCallId?: string } {
+export function enclosingTool(s: string, idx: number): { toolName?: string; toolCallId?: string } {
   const back = s.slice(Math.max(0, idx - 2000), idx);
   const toolName = [...back.matchAll(/"toolName":\s*"([^"]+)"/g)].pop()?.[1];
   const toolCallId = [...back.matchAll(/"toolCallId":\s*"([^"]+)"/g)].pop()?.[1];
@@ -160,14 +163,14 @@ function enclosingTool(s: string, idx: number): { toolName?: string; toolCallId?
 }
 
 /** A compact context window around a match, whitespace-collapsed. */
-function snippetAround(s: string, idx: number, len: number, radius = 80): string {
+export function snippetAround(s: string, idx: number, len: number, radius = 80): string {
   const start = Math.max(0, idx - radius);
   const end = Math.min(s.length, idx + len + radius);
   return s.slice(start, end).replace(/\s+/g, " ").trim();
 }
 
 /** Scan serialized JSON for error signals. */
-function scanErrors(s: string): ErrorMatch[] {
+export function scanErrors(s: string): ErrorMatch[] {
   const matches: ErrorMatch[] = [];
   for (const { name, re } of ERROR_PATTERNS) {
     for (const m of s.matchAll(re)) {
@@ -198,7 +201,7 @@ function appendErrorLog(dir: string, entry: AnyRecord): void {
 // ---- response summary ----------------------------------------------------
 
 /** Extract a short preview of the assistant's text content (first ~500 chars). */
-function textPreview(content: any): string {
+export function textPreview(content: any): string {
   if (!Array.isArray(content)) return "";
   const parts: string[] = [];
   for (const block of content) {

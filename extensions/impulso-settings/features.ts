@@ -763,53 +763,72 @@ function deleteByPath(obj: Json, dotted: string): void {
 // State read / apply
 // ─────────────────────────────────────────────────────────────────────────
 
+// A feature is boolean-toggling when it has no enum values, or exactly the
+// "on"/"off" pair. Everything else is an enum (or free-form picker).
+function isBoolValues(values?: readonly string[]): boolean {
+  return (
+    !values ||
+    values.length === 0 ||
+    (values.length === 2 && values.includes("on") && values.includes("off"))
+  );
+}
+
+// Index of `spec` in settings.json packages[] (string or object entry), -1 if absent.
+function findPackageEntry(pkgs: PackageEntry[], spec: string): number {
+  return pkgs.findIndex(
+    (p) => (typeof p === "string" && p === spec) || (typeof p === "object" && p.source === spec),
+  );
+}
+
 /** Current display value ("on" | "off" | enum string) for a feature. */
 export function getFeatureState(f: Feature): string {
-  if (f.kind === "launch") {
-    try {
-      return f.display ? f.display() : "open →";
-    } catch {
-      return "open →";
-    }
+  switch (f.kind) {
+    case "launch":
+      try {
+        return f.display ? f.display() : "open →";
+      } catch {
+        return "open →";
+      }
+    case "package":
+      return packageState(f);
+    case "local":
+      return isFeatureEnabled(f.id) ? "on" : "off";
+    case "config":
+      return configState(f);
+    default:
+      return settingState(f);
   }
-  if (f.kind === "package") {
-    const pkgs = readSettings().packages;
-    if (!Array.isArray(pkgs)) return "off";
-    const entry = (pkgs as PackageEntry[]).find(
-      (p) =>
-        (typeof p === "string" && p === f.spec) || (typeof p === "object" && p.source === f.spec),
-    );
-    if (!entry) return "off";
-    return typeof entry === "string" || entry.autoload !== false ? "on" : "off";
-  }
+}
 
-  if (f.kind === "local") {
-    return isFeatureEnabled(f.id) ? "on" : "off";
-  }
+function packageState(f: Feature): string {
+  const pkgs = readSettings().packages;
+  if (!Array.isArray(pkgs)) return "off";
+  const entries = pkgs as PackageEntry[];
+  const idx = findPackageEntry(entries, f.spec!);
+  if (idx === -1) return "off";
+  const entry = entries[idx];
+  return typeof entry === "string" || entry.autoload !== false ? "on" : "off";
+}
 
-  if (f.kind === "config") {
-    const raw = readConfigFile(f.configFile!)[f.key!];
-    // `picker` features are free-form strings drawn from a dynamic list
-    // (e.g. a model id); "" means the key is absent / "same as main".
-    // They must NOT be treated as booleans even though they have no `values`.
-    if (f.picker) {
-      return raw === undefined ? "" : String(raw);
-    }
-    const isBool =
-      !f.values ||
-      f.values.length === 0 ||
-      (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
-    if (isBool) {
-      const def = f.defaultValue === "on";
-      return raw === undefined ? (def ? "on" : "off") : raw === true ? "on" : "off";
-    }
-    // enum: "" (first value) means the key is absent / "same as main".
-    const fallback = f.defaultValue ?? f.values![0] ?? "";
-    const str = raw === undefined ? "" : String(raw);
-    return f.values!.includes(str) ? str : fallback;
+// config-file features: the value lives in a package's own JSON file.
+function configState(f: Feature): string {
+  const raw = readConfigFile(f.configFile!)[f.key!];
+  // `picker` features are free-form strings drawn from a dynamic list
+  // (e.g. a model id); "" means the key is absent / "same as main".
+  // They must NOT be treated as booleans even though they have no `values`.
+  if (f.picker) return raw === undefined ? "" : String(raw);
+  if (isBoolValues(f.values)) {
+    const def = f.defaultValue === "on";
+    return raw === undefined ? (def ? "on" : "off") : raw === true ? "on" : "off";
   }
+  // enum: "" (first value) means the key is absent / "same as main".
+  const fallback = f.defaultValue ?? f.values![0] ?? "";
+  const str = raw === undefined ? "" : String(raw);
+  return f.values!.includes(str) ? str : fallback;
+}
 
-  // pi-setting
+// pi-setting features: the value lives at a dotted path in settings.json.
+function settingState(f: Feature): string {
   if (f.picker && f.modelKey) {
     const model = getByPath(readSettings(), f.modelKey) as
       { provider?: string; id?: string } | undefined;
@@ -828,11 +847,7 @@ export function getFeatureState(f: Feature): string {
   }
   if (f.picker) return "";
   const raw = getByPath(readSettings(), f.key!);
-  const isBool =
-    !f.values ||
-    f.values.length === 0 ||
-    (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
-  if (isBool) {
+  if (isBoolValues(f.values)) {
     const def = f.defaultValue === "on";
     return raw === undefined ? (def ? "on" : "off") : raw === true ? "on" : "off";
   }
@@ -844,90 +859,91 @@ export function getFeatureState(f: Feature): string {
 
 /** Apply a new display value to the underlying config. Throws on failure. */
 export function setFeatureState(f: Feature, value: string): void {
-  if (f.kind === "package") {
-    const data = readSettings();
-    const pkgs = Array.isArray(data.packages) ? (data.packages as PackageEntry[]) : [];
-    const idx = pkgs.findIndex(
-      (p) =>
-        (typeof p === "string" && p === f.spec) || (typeof p === "object" && p.source === f.spec),
-    );
-    const next: PackageEntry = value === "on" ? f.spec! : { source: f.spec!, autoload: false };
-    if (idx >= 0) pkgs[idx] = next;
-    else pkgs.push(next);
-    data.packages = pkgs;
-    writeSettings(data);
-    return;
-  }
-
-  if (f.kind === "local") {
-    setFeatureEnabled(f.id, value === "on");
-    return;
-  }
-
-  if (f.kind === "config") {
-    const data = readConfigFile(f.configFile!);
-    // `picker` features are free-form strings (e.g. a model id); "" removes
-    // the key ("same as main / use default"). Not boolean despite no `values`.
-    if (f.picker) {
-      if (value === "") delete data[f.key!];
-      else data[f.key!] = value;
-      writeConfigFile(f.configFile!, data);
+  switch (f.kind) {
+    case "package":
+      setPackageState(f, value);
       return;
-    }
-    const isBool =
-      !f.values ||
-      f.values.length === 0 ||
-      (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
-    if (isBool) {
-      data[f.key!] = value === "on";
-    } else if (value === "") {
-      // "" is the "same as main / use default" sentinel: remove the key.
-      delete data[f.key!];
-    } else {
-      data[f.key!] = f.numeric ? Number(value) : value;
-    }
-    writeConfigFile(f.configFile!, data);
-    return;
+    case "local":
+      setFeatureEnabled(f.id, value === "on");
+      return;
+    case "config":
+      setConfigState(f, value);
+      return;
+    default:
+      setSettingState(f, value);
   }
+}
 
-  // pi-setting
+function setPackageState(f: Feature, value: string): void {
+  const data = readSettings();
+  const pkgs = Array.isArray(data.packages) ? (data.packages as PackageEntry[]) : [];
+  const idx = findPackageEntry(pkgs, f.spec!);
+  const next: PackageEntry = value === "on" ? f.spec! : { source: f.spec!, autoload: false };
+  if (idx >= 0) pkgs[idx] = next;
+  else pkgs.push(next);
+  data.packages = pkgs;
+  writeSettings(data);
+}
+
+// config-file features: write into the package's own JSON file. `picker`
+// features are free-form strings (e.g. a model id); "" removes the key
+// ("same as main / use default"). Not boolean despite no `values`.
+function setConfigState(f: Feature, value: string): void {
+  const data = readConfigFile(f.configFile!);
+  if (f.picker) {
+    if (value === "") delete data[f.key!];
+    else data[f.key!] = value;
+  } else if (isBoolValues(f.values)) {
+    data[f.key!] = value === "on";
+  } else if (value === "") {
+    // "" is the "same as main / use default" sentinel: remove the key.
+    delete data[f.key!];
+  } else {
+    data[f.key!] = f.numeric ? Number(value) : value;
+  }
+  writeConfigFile(f.configFile!, data);
+}
+
+// Clear a model picker selection: drop provider/id, keep anything else
+// (e.g. thinking level) if set.
+function clearModelSelection(data: Json, modelKey: string): void {
+  const model = getByPath(data, modelKey);
+  if (model && typeof model === "object" && !Array.isArray(model)) {
+    const m = model as Record<string, unknown>;
+    delete m.provider;
+    delete m.id;
+  }
+}
+
+// Set a "provider/model-id" picker selection. No-op on malformed values.
+function setModelSelection(data: Json, modelKey: string, value: string): void {
+  const slash = value.indexOf("/");
+  if (slash <= 0) return;
+  setByPath(data, `${modelKey}.provider`, value.slice(0, slash));
+  setByPath(data, `${modelKey}.id`, value.slice(slash + 1));
+}
+
+// pi-setting features: write at a dotted path in settings.json.
+function setSettingState(f: Feature, value: string): void {
   const data = readSettings();
   if (f.picker && f.modelKey) {
-    if (value === "") {
-      // Clear: drop provider/id, keep thinking if set.
-      const model = getByPath(data, f.modelKey);
-      if (model && typeof model === "object" && !Array.isArray(model)) {
-        const m = model as Record<string, unknown>;
-        delete m.provider;
-        delete m.id;
-      }
-    } else {
-      const slash = value.indexOf("/");
-      if (slash > 0) {
-        setByPath(data, `${f.modelKey}.provider`, value.slice(0, slash));
-        setByPath(data, `${f.modelKey}.id`, value.slice(slash + 1));
-      }
-    }
+    if (value === "") clearModelSelection(data, f.modelKey);
+    else setModelSelection(data, f.modelKey, value);
     writeSettings(data);
     return;
   }
   if (f.picker) {
     // Plain-string picker (no modelKey). A picker feature without a key
     // is a registry misconfiguration — no-op instead of writing to an
-    // undefined path.
+    // undefined path. "" removes the key so the default chain applies again.
     if (f.key) {
-      // "" removes the key so the default chain applies again.
       if (value === "") deleteByPath(data, f.key);
       else setByPath(data, f.key, value);
       writeSettings(data);
     }
     return;
   }
-  const isBool =
-    !f.values ||
-    f.values.length === 0 ||
-    (f.values.length === 2 && f.values.includes("on") && f.values.includes("off"));
-  if (isBool) {
+  if (isBoolValues(f.values)) {
     setByPath(data, f.key!, value === "on");
   } else if (value === "") {
     // "" is the "same as main / use default" sentinel: remove the key.
