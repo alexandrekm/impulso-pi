@@ -306,6 +306,40 @@ function coerceEntryTimestamp(timestamp: number | undefined, entry: SessionMessa
   return Number.isFinite(ts) ? ts : 0;
 }
 
+/**
+ * Request duration: the producer's explicit `duration` when present (omp
+ * writes it), otherwise derived for earendil-works pi sessions — the
+ * assistant message `timestamp` is set when the provider stream starts
+ * (request start) and the entry `timestamp` is assigned when the completed
+ * message is persisted (response end), so the delta is the request wall
+ * time. Same cap/discard policy as tool-call durations: a long suspend
+ * mid-request (laptop sleep, crash-recovered writes) would inflate the
+ * delta, so cap at 1h and discard non-positive values.
+ *
+ * Plausibility guard: some providers set the message timestamp at
+ * completion rather than stream start (cursor-native does), making the
+ * delta near-zero while the message carries a full response. A derived
+ * delta implying an output rate above PLAUSIBLE_MAX_TPS measures nothing
+ * and is discarded (explicit producer-written durations are trusted as-is).
+ */
+const DERIVED_DURATION_CAP_MS = 60 * 60 * 1000;
+export const PLAUSIBLE_MAX_TPS = 2000;
+function coerceMessageDuration(
+  duration: number | undefined,
+  msgTimestamp: number | undefined,
+  entry: SessionMessageEntry,
+  outputTokens: number,
+): number | null {
+  if (typeof duration === "number" && Number.isFinite(duration) && duration > 0) return duration;
+  if (typeof msgTimestamp !== "number" || !Number.isFinite(msgTimestamp)) return null;
+  const persisted = Date.parse(entry.timestamp);
+  if (!Number.isFinite(persisted)) return null;
+  const delta = persisted - msgTimestamp;
+  if (delta <= 0 || delta > DERIVED_DURATION_CAP_MS) return null;
+  if (outputTokens > 0 && (outputTokens * 1000) / delta > PLAUSIBLE_MAX_TPS) return null;
+  return delta;
+}
+
 const ZERO_USAGE_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 
 /**
@@ -364,7 +398,7 @@ function extractStats(
     provider: msg.provider,
     api: msg.api,
     timestamp: coerceEntryTimestamp(msg.timestamp, entry),
-    duration: msg.duration ?? null,
+    duration: coerceMessageDuration(msg.duration, msg.timestamp, entry, usage.output),
     ttft: msg.ttft ?? null,
     // A message persisted without a terminal stop reason never completed
     // normally: classify by whether it carried an error.

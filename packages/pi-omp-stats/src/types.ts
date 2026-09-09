@@ -99,9 +99,12 @@ export interface AssistantMessage {
   stopReason?: StopReason;
   /** Unix milliseconds. Falls back to the entry's ISO timestamp. */
   timestamp?: number;
-  /** Request duration in ms (not emitted by earendil-works pi as of this port). */
+  /** Request duration in ms. earendil-works pi does not emit it; the parser
+   * derives it (entry persist timestamp − message start timestamp) when
+   * absent. */
   duration?: number;
-  /** Time-to-first-token in ms (not emitted by earendil-works pi as of this port). */
+  /** Time-to-first-token in ms (not emitted by earendil-works pi; always
+   * null for pi-written sessions — no first-token timing is persisted). */
   ttft?: number;
   errorMessage?: string | null;
   responseId?: string;
