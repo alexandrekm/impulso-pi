@@ -14,20 +14,6 @@
     "hideThinkingBlock": true,
     // Catppuccin Mocha, from the pi-themes package (git: below).
     "theme": "catppuccin-mocha",
-
-    // Default model — repo-owned, re-applied on every sync. In-session
-    // model changes (picker, /model <name>, Ctrl+P) stay session-only in
-    // pi 0.84.4 and never rewrite this. Change the default by editing
-    // these two lines + `./install.sh`.
-    "defaultProvider": "openrouter",
-    "defaultModel": "z-ai/glm-5.3",
-
-    // Ctrl+P model-cycle shortlist (--models format: exact ids or globs,
-    // optional :thinking suffix; matched against provider/id or bare id).
-    // Order = cycle order. Repo-owned like the keys above: edit +
-    // `./install.sh` to change. :batch variants are separate ids and are
-    // not matched by the exact forms below.
-    "enabledModels": ["moonshotai/kimi-k3", "anthropic/claude-sonnet-5", "anthropic/claude-opus-5"],
   },
 
   // DEFAULT settings — deep fill-only: a key (and nested sub-keys) is
@@ -36,6 +22,24 @@
   // extension-managed namespaces on fresh machines without clobbering
   // per-user tuning. Keys removed here are left as-is (non-clobber).
   "settingsDefaults": {
+    // Model seed — fill-only, NEVER overwritten once present. Fresh machines
+    // get this starting point; local edits to settings.json (default model,
+    // Ctrl+P cycle shortlist) survive every sync. To change your setup, edit
+    // the profile's settings.json directly (or via pi's /model + Ctrl+P);
+    // edit these lines only to change what NEW installs start with.
+    //   defaultProvider/defaultModel — the session's starting model.
+    //   enabledModels — Ctrl+P model-cycle shortlist (--models format: exact
+    //     ids or globs, optional :thinking suffix; matched against
+    //     provider/id or bare id). Order = cycle order. :batch variants are
+    //     separate ids and are not matched by the exact forms below.
+    "defaultProvider": "openrouter",
+    "defaultModel": "z-ai/glm-5.3",
+    "enabledModels": [
+      "z-ai/glm-5.3",
+      "moonshotai/kimi-k3",
+      "anthropic/claude-sonnet-5",
+      "anthropic/claude-opus-5",
+    ],
     // pi-observational-memory: by default the proactive compaction trigger
     // fires at a fixed 81k-token threshold (calibrated mode), which compacts
     // far too often on large-context models. Ratio mode + 0.9 makes it fire
