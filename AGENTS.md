@@ -170,8 +170,9 @@ deliberately different semantics:
   initial values for extension-managed namespaces on fresh machines without
   clobbering per-user tuning. Currently used for `observational-memory`
   compaction thresholds (`compactAfterTokensMode: "ratio"`,
-  `compactAfterTokensRatio: 0.9`) so the proactive auto-compaction trigger
-  doesn't fire at the default 81k-token threshold on large-context models,
+  `compactAfterTokensRatio: 0.6`) so the proactive auto-compaction
+  trigger doesn't fire at the default 81k-token threshold on
+  large-context models,
   and for `litellm.skills.enabled: false`, which stops pi-provider-litellm
   from registering the LiteLLM Skills Gateway tools
   (`litellm_skill_list/create/delete`) and injecting the proxy's skill

@@ -42,9 +42,10 @@
     ],
     // pi-observational-memory: by default the proactive compaction trigger
     // fires at a fixed 81k-token threshold (calibrated mode), which compacts
-    // far too often on large-context models. Ratio mode + 0.9 makes it fire
-    // at ~90% of the active model's context window instead, so the auto-
-    // trigger rarely fires while observation/reflection work continues; pi's
+    // far too often on large-context models. Ratio mode + 0.6 makes it fire
+    // at ~60% of the active model's context window instead — early enough to
+    // keep per-request cache-read cost down on huge-context models (claude
+    // was averaging ~360k cache-read tokens/request at ratio 0.9); pi's
     // native window-pressure compaction remains the safety net. The
     // /settings "Compaction trigger mode" toggle can still flip this back
     // to `calibrated` — install only fills these when absent, never resets.
