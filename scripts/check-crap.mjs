@@ -70,10 +70,16 @@ function runTestsWithCoverage() {
     cwd: ROOT,
     env: { ...process.env, NODE_V8_COVERAGE: covdir },
     encoding: "utf8",
-    stdio: ["ignore", "ignore", "inherit"],
+    // Pipe so a failing suite can be echoed (CI shows which test broke);
+    // the dot reporter is small but give it headroom anyway.
+    stdio: ["ignore", "pipe", "pipe"],
+    maxBuffer: 32 * 1024 * 1024,
   });
   if (res.status !== 0) {
     console.error("CRAP gate: test suite failed; cannot compute coverage.");
+    console.error("── npm test output ────────────────────────────────");
+    console.error(res.stdout ?? "(no stdout)");
+    console.error(res.stderr ?? "");
     rmSync(covdir, { recursive: true, force: true });
     process.exit(1);
   }
