@@ -53,6 +53,9 @@ import {
   getToolStatsByModel,
   getToolTimeSeries,
   getSearchCallRows,
+  getSearchAdoptionSessions,
+  getSearchAdoptionTimeseries,
+  type SearchAdoptionSession,
   getUserTurnTimestamps,
   getTimeSeries,
   initDb,
@@ -89,6 +92,8 @@ import type {
   BehaviorDashboardStats,
   DashboardStats,
   ProviderDashboardStats,
+  SearchAdoptionPeriod,
+  SearchAdoptionStats,
   SearchMixStats,
   ToolDashboardStats,
 } from "./shared-types.js";
@@ -558,6 +563,92 @@ function computeSearchMix(cutoff?: number): SearchMixStats {
         errorRate: agg.calls > 0 ? agg.errors / agg.calls : 0,
       }))
       .sort((a, b) => b.calls - a.calls),
+  };
+}
+
+/**
+ * Search adoption panel: did investigation get cheaper after zvec became
+ * usable? Sessions are split at `since` (the zvec enablement date; a
+ * ?since= epoch-ms or ISO-date query param overrides the default) and
+ * compared on turns, wall-clock, tokens, and search-tool mix. The
+ * per-day timeseries tracks the adoption curve within the dashboard range.
+ *
+ * Wall-clock is first→last user message per session, capped at 12h so
+ * long-running sessions don't skew averages. Sessions (not requests) are
+ * the unit: one session ≈ one investigation, fewer turns ≈ fewer follow-up
+ * questions to reach an answer.
+ */
+const DEFAULT_ZVEC_ENABLED_AT = Date.UTC(2026, 8, 9); // 2026-09-09: home-index fix + scout allowlist
+const ADOPTION_WALL_CLOCK_CAP_MS = 12 * 60 * 60 * 1000;
+
+function parseSince(raw: string | null | undefined): number {
+  if (raw) {
+    const n = Number(raw);
+    const parsed = Number.isFinite(n) && n > 0 ? n : Date.parse(raw);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return DEFAULT_ZVEC_ENABLED_AT;
+}
+
+function summarizePeriod(
+  label: "before" | "after",
+  sessions: SearchAdoptionSession[],
+): SearchAdoptionPeriod {
+  const n = sessions.length;
+  if (n === 0) {
+    return {
+      label,
+      sessions: 0,
+      avgTurns: 0,
+      avgWallClockMin: 0,
+      avgTokens: 0,
+      avgSearchCalls: 0,
+      avgZvecCalls: 0,
+      avgZvecSearchMs: null,
+      zvecAdoptionPct: 0,
+      zvecErrors: 0,
+    };
+  }
+  const wall = sessions.map((s) =>
+    Math.min(Math.max(s.endTs - s.startTs, 0), ADOPTION_WALL_CLOCK_CAP_MS),
+  );
+  const zvecSessions = sessions.filter((s) => s.zvecSearchCalls > 0).length;
+  const durSum = sessions.reduce((acc, s) => acc + (s.zvecSearchAvgMs ?? 0), 0);
+  const durCount = sessions.filter((s) => s.zvecSearchAvgMs != null).length;
+  return {
+    label,
+    sessions: n,
+    avgTurns: sessions.reduce((a, s) => a + s.turns, 0) / n,
+    avgWallClockMin: wall.reduce((a, b) => a + b, 0) / n / 60000,
+    avgTokens: sessions.reduce((a, s) => a + s.tokens, 0) / n,
+    avgSearchCalls: sessions.reduce((a, s) => a + s.exactCalls, 0) / n,
+    avgZvecCalls: sessions.reduce((a, s) => a + s.zvecCalls, 0) / n,
+    avgZvecSearchMs: durCount > 0 ? Math.round(durSum / durCount) : null,
+    zvecAdoptionPct: (zvecSessions / n) * 100,
+    zvecErrors: sessions.reduce((a, s) => a + s.zvecErrors, 0),
+  };
+}
+
+export async function getSearchAdoptionStats(
+  range?: string | null,
+  sinceRaw?: string | null,
+): Promise<SearchAdoptionStats> {
+  await initDb();
+  const { modelSeriesDays, modelSeriesBucketMs, cutoff } = getTimeRangeConfig(range);
+  const since = parseSince(sinceRaw);
+  const all = getSearchAdoptionSessions();
+  const before = all.filter((s) => s.startTs < since);
+  const after = all.filter((s) => s.startTs >= since);
+  return {
+    since,
+    sinceLabel: new Date(since).toISOString().slice(0, 10),
+    periodBefore: summarizePeriod("before", before),
+    periodAfter: summarizePeriod("after", after),
+    timeseries: getSearchAdoptionTimeseries(modelSeriesDays, cutoff, modelSeriesBucketMs),
+    sessions: all.slice(0, 100).map((s) => ({
+      ...s,
+      period: s.startTs < since ? ("before" as const) : ("after" as const),
+    })),
   };
 }
 

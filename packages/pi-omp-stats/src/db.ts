@@ -2842,3 +2842,187 @@ export function getUserTurnTimestamps(): Map<string, number[]> {
   }
   return out;
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Search adoption (zvec enablement tracking)
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Tools counted by the search-adoption panel. zvec_* are the semantic
+ * side; grep/find/multi_grep the exact side (FFF's override surface). */
+const ADOPTION_TOOLS = [
+  "zvec_search",
+  "zvec_status",
+  "zvec_index",
+  "grep",
+  "find",
+  "multi_grep",
+] as const;
+const ZVEC_SEARCH_TOOLS = ["zvec_search", "zvec_status", "zvec_index"] as const;
+
+export interface SearchAdoptionDay {
+  timestamp: number;
+  zvecSearch: number;
+  zvecErrors: number;
+  exact: number;
+}
+
+/** Per-day call counts of zvec_search vs exact search (grep/find/multi_grep),
+ *  plus zvec_* error counts — the adoption curve over time. */
+export function getSearchAdoptionTimeseries(
+  days = 30,
+  cutoff?: number | null,
+  bucketMs = 24 * 60 * 60 * 1000,
+): SearchAdoptionDay[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT (timestamp / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket,
+			SUM(CASE WHEN tool_name = 'zvec_search' THEN 1 ELSE 0 END) as zvec_search,
+			SUM(CASE WHEN tool_name IN ('zvec_search','zvec_status','zvec_index') AND is_error = 1 THEN 1 ELSE 0 END) as zvec_errors,
+			SUM(CASE WHEN tool_name IN ('grep','find','multi_grep') THEN 1 ELSE 0 END) as exact
+		FROM tool_calls
+		WHERE tool_name IN (${ADOPTION_TOOLS.map(() => "?").join(", ")})
+		${hasCutoff ? "AND timestamp >= ?" : ""}
+		GROUP BY bucket
+		ORDER BY bucket ASC
+	`;
+  // Placeholder order follows SQL text order: the two CAST(?) bucket
+  // placeholders in the SELECT come first, then the IN (...) tools, then
+  // the optional cutoff.
+  const binds = hasCutoff
+    ? [bucketMs, bucketMs, ...ADOPTION_TOOLS, cutoff]
+    : [bucketMs, bucketMs, ...ADOPTION_TOOLS];
+  const rows = db.prepare(sql).all(...binds) as unknown as Array<{
+    bucket: number;
+    zvec_search: number | null;
+    zvec_errors: number | null;
+    exact: number | null;
+  }>;
+  return rows.map((r) => ({
+    timestamp: r.bucket,
+    zvecSearch: r.zvec_search ?? 0,
+    zvecErrors: r.zvec_errors ?? 0,
+    exact: r.exact ?? 0,
+  }));
+}
+
+export interface SearchAdoptionSession {
+  sessionFile: string;
+  folder: string;
+  startTs: number;
+  endTs: number;
+  turns: number;
+  requests: number;
+  tokens: number;
+  zvecCalls: number;
+  zvecSearchCalls: number;
+  zvecErrors: number;
+  zvecSearchAvgMs: number | null;
+  exactCalls: number;
+}
+
+/** Per-session search-adoption rows over ALL history (no cutoff — the
+ *  before/after comparison is across the enablement boundary, not the
+ *  dashboard range). Sessions are identified by their user_messages rows;
+ *  token/request aggregates come from messages, tool counts from tool_calls
+ *  (both agent types: scout-subagent zvec usage counts as adoption). */
+export function getSearchAdoptionSessions(limit = 500): SearchAdoptionSession[] {
+  if (!db) return [];
+  // 1. Session spine: first/last user message + turn count.
+  const spine = db
+    .prepare(
+      `SELECT session_file, MIN(folder) as folder, MIN(timestamp) as start_ts, MAX(timestamp) as end_ts, COUNT(*) as turns
+			 FROM user_messages GROUP BY session_file ORDER BY start_ts DESC LIMIT ?`,
+    )
+    .all(limit) as unknown as Array<{
+    session_file: string;
+    folder: string;
+    start_ts: number;
+    end_ts: number;
+    turns: number;
+  }>;
+  if (spine.length === 0) return [];
+  const files = spine.map((s) => s.session_file);
+  const fileSet = new Set(files);
+
+  // 2. Request/token totals per session (messages).
+  const msgs = new Map<string, { requests: number; tokens: number }>();
+  for (const r of db
+    .prepare(
+      `SELECT session_file, COUNT(*) as requests, SUM(total_tokens) as tokens FROM messages GROUP BY session_file`,
+    )
+    .all() as unknown as Array<{ session_file: string; requests: number; tokens: number | null }>) {
+    if (fileSet.has(r.session_file)) {
+      msgs.set(r.session_file, { requests: r.requests, tokens: r.tokens ?? 0 });
+    }
+  }
+
+  // 3. Search-tool counts + zvec_search latency per session (tool_calls).
+  const tools = new Map<
+    string,
+    {
+      zvec: number;
+      zvecSearch: number;
+      zvecErrors: number;
+      durSum: number;
+      durCount: number;
+      exact: number;
+    }
+  >();
+  const placeholders = ADOPTION_TOOLS.map(() => "?").join(", ");
+  for (const r of db
+    .prepare(
+      `SELECT session_file, tool_name, COUNT(*) as calls, SUM(is_error) as errors, SUM(duration_ms) as dur_sum,
+					 SUM(CASE WHEN duration_ms IS NOT NULL THEN 1 ELSE 0 END) as dur_count
+				 FROM tool_calls WHERE tool_name IN (${placeholders}) GROUP BY session_file, tool_name`,
+    )
+    .all(...ADOPTION_TOOLS) as unknown as Array<{
+    session_file: string;
+    tool_name: string;
+    calls: number;
+    errors: number | null;
+    dur_sum: number | null;
+    dur_count: number | null;
+  }>) {
+    if (!fileSet.has(r.session_file)) continue;
+    const agg = tools.get(r.session_file) ?? {
+      zvec: 0,
+      zvecSearch: 0,
+      zvecErrors: 0,
+      durSum: 0,
+      durCount: 0,
+      exact: 0,
+    };
+    if ((ZVEC_SEARCH_TOOLS as readonly string[]).includes(r.tool_name)) {
+      agg.zvec += r.calls;
+      agg.zvecErrors += r.errors ?? 0;
+      if (r.tool_name === "zvec_search") {
+        agg.zvecSearch += r.calls;
+        agg.durSum += r.dur_sum ?? 0;
+        agg.durCount += r.dur_count ?? 0;
+      }
+    } else {
+      agg.exact += r.calls;
+    }
+    tools.set(r.session_file, agg);
+  }
+
+  return spine.map((s) => {
+    const m = msgs.get(s.session_file);
+    const t = tools.get(s.session_file);
+    return {
+      sessionFile: s.session_file,
+      folder: s.folder,
+      startTs: s.start_ts,
+      endTs: s.end_ts,
+      turns: s.turns,
+      requests: m?.requests ?? 0,
+      tokens: m?.tokens ?? 0,
+      zvecCalls: t?.zvec ?? 0,
+      zvecSearchCalls: t?.zvecSearch ?? 0,
+      zvecErrors: t?.zvecErrors ?? 0,
+      zvecSearchAvgMs: t && t.durCount > 0 ? Math.round(t.durSum / t.durCount) : null,
+      exactCalls: t?.exact ?? 0,
+    };
+  });
+}

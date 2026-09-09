@@ -137,6 +137,15 @@ export const FEATURES: Feature[] = [
     spec: "npm:@luminascale/pi-zvec-grep",
   },
   {
+    id: "zvec-guard",
+    tab: "search",
+    group: "Semantic search",
+    label: "zvec home-index guard",
+    description:
+      "Block zvec_index calls that would index $HOME (index/rebuild modes; drop stays allowed). A home-rooted index makes every zg call stat the whole home tree — status/query hang for minutes from any cwd under $HOME, which silently disabled zvec on all profiles once already.",
+    kind: "local",
+  },
+  {
     id: "zvec-autoindex",
     tab: "search",
     group: "Semantic search",
