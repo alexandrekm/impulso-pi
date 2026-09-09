@@ -20,7 +20,7 @@
 // Toggled via the impulso settings page (feature id `system-prompt`); off =
 // pi's stock prompt is used verbatim.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,10 +29,13 @@ import { fileURLToPath } from "node:url";
 // extension has no import-time dependency on impulso-settings being present).
 // ─────────────────────────────────────────────────────────────────────────
 
+function configDir(): string {
+  return process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+}
+
 function isFeatureEnabled(id: string): boolean {
   try {
-    const dir = process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
-    const raw = readFileSync(join(dir, "impulso-settings.json"), "utf8");
+    const raw = readFileSync(join(configDir(), "impulso-settings.json"), "utf8");
     return !((JSON.parse(raw).disabled ?? []) as string[]).includes(id);
   } catch {
     return true;
@@ -65,6 +68,16 @@ const outputStyle = [
 // Tool-dependent guideline pi adds when bash is active but none of
 // grep/find/ls are (i.e. the user would otherwise have no file-search tool).
 const bashOnlyFileopsGuideline = "Use bash for file operations like ls, rg, find";
+
+// Scout-first nudge: encourages delegating multi-file/unknown-location
+// reconnaissance to the read-only scout subagent instead of burning parent
+// context on many inline read/search rounds. Emitted only when BOTH the
+// pi-subagents `subagent` tool is active and the scout role is installed
+// (agents/scout.md under the config dir), so the prompt never points at a
+// missing agent. The wording carries the break-even threshold: quick 1-2
+// call lookups stay inline — child startup + cold cache can't beat them.
+const scoutFirstGuideline =
+  "Scout-first: delegate reconnaissance that will likely span multiple files or unknown locations to the read-only `scout` subagent (async, fresh context) and work from its compact handoff; do quick 1-2 call lookups inline";
 
 // Detailed Pi-development guidance belongs in an on-demand skill rather than
 // every system prompt. The pointer is emitted only when the model-invocable skill
@@ -123,7 +136,11 @@ function buildAvailableToolsSection(
   return `${availableToolsHeading}\n${toolsList}`;
 }
 
-export function buildGuidelinesSection(opts: any, selectedTools: string[]): string {
+export function buildGuidelinesSection(
+  opts: any,
+  selectedTools: string[],
+  hasScoutAgent = false,
+): string {
   // Deduped order matches pi: bash-only fileops, tool-provided, output style.
   const guidelines: string[] = [];
   const seen = new Set<string>();
@@ -145,6 +162,9 @@ export function buildGuidelinesSection(opts: any, selectedTools: string[]): stri
     const normalized = guideline.trim();
     if (normalized.length > 0) add(normalized);
   }
+  if (hasScoutAgent && selectedTools.includes("subagent")) {
+    add(scoutFirstGuideline);
+  }
   for (const guideline of outputStyle) add(guideline);
 
   const hasPiDevelopmentSkill = (opts.skills ?? []).some(
@@ -157,7 +177,7 @@ export function buildGuidelinesSection(opts: any, selectedTools: string[]): stri
 }
 
 // Reassemble the prompt from structured options + our fixed sections.
-export function buildPrompt(opts: any): string {
+export function buildPrompt(opts: any, hasScoutAgent = false): string {
   const selectedTools: string[] = opts.selectedTools ?? ["read", "bash", "edit", "write"];
   const toolSnippets: Record<string, string> = opts.toolSnippets ?? {};
 
@@ -165,7 +185,7 @@ export function buildPrompt(opts: any): string {
     generalInstructions,
     buildAvailableToolsSection(selectedTools, toolSnippets),
     additionalToolsInstructions,
-    buildGuidelinesSection(opts, selectedTools),
+    buildGuidelinesSection(opts, selectedTools, hasScoutAgent),
   ].join("\n\n");
 
   // appendSystemPrompt (--append-system-prompt / APPEND_SYSTEM.md)
@@ -209,6 +229,7 @@ export default function (pi: any): void {
     // anyway. Don't double-process.
     if (opts.customPrompt) return;
 
-    return { systemPrompt: buildPrompt(opts) };
+    const hasScoutAgent = existsSync(join(configDir(), "agents", "scout.md"));
+    return { systemPrompt: buildPrompt(opts, hasScoutAgent) };
   });
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -57,6 +57,19 @@ describe("buildGuidelinesSection", () => {
 
     const none = buildGuidelinesSection({ promptGuidelines: [], skills: [] }, []);
     assert.ok(!none.includes("pi-development"));
+  });
+
+  test("emits the scout-first guideline only with subagent tool + scout agent", () => {
+    const opts = { promptGuidelines: [], skills: [] };
+    const withBoth = buildGuidelinesSection(opts, ["read", "subagent"], true);
+    assert.match(withBoth, /Scout-first: delegate reconnaissance/);
+
+    // Missing either gate → no guideline (prompt never points at a missing agent).
+    assert.ok(!buildGuidelinesSection(opts, ["read"], true).includes("Scout-first"));
+    assert.ok(!buildGuidelinesSection(opts, ["read", "subagent"], false).includes("Scout-first"));
+
+    // Existing calls without the third arg keep the old (no-scout) behavior.
+    assert.ok(!buildGuidelinesSection(opts, ["read", "subagent"]).includes("Scout-first"));
   });
 });
 
@@ -124,6 +137,18 @@ describe("buildPrompt", () => {
   test("cwd backslashes become forward slashes", () => {
     assert.ok(buildPrompt({ cwd: "C:\\work\\repo" }).includes("C:/work/repo"));
   });
+
+  test("scout-first guideline flows through buildPrompt when enabled", () => {
+    const opts = {
+      selectedTools: ["read", "subagent"],
+      toolSnippets: {},
+      promptGuidelines: [],
+      skills: [],
+      cwd: "/x",
+    };
+    assert.ok(buildPrompt(opts, true).includes("Scout-first: delegate reconnaissance"));
+    assert.ok(!buildPrompt(opts).includes("Scout-first"));
+  });
 });
 
 describe("factory before_agent_start hook", () => {
@@ -145,5 +170,22 @@ describe("factory before_agent_start hook", () => {
     const h = makePi();
     assert.equal(await h({}), undefined);
     assert.equal(await h({ systemPromptOptions: { customPrompt: "mine" } }), undefined);
+  });
+
+  test("includes the scout-first guideline only when agents/scout.md exists", async () => {
+    const dir = process.env.PI_CODING_AGENT_DIR!;
+    const opts = {
+      selectedTools: ["read", "subagent"],
+      toolSnippets: { read: "r" },
+      cwd: "/x",
+    };
+    const h = makePi();
+    const without = (await h({ systemPromptOptions: opts })) as { systemPrompt: string };
+    assert.ok(!without.systemPrompt.includes("Scout-first"));
+
+    mkdirSync(join(dir, "agents"), { recursive: true });
+    writeFileSync(join(dir, "agents", "scout.md"), "---\nname: scout\n---\n");
+    const withScout = (await h({ systemPromptOptions: opts })) as { systemPrompt: string };
+    assert.match(withScout.systemPrompt, /Scout-first: delegate reconnaissance/);
   });
 });
