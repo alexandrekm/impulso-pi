@@ -5,10 +5,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-// The factory reads <configDir>/mode.json (CONFIG_DIR resolved at import).
-const CONFIG_DIR = mkdtempSync(join(tmpdir(), "impulso-cfg-"));
-process.env.PI_CODING_AGENT_DIR = CONFIG_DIR;
-
+// Doc-mode state arrives via the modes extension's pi.events broadcasts
+// (faked below with an in-memory bus); nothing is read from disk.
 const { unquote, parseSkill, default: factory } = await import("./index.ts");
 
 const writeSkill = (dir: string, body: string) => {
@@ -87,18 +85,27 @@ describe("parseSkill", () => {
 });
 
 describe("factory before_agent_start hook", () => {
-  const writeMode = (mode?: string) =>
-    writeFileSync(join(CONFIG_DIR, "mode.json"), JSON.stringify({ mode }));
-
   function makePi() {
     const handlers = new Map<string, (event: unknown) => unknown>();
-    factory({ on: (n: string, h: (e: unknown) => unknown) => handlers.set(n, h) });
-    return handlers.get("before_agent_start")!;
+    const bus: ((data: unknown) => void)[] = [];
+    factory({
+      on: (n: string, h: (e: unknown) => unknown) => handlers.set(n, h),
+      events: {
+        on: (_channel: string, h: (data: unknown) => void) => bus.push(h),
+        emit: () => {},
+      },
+    });
+    return {
+      handler: handlers.get("before_agent_start")!,
+      broadcast: (data: unknown) => {
+        for (const h of bus) h(data);
+      },
+    };
   }
 
   test("doc mode injects skills into opts.skills and appends the block", async () => {
-    writeMode("doc");
-    const h = makePi();
+    const { handler: h, broadcast } = makePi();
+    broadcast({ mode: "doc" });
     const opts = { skills: [{ name: "existing" }] };
     const result = (await h({ systemPromptOptions: opts, systemPrompt: "BASE" })) as {
       systemPrompt: string;
@@ -117,18 +124,24 @@ describe("factory before_agent_start hook", () => {
     assert.equal(again, 1);
   });
 
-  test("non-doc mode (or absent mode.json) is inert; opts without a skills array only appends", async () => {
-    const h = makePi();
-    writeMode("code");
+  test("non-doc mode (or no modes extension) is inert; opts without a skills array only appends", async () => {
+    const { handler: h, broadcast } = makePi();
+    // No broadcast at all (modes extension absent) → inert.
+    assert.equal(await h({ systemPromptOptions: {}, systemPrompt: "X" }), undefined);
+    // Malformed broadcast → still inert.
+    broadcast(undefined);
+    assert.equal(await h({ systemPromptOptions: {}, systemPrompt: "X" }), undefined);
+    broadcast({ mode: "code" });
     assert.equal(await h({ systemPromptOptions: {}, systemPrompt: "X" }), undefined);
 
-    rmSync(join(CONFIG_DIR, "mode.json"));
-    assert.equal(await h({ systemPromptOptions: {}, systemPrompt: "X" }), undefined);
-
-    writeMode("doc");
+    broadcast({ mode: "doc" });
     const result = (await h({ systemPromptOptions: {}, systemPrompt: "Y" })) as {
       systemPrompt: string;
     };
     assert.ok(result.systemPrompt.includes("gws-shared"));
+
+    // Switching back to code turns injection off again.
+    broadcast({ mode: "code" });
+    assert.equal(await h({ systemPromptOptions: {}, systemPrompt: "Z" }), undefined);
   });
 });

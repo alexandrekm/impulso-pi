@@ -631,28 +631,22 @@ export default function (pi: ExtensionAPI) {
       let diffAdded = 0;
       let diffRemoved = 0;
 
-      // Current /mode (modes extension). State lives in <configDir>/mode.json;
-      // falls back to the `default` in extensions/modes/config.json when no
-      // state file exists, and to null when the modes extension isn't synced
-      // to this profile (segment hidden). Polled on the 1s diff timer — the
-      // /mode command writes the file, so the footer picks it up within a
-      // second without any cross-extension wiring.
+      // Current /mode (modes extension). The mode is in-memory per session
+      // in the modes extension, which broadcasts it on pi.events
+      // ("modes:changed") on session_start and on every /mode change — this
+      // subscription updates the footer immediately (no polling). The
+      // initial value falls back to the `default` in
+      // extensions/modes/config.json, and to null when the modes extension
+      // isn't synced to this profile (segment hidden).
       // NOTE: this file is at extensions/pi-dynamic-footer/observability.ts —
       // three dirname()s to reach <configDir> (modes' index.ts is one level
       // shallower and gets away with two).
       const CONFIG_DIR =
         process.env.PI_CODING_AGENT_DIR ||
         dirname(dirname(dirname(fileURLToPath(import.meta.url))));
-      const MODE_STATE_PATH = join(CONFIG_DIR, "mode.json");
       const MODE_CONFIG_PATH = join(CONFIG_DIR, "extensions", "modes", "config.json");
 
-      function readCurrentMode(): string | null {
-        try {
-          const data = JSON.parse(readFileSync(MODE_STATE_PATH, "utf8")) as { mode?: unknown };
-          if (typeof data.mode === "string" && data.mode) return data.mode;
-        } catch {
-          // no state file yet — fall back to the configured default
-        }
+      function readDefaultMode(): string | null {
         try {
           const cfg = JSON.parse(readFileSync(MODE_CONFIG_PATH, "utf8")) as {
             default?: unknown;
@@ -664,14 +658,14 @@ export default function (pi: ExtensionAPI) {
         return null;
       }
 
-      let currentMode: string | null = readCurrentMode();
-      function refreshMode(): void {
-        const mode = readCurrentMode();
-        if (mode !== currentMode) {
+      let currentMode: string | null = readDefaultMode();
+      const unsubMode = pi.events.on("modes:changed", (data: unknown) => {
+        const mode = (data as { mode?: unknown } | undefined)?.mode;
+        if (typeof mode === "string" && mode && mode !== currentMode) {
           currentMode = mode;
           tui.requestRender();
         }
-      }
+      });
 
       let diffRefreshInFlight = false;
       async function refreshDiff() {
@@ -717,7 +711,6 @@ export default function (pi: ExtensionAPI) {
 
       const timer = setInterval(() => {
         void refreshDiff();
-        refreshMode();
       }, 1000);
 
       // Periodic quota refresh every 5 minutes (fetchQuota handles its own cache)
@@ -810,6 +803,7 @@ export default function (pi: ExtensionAPI) {
         dispose() {
           (globalThis as any).__opencode_go_trigger_refresh = undefined;
           unsubBranch();
+          unsubMode();
           clearInterval(timer);
           clearInterval(quotaTimer);
           if (prTimer) clearTimeout(prTimer);
