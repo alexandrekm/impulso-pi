@@ -146,7 +146,7 @@ cat .github/pull_request_template.md
 ```
 
 - **Title:** `type(JIRA_KEY): lowercase description` (type + key from steps 2 and 4; summarize the change)
-- **Body:** fill the repo template from diff + commit history. Append `Jira: https://k2labs.atlassian.net/browse/JIRA_KEY` if not already present.
+- **Body:** fill the repo template from diff + commit history. Append `Jira: $ATLASSIAN_SITE/browse/JIRA_KEY` (resolve the env var to build the literal URL) if not already present.
 
 Proceed directly to create the PR (§11) with the generated title and body — no approval gate. Show the title and body in your response.
 

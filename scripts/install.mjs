@@ -30,7 +30,6 @@ import {
   rmSync,
   readdirSync,
   lstatSync,
-  cpSync,
   realpathSync,
 } from "node:fs";
 import { join, dirname, resolve, relative } from "node:path";
@@ -38,7 +37,6 @@ import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { pathToFileURL } from "node:url";
 import * as readline from "node:readline/promises";
 
 import {
@@ -88,12 +86,9 @@ function hashFile(p) {
   return sha256(readFileSync(p));
 }
 
-// Deterministic, order-independent hash of a directory's contents. Paths
-// are stored relative to the directory root so the hash is location-
-// independent: a freshly copied directory hashes the same as its source
-// (absolute path prefixes would otherwise differ), keeping skill (directory)
-// resources in sync across installs instead of always "locally modified".
-function hashDir(p) {
+// Sorted file paths relative to the directory root (the sort happens on
+// absolute paths, which preserves relative order since they share a prefix).
+function listRelativeFiles(p) {
   const files = [];
   const walk = (d) => {
     for (const name of readdirSync(d)) {
@@ -104,13 +99,45 @@ function hashDir(p) {
   };
   walk(p);
   files.sort();
+  return files.map((fp) => relative(p, fp));
+}
+
+// Deterministic, order-independent hash of a directory's contents. Paths
+// are stored relative to the directory root so the hash is location-
+// independent: a freshly copied directory hashes the same as its source
+// (absolute path prefixes would otherwise differ), keeping skill (directory)
+// resources in sync across installs instead of always "locally modified".
+function hashDir(p) {
   const blob =
-    files.map((fp) => `${sha256(readFileSync(fp))}  ${relative(p, fp)}`).join("\n") + "\n";
+    listRelativeFiles(p)
+      .map((rp) => `${sha256(readFileSync(join(p, rp)))}  ${rp}`)
+      .join("\n") + "\n";
   return sha256(Buffer.from(blob));
 }
 
 function hashOf(p) {
   return lstatSync(p).isDirectory() ? hashDir(p) : hashFile(p);
+}
+
+// Hash of the destination computed against the SOURCE's file list, so
+// machine-local extras inside a synced directory (e.g. an unversioned
+// skills/<name>/LAYOUT.md with internal ids) are invisible to sync: they
+// never conflict, are never copied over, never deleted, never pulled.
+// Repo files missing locally are SKIPPED, not marked: a missing file
+// simply drops out of the blob, so localHash still equals the last-sync
+// hash when nothing else changed — upstream additions show up as
+// "upstream updated", not CONFLICT. Since repoHash always includes every
+// src file, localHash can never equal it while one is missing, so installs
+// are never skipped. A locally deleted repo file self-heals: it counts as
+// unchanged, the next install merge-copies it back.
+function hashDestAgainst(dest, src) {
+  if (!lstatSync(src).isDirectory()) return hashOf(dest);
+  const blob =
+    listRelativeFiles(src)
+      .filter((rp) => existsSync(join(dest, rp)))
+      .map((rp) => `${sha256(readFileSync(join(dest, rp)))}  ${rp}`)
+      .join("\n") + "\n";
+  return sha256(Buffer.from(blob));
 }
 
 // ---- manifest ------------------------------------------------------------
@@ -302,10 +329,23 @@ function resolveTargetFileKeys(keys, profiles) {
   );
 }
 
-function copyEntry(src, dest) {
+// fileListDir (default: src) supplies the list of files to copy — always
+// the REPO side. doPull passes the repo dir explicitly: pull's src is the
+// local target, whose file list includes machine-local extras that must
+// never be promoted into the repo.
+function copyEntry(src, dest, fileListDir = src) {
   if (lstatSync(src).isDirectory()) {
-    rmSync(dest, { recursive: true, force: true });
-    cpSync(src, dest, { recursive: true });
+    // Merge-copy: overwrite the listed files in place, never delete
+    // anything — machine-local extras inside synced dirs (see
+    // hashDestAgainst) must survive installs. Repo-side deletions leave
+    // the stale local file behind, where it is ignored by the hash.
+    for (const rp of listRelativeFiles(fileListDir)) {
+      const from = join(src, rp);
+      if (!existsSync(from)) continue; // e.g. locally deleted during a pull
+      const target = join(dest, rp);
+      mkdirSync(dirname(target), { recursive: true });
+      copyFileSync(from, target);
+    }
   } else {
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(src, dest);
@@ -839,7 +879,7 @@ function doInstallFiles(t, profiles) {
       console.log(`  [new]         ${key}`);
       continue;
     }
-    const localHash = hashOf(dest);
+    const localHash = hashDestAgainst(dest, src);
     const lastHash = manifestGet(map, key);
     if (localHash === repoHash) {
       manifestSet(map, repoHash, key, dest);
@@ -876,7 +916,7 @@ function doStatus(t, profiles) {
       console.log(`  ${key.padEnd(43)} new (not installed)`);
       continue;
     }
-    const localHash = hashOf(dest);
+    const localHash = hashDestAgainst(dest, src);
     const lastHash = manifestGet(map, key);
     let state;
     if (localHash === repoHash) state = "in sync";
@@ -898,12 +938,12 @@ function doPull(t, profiles) {
     const src = srcPath(key);
     const dest = destPath(t.dir, key, profiles.resources[key]);
     if (!existsSync(dest)) continue;
-    const localHash = hashOf(dest);
+    const localHash = hashDestAgainst(dest, src);
     const repoHash = hashOf(src);
     const lastHash = manifestGet(map, key);
     if (localHash === repoHash) continue;
     if (lastHash === repoHash || !lastHash) {
-      copyEntry(dest, src);
+      copyEntry(dest, src, src);
       manifestSet(map, localHash, key, dest);
       console.log(`  [pulled]  ${key}`);
       pulled++;

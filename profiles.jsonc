@@ -540,6 +540,24 @@
     // authenticated as the user's browser session. Install/auth/recovery:
     // skills/slack/SETUP.md (patched binary + Brave required).
     "skills/slack/": { "tags": ["work"] },
+    // confluence: publish and manage Confluence pages via three
+    // complementary tools — `acli confluence` (read-only page/space view),
+    // `uvx md2cf` (markdown → storage format, create/update pages), and curl
+    // REST for the gaps (parent-page creation, CQL search, verify). No PII in
+    // the file: site/email/API key come from $ATLASSIAN_SITE /
+    // $ATLASSIAN_EMAIL / $ATLASSIAN_API_KEY env vars (exported in ~/.env.zshrc),
+    // and the skill is fully generic — space keys/page-tree ids/helper-script
+    // paths live in a machine-local, unversioned skills/confluence/LAYOUT.md
+    // on each machine (invisible to sync: never conflicted, copied, or pulled;
+    // see the non-clobber section in AGENTS.md). Hard-won rules: every browser
+    // URL needs the /wiki context path, md2cf -o must be the full REST base,
+    // join _links.base + _links.webui never host + webui, CQL text~ search when
+    // titles carry em-dashes, and run the banner patcher (path in LAYOUT.md)
+    // after every publish to restore 🚨/⚠️ panel macros md2cf flattens.
+    // Gated to doc mode via extensions/modes/config.json (with
+    // gws-docs-authoring and unslop), so it stays out of the prompt in
+    // code mode.
+    "skills/confluence/": { "tags": ["work"] },
     // create-pr-personal: lightweight commit + PR workflow for personal
     // repos. Same shape as create-pr but stripped down — Conventional
     // Commits for the message + PR title, a short what/why PR body, no Jira,

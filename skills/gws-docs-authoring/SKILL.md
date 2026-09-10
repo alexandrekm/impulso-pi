@@ -228,7 +228,7 @@ There is **no** `insertInlineImage`-by-file-ID request in the Docs API.
    ```bash
    FID=$(gws drive +upload diagram.png --parent FOLDER_ID --name "diagram.png" \
      2>/dev/null | jq -r .id)
-   # Derive the company domain from your own account (e.g. gomotive.com):
+   # Derive the company domain from your own account:
    DOMAIN=$(gws drive about get --params '{"fields":"user"}' 2>/dev/null \
      | jq -r '.user.emailAddress' | sed 's/.*@//')
    # Share with the whole company as readers (link-only; +allowFileDiscovery

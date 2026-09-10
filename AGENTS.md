@@ -255,6 +255,14 @@ profiles mode it re-runs `service install` first to re-bake
 repo-changed/untouched → copy; local-changed/repo-untouched → skip (use
 `./install.sh pull` to promote); both-changed → conflict, flagged.
 
+For **directory resources** (skills), the local side is hashed against the
+repo's file list, so machine-local extras inside a synced dir are invisible
+to sync: they never conflict, are never overwritten by an install
+(merge-copy, nothing deleted), and never promoted by `pull`. Use this for
+unversioned per-machine companions, e.g. `skills/confluence/LAYOUT.md`
+(concrete space keys, page-tree ids, helper-script paths that must not be
+versioned).
+
 ## Current core resources
 
 - `extensions/command-guard/` — bash command-guard (default-allow glob policy)

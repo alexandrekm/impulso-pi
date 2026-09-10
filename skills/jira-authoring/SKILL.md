@@ -145,5 +145,5 @@ Ticket created: AICPE-XXX
   Epic: AICPE-YYY — "<epic name>"
   Sprint: AICPE Sprint N
   Story points: <N>  (or "not set — asked user")
-  URL: https://k2labs.atlassian.net/browse/AICPE-XXX
+  URL: $ATLASSIAN_SITE/browse/AICPE-XXX
 ```
