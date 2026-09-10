@@ -190,7 +190,6 @@ If `acli` is unavailable, load `skill://jira/FALLBACK.md` for the REST `PUT /res
 curl -s "${ATLASSIAN_SITE}/rest/api/2/issue/<KEY>?fields=customfield_10004" \
   -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_KEY}"
 ```
-```
 
 Points set (non-null, > 0) → skip. Missing or `0`/`null` → **ask the user** with `ask_user_question`, suggesting Fibonacci values sized to the work. Put your recommended value first, marked `(Recommended)`. Base the recommendation on scope (touch → 1, small → 2, normal → 3, medium → 5, large → 8, very large → 13):
 
