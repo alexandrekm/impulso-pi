@@ -122,17 +122,20 @@ function hashOf(p) {
 // Hash of the destination computed against the SOURCE's file list, so
 // machine-local extras inside a synced directory (e.g. an unversioned
 // skills/<name>/LAYOUT.md with internal ids) are invisible to sync: they
-// never conflict, are never copied over, never deleted, never pulled. A
-// repo file missing locally still mismatches ("<absent>"), so installs
-// are never skipped because of an extra.
+// never conflict, are never copied over, never deleted, never pulled.
+// Repo files missing locally are SKIPPED, not marked: a missing file
+// simply drops out of the blob, so localHash still equals the last-sync
+// hash when nothing else changed — upstream additions show up as
+// "upstream updated", not CONFLICT. Since repoHash always includes every
+// src file, localHash can never equal it while one is missing, so installs
+// are never skipped. A locally deleted repo file self-heals: it counts as
+// unchanged, the next install merge-copies it back.
 function hashDestAgainst(dest, src) {
   if (!lstatSync(src).isDirectory()) return hashOf(dest);
   const blob =
     listRelativeFiles(src)
-      .map((rp) => {
-        const fp = join(dest, rp);
-        return `${existsSync(fp) ? sha256(readFileSync(fp)) : "<absent>"}  ${rp}`;
-      })
+      .filter((rp) => existsSync(join(dest, rp)))
+      .map((rp) => `${sha256(readFileSync(join(dest, rp)))}  ${rp}`)
       .join("\n") + "\n";
   return sha256(Buffer.from(blob));
 }
@@ -326,16 +329,22 @@ function resolveTargetFileKeys(keys, profiles) {
   );
 }
 
-function copyEntry(src, dest) {
+// fileListDir (default: src) supplies the list of files to copy — always
+// the REPO side. doPull passes the repo dir explicitly: pull's src is the
+// local target, whose file list includes machine-local extras that must
+// never be promoted into the repo.
+function copyEntry(src, dest, fileListDir = src) {
   if (lstatSync(src).isDirectory()) {
-    // Merge-copy: overwrite the repo's files in place, never delete
+    // Merge-copy: overwrite the listed files in place, never delete
     // anything — machine-local extras inside synced dirs (see
     // hashDestAgainst) must survive installs. Repo-side deletions leave
     // the stale local file behind, where it is ignored by the hash.
-    for (const rp of listRelativeFiles(src)) {
+    for (const rp of listRelativeFiles(fileListDir)) {
+      const from = join(src, rp);
+      if (!existsSync(from)) continue; // e.g. locally deleted during a pull
       const target = join(dest, rp);
       mkdirSync(dirname(target), { recursive: true });
-      copyFileSync(join(src, rp), target);
+      copyFileSync(from, target);
     }
   } else {
     mkdirSync(dirname(dest), { recursive: true });
@@ -934,7 +943,7 @@ function doPull(t, profiles) {
     const lastHash = manifestGet(map, key);
     if (localHash === repoHash) continue;
     if (lastHash === repoHash || !lastHash) {
-      copyEntry(dest, src);
+      copyEntry(dest, src, src);
       manifestSet(map, localHash, key, dest);
       console.log(`  [pulled]  ${key}`);
       pulled++;
