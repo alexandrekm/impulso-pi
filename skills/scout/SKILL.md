@@ -1,7 +1,6 @@
 ---
 name: scout
 description: Read-only scout subagent delegation — when the user says "scout", delegate reconnaissance to the scout subagent instead of doing it yourself.
-disable-model-invocation: true
 author: alexandre.mendonca
 tags: [subagents, scout, recon, read-only]
 ---
@@ -19,20 +18,28 @@ launching.
 
 ## When to use
 
-- The user says "scout", "use the scout", "scout this repo", or asks for a
-  read-only investigation of a codebase, dependency, or config.
-- A task needs evidence-based reconnaissance that the parent shouldn't do
-  inline (large tree, many files, or a side analysis that would derail the
-  main thread).
+There is no judgment call — the delegation rule is mechanical:
+
+- Any question that spans **more than one repo/submodule** → always scout,
+  regardless of how cheap it looks.
+- Recon expected to exceed **~3 tool calls** → scout.
+- **Mid-task:** if inline reconnaissance passes either threshold, stop and
+  re-delegate the remaining investigation to scout. Never let incremental
+  scope creep keep a growing task inline.
+- Still inline: single-file or single-repo lookups that fit within ~3 tool
+  calls, or files the parent already holds anchors for.
+
+Of course, the user saying **scout** always means scout, regardless of the
+above.
 
 ## How to invoke
 
 Launch exactly one scout via the subagent tool with `agent: "scout"` (or
 `/run scout <task>`). It runs **fresh-context, asynchronous, and read-only**:
 
-- **Tools:** `read`, `grep`, `find`, `ls`, and `contact_supervisor` (the
-  latter only for necessary clarification, a material blocker, or a concise
-  material progress update).
+- **Tools:** `read`, `grep`, `find`, `ls`, `zvec_search`, `zvec_status`, and
+  `contact_supervisor` (the latter only for necessary clarification, a
+  material blocker, or a concise material progress update).
 - **Cannot:** `bash`, `write`, `edit`, `subagent`, or any workspace changes.
 - **Depth:** `maxSubagentDepth: 1` — it cannot spawn children.
 - **Context:** fresh (no parent memory), but inherits the project context.
