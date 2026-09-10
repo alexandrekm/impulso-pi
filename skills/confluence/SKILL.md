@@ -100,6 +100,31 @@ curl -s -u "$AUTH:$ATLASSIAN_API_KEY" "$BASE/content/<PAGE_ID>?expand=version,bo
 # $ATLASSIAN_SITE/wiki + _links.webui from the page's GET
 ```
 
+## Folders (real page-tree folders)
+
+Folders are a separate content type from pages. The v2 API covers create, get-by-id, and delete only; there is **no list-folders endpoint**, and search/Glean don't index empty folders. If a folder id is unknown, ask the user to open the folder and paste its URL (`/spaces/<KEY>/folder/<id>`).
+
+```bash
+# Create a folder (optionally nested under a parent folder or page):
+curl -s -X POST -u "$AUTH:$ATLASSIAN_API_KEY" -H "Content-Type: application/json" \
+  "$ATLASSIAN_SITE/wiki/api/v2/folders" \
+  -d '{"spaceId": "<SPACE_ID>", "title": "Folder title", "parentId": "<PARENT_ID>"}'
+
+# Move a page into a folder (or reparent under any content):
+# PUT, not POST (POST returns 405). The pages API cannot create pages directly under
+# folders, so create the page first, then move it.
+curl -s -X PUT -o /dev/null -w "%{http_code}\n" -u "$ATLASSIAN_API_KEY" \
+  "$ATLASSIAN_SITE/wiki/rest/api/content/<PAGE_ID>/move/append/<FOLDER_ID>"
+
+# Delete a folder (to trash):
+curl -s -X DELETE -o /dev/null -w "%{http_code}\n" -u "$ATLASSIAN_API_KEY" \
+  "$ATLASSIAN_SITE/wiki/api/v2/folders/<FOLDER_ID>"
+```
+
+- A folder cannot share a title with another folder in the space (400 on collision).
+- Moving a page does not change its id or URL; embedded links survive.
+- Deleting a page does not delete its children; move children out first.
+
 ## Common mistakes
 
 - 404 on publish → `-o` missing `/wiki/rest/api`.
@@ -107,4 +132,6 @@ curl -s -u "$AUTH:$ATLASSIAN_API_KEY" "$BASE/content/<PAGE_ID>?expand=version,bo
 - Title search returns nothing but the page exists → em-dash/special chars; use CQL `text~"..."`.
 - CQL results missing just-created pages → search index lag (~seconds); wait or query `/content?spaceKey=&title=` with a plain title.
 - md2cf "File does not exist" → pass an absolute path; the tool's cwd is wherever the shell is, not the doc dir.
+- Moving a page into a folder → POST `/move/append/...` returns 405; it is a PUT.
+- Trying to find a folder by title → no list endpoint exists; ask for the URL (the id is in it).
 - Using a page id from LAYOUT.md or an earlier session without re-resolving → ids go stale; CQL-search the title first.
