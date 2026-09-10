@@ -12,10 +12,10 @@ Resolve a Jira ticket for current work, search tickets, create tickets, transiti
 **Requires `acli`** installed and authenticated. Verify before first use:
 
 ```bash
-acli auth status   # must show ✓ Authenticated + site k2labs.atlassian.net
+acli auth status   # must show ✓ Authenticated + the site in $ATLASSIAN_SITE
 ```
 
-If `acli` is missing, install it and run `acli auth login`. The REST fallback (`FALLBACK.md`) needs two env vars — `JIRA_EMAIL` (your `@gomotive.com` address) and `ATLASSIAN_API_KEY` (already in env). You only need them when `acli` is unavailable or for the no-`acli` operations (sprint-add, story points, createmeta, epic parent on an existing ticket); a healthy `acli auth status` means you do **not** have to set them.
+If `acli` is missing, install it and run `acli auth login`. The REST fallback (`FALLBACK.md`) uses three env vars — `ATLASSIAN_SITE`, `ATLASSIAN_EMAIL`, and `ATLASSIAN_API_KEY` (all already in the environment). You only need them when `acli` is unavailable or for the no-`acli` operations (sprint-add, story points, createmeta, epic parent on an existing ticket); a healthy `acli auth status` means you do **not** have to check them.
 
 If `acli` is unavailable or fails, REST API fallbacks are in `skill://jira/FALLBACK.md` — load it on demand. Some operations (sprint-add, story points, createmeta, epic parent on an existing ticket) have no `acli` equivalent and always need REST.
 
@@ -66,7 +66,7 @@ Description:
 
 Priority:  High
 Reporter:  Jane Smith
-URL:       https://k2labs.atlassian.net/browse/AICPE-107
+URL:       $ATLASSIAN_SITE/browse/AICPE-107
 ```
 
 Description up to ~5 lines, truncate with `…`. Omit empty fields.
@@ -184,11 +184,12 @@ If `acli` is unavailable, load `skill://jira/FALLBACK.md` for the REST `PUT /res
 
 #### d. Ensure story points are set
 
-`workitem view` does not display story points; check via REST (`customfield_10004` = Story Points on k2labs Jira):
+`workitem view` does not display story points; check via REST (`customfield_10004` = Story Points on this Jira site):
 
 ```bash
-curl -s "https://k2labs.atlassian.net/rest/api/2/issue/<KEY>?fields=customfield_10004" \
-  -u "${JIRA_EMAIL}:${ATLASSIAN_API_KEY}"
+curl -s "${ATLASSIAN_SITE}/rest/api/2/issue/<KEY>?fields=customfield_10004" \
+  -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_KEY}"
+```
 ```
 
 Points set (non-null, > 0) → skip. Missing or `0`/`null` → **ask the user** with `ask_user_question`, suggesting Fibonacci values sized to the work. Put your recommended value first, marked `(Recommended)`. Base the recommendation on scope (touch → 1, small → 2, normal → 3, medium → 5, large → 8, very large → 13):
@@ -209,8 +210,8 @@ ask_user_question(questions=[{
 Adjust the four options to fit the actual work (Fibonacci: 1, 2, 3, 5, 8, 13). Then set them:
 
 ```bash
-curl -s -X PUT "https://k2labs.atlassian.net/rest/api/2/issue/<KEY>" \
-  -u "${JIRA_EMAIL}:${ATLASSIAN_API_KEY}" \
+curl -s -X PUT "${ATLASSIAN_SITE}/rest/api/2/issue/<KEY>" \
+  -u "${ATLASSIAN_EMAIL}:${ATLASSIAN_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"fields":{"customfield_10004": <N>}}'
 ```
