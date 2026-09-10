@@ -554,6 +554,9 @@
     // join _links.base + _links.webui never host + webui, CQL text~ search when
     // titles carry em-dashes, and run the banner patcher (path in LAYOUT.md)
     // after every publish to restore 🚨/⚠️ panel macros md2cf flattens.
+    // Gated to doc mode via extensions/modes/config.json (with
+    // gws-docs-authoring and unslop), so it stays out of the prompt in
+    // code mode.
     "skills/confluence/": { "tags": ["work"] },
     // create-pr-personal: lightweight commit + PR workflow for personal
     // repos. Same shape as create-pr but stripped down — Conventional
