@@ -1,6 +1,6 @@
 ---
 name: scout
-description: Read-only reconnaissance with a compact, evidence-based handoff. Use for investigations that will likely span multiple files, unknown locations, or design rationale (call chains, where-is-X-handled questions, change-surface mapping before edits); do quick 1-2 call lookups inline instead.
+description: Read-only reconnaissance with a compact, evidence-based handoff. Delegate mechanically, without judgment calls: any question spanning more than one repo/submodule, or recon expected to exceed ~3 tool calls, always goes to scout — including mid-task re-delegation when inline recon outgrows those limits. Only single-file or single-repo lookups within ~3 tool calls stay inline.
 tools: read, grep, find, ls, zvec_search, zvec_status, contact_supervisor
 systemPromptMode: replace
 inheritProjectContext: true
