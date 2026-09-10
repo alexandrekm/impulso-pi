@@ -177,7 +177,7 @@ export const FEATURES: Feature[] = [
     group: "Footer",
     label: "Dynamic footer",
     description:
-      "Live observability footer: context gauge, TPS, tokens, cost, cache %, git branch, thinking level, quota bars. /obs dashboard.",
+      "Live observability footer: context gauge, TPS, tokens, cost, cache %, cache TTL countdown, git branch, thinking level, quota bars. /obs dashboard.",
     kind: "local",
   },
   {

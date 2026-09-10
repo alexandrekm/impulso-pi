@@ -267,8 +267,10 @@ versioned).
 
 - `extensions/command-guard/` — bash command-guard (default-allow glob policy)
 - `npm:@juanbenjumea/pi-dynamic-footer` — dynamic footer with live
-  observability (context gauge, TPS, tokens, cost, cache %, git branch + diff,
-  thinking level, fast-mode indicator, subscription quota bars for 8
+  observability (context gauge, TPS, tokens, cost, cache %, cache TTL
+  retention + expiry countdown (local segment, tracks the cache-ttl
+  extension's PI_CACHE_RETENTION), git branch + diff, thinking level,
+  fast-mode indicator, subscription quota bars for 8
   providers); owns the footer via pi's native `setFooter()`. Commands:
   `/obs`, `/obs-toggle`, `/obs-settings`. Replaced `pi-droid-styling` (which
   baked its footer into the BoxEditor with no disable flag) and

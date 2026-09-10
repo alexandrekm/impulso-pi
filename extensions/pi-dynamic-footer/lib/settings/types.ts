@@ -12,6 +12,11 @@ export type SegmentKey =
   | "tps"
   | "cost"
   | "cache"
+  | "cacheWrite"
+  | "cacheTtl"
+  | "reasoning"
+  | "prStatus"
+  | "ciStatus"
   | "turnCount"
   | "usageBars";
 

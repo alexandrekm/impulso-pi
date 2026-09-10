@@ -19,6 +19,7 @@ export const defaultAssembler: LayoutAssembler = (segments, width, theme) => {
     segments["reasoning"],
     segments["cache"],
     segments["cacheWrite"],
+    segments["cacheTtl"],
     segments["cost"],
     segments["runtime"],
     segments["pwd"],
