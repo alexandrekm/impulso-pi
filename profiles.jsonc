@@ -174,7 +174,10 @@
     // pi-dynamic-footer (vendored from @juanbenjumea/pi-dynamic-footer v0.1.7
     // by Juan Benjumea): dynamic footer with live observability — context
     // gauge + %, live/last-turn TPS, per-turn ↑input/↓output tokens, session
-    // cost, cache hit %, git branch + ±diff lines, thinking level, fast-mode
+    // cost, cache hit %, cache TTL retention + expiry countdown (local
+    // cacheTtl segment, tracks PI_CACHE_RETENTION from extensions/cache-ttl;
+    // local fork addition — re-apply segments.ts/layout.ts/settings on an
+    // upstream re-vendor), git branch + ±diff lines, thinking level, fast-mode
     // indicator, turn count, and rolling-window subscription quota bars for 8
     // provider types (Claude/Codex/OpenCode Go/ClinePass/Umans/Copilot/
     // Gemini/Kimi). Owns the footer via ctx.ui.setFooter(). Commands: /obs

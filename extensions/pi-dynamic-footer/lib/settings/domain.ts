@@ -101,6 +101,7 @@ export function updateSetting(
     case "cost":
     case "cache":
     case "cacheWrite":
+    case "cacheTtl":
     case "reasoning":
     case "prStatus":
     case "ciStatus":

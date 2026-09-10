@@ -7,10 +7,22 @@ export type SegmentKey =
   | "runtime"
   | "pwd"
   | "git"
+  | "mode"
+  | "contextUsage"
+  | "contextProgress"
+  | "contextPercentage"
+  | "contextNumbers"
+  | "tokens"
+  | "tps"
+  | "cost"
+  | "cache"
+  | "cacheWrite"
+  | "cacheTtl"
+  | "reasoning"
   | "prStatus"
   | "ciStatus"
-  | "contextUsage"
-  | "mode"
+  | "turnCount"
+  | "usageBars";
 
 export interface FooterSettings {
   segments: Record<SegmentKey, boolean>;
@@ -52,6 +64,14 @@ export interface FooterInput {
   theme: PiTheme;
   /** Subscription usage bars data, fetched on session_start and periodically */
   quotaUsage: QuotaSnapshot | null;
+  /** Effective prompt-cache retention ("long" = extended TTL via PI_CACHE_RETENTION). */
+  cacheRetention: "short" | "long";
+  /**
+   * Epoch ms of the last completed provider request (turn_end with usage) —
+   * every request re-sends the cached prefix, which refreshes the provider's
+   * cache TTL clock. Null before the first completed turn of the session.
+   */
+  lastCacheRefreshAt: number | null;
 }
 
 export interface SegmentRenderer {

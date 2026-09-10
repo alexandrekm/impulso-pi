@@ -13,6 +13,18 @@ import {
 
 const BAR_FILLED = "▓";
 const BAR_EMPTY = "░";
+
+// Prompt-cache TTL per retention mode, in ms. Anthropic semantics (the
+// /settings "Prompt caching" toggle + extensions/cache-ttl write
+// PI_CACHE_RETENTION): short = 5m, long = 1h. Every completed request that
+// re-sends the cached prefix refreshes the entry's TTL, so the countdown
+// anchors to the last completed turn. OpenAI's long retention is actually
+// 24h and its short cache is in-memory (no fixed TTL) — the countdown is a
+// heuristic there; fine for a glanceable footer.
+const CACHE_TTL_MS = {
+  short: 5 * 60_000,
+  long: 60 * 60_000,
+} as const;
 const THINKING_ABBR: Record<string, string> = {
   minimal: "min",
   medium: "med",
@@ -203,6 +215,25 @@ export const builtinRenderers: Record<string, SegmentRenderer> = {
     const { totalCacheWrite, theme } = input;
     if (totalCacheWrite <= 0) return theme.fg("dim", "✎ --");
     return theme.fg("dim", `✎ ${fmtTokens(totalCacheWrite)}`);
+  },
+
+  cacheTtl(input) {
+    const { cacheRetention, lastCacheRefreshAt, theme } = input;
+    if (lastCacheRefreshAt === null) {
+      // No completed turn yet this session — nothing cached (or cache state
+      // unknown); show the retention mode without a countdown.
+      return theme.fg("dim", `⏳ ${cacheRetention} --`);
+    }
+    const remainingMs = CACHE_TTL_MS[cacheRetention] - (Date.now() - lastCacheRefreshAt);
+    if (remainingMs <= 0) {
+      // TTL elapsed with no request since — the cache is cold; the next
+      // request pays a full cache write.
+      return theme.fg("error", `⏳ ${cacheRetention} 0:00`);
+    }
+    const totalSec = Math.ceil(remainingMs / 1000);
+    const text = `${Math.floor(totalSec / 60)}:${String(totalSec % 60).padStart(2, "0")}`;
+    const color = remainingMs <= 60_000 ? "warning" : "dim";
+    return theme.fg(color as any, `⏳ ${cacheRetention} ${text}`);
   },
 
   reasoning(input) {

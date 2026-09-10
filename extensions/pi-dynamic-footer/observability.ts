@@ -82,6 +82,12 @@ interface SessionState {
   totalCacheRead: number;
   totalCacheWrite: number;
   totalReasoningTokens: number;
+  /**
+   * Epoch ms of the last completed provider request — the prompt cache's
+   * TTL clock refreshes on every request that re-sends the cached prefix.
+   * Null before the first completed turn (footer cacheTtl segment shows "--").
+   */
+  lastCacheRefreshAt: number | null;
   turnNumber: number;
   agentStartTime: number | null;
   isStreaming: boolean;
@@ -380,6 +386,7 @@ export default function (pi: ExtensionAPI) {
     totalCacheRead: 0,
     totalCacheWrite: 0,
     totalReasoningTokens: 0,
+    lastCacheRefreshAt: null,
     turnNumber: 0,
     agentStartTime: null,
     isStreaming: false,
@@ -406,6 +413,7 @@ export default function (pi: ExtensionAPI) {
         cost: true,
         cache: true,
         cacheWrite: false,
+        cacheTtl: true,
         reasoning: true,
         prStatus: true,
         ciStatus: true,
@@ -427,6 +435,7 @@ export default function (pi: ExtensionAPI) {
     state.totalCacheRead = 0;
     state.totalCacheWrite = 0;
     state.totalReasoningTokens = 0;
+    state.lastCacheRefreshAt = null;
     state.turnNumber = 0;
     state.agentStartTime = null;
     state.isStreaming = false;
@@ -518,6 +527,11 @@ export default function (pi: ExtensionAPI) {
     const reasoning = completedMessage.usage.reasoning ?? 0;
     const safeReasoning = Number.isFinite(reasoning) ? Math.max(0, reasoning) : 0;
     state.totalReasoningTokens += safeReasoning;
+
+    // Completed request: the cached prefix was re-sent, which refreshes the
+    // provider's cache TTL (Anthropic: reads and writes both restart the
+    // 5m/1h clock). Anchors the footer's cacheTtl countdown.
+    state.lastCacheRefreshAt = Date.now();
 
     const safeInputTokens = Number.isFinite(inputTokens) ? Math.max(0, inputTokens) : 0;
     const safeOutputTokens = Number.isFinite(outputTokens) ? Math.max(0, outputTokens) : 0;
@@ -833,6 +847,11 @@ export default function (pi: ExtensionAPI) {
             totalCacheRead: state.totalCacheRead,
             totalCacheWrite: state.totalCacheWrite,
             totalReasoningTokens: state.totalReasoningTokens,
+            // Retention read live so the /settings "Prompt caching" toggle
+            // (+ /reload, which re-runs extensions/cache-ttl) reflects within a
+            // second — the footer re-renders every second.
+            cacheRetention: process.env.PI_CACHE_RETENTION === "long" ? "long" : "short",
+            lastCacheRefreshAt: state.lastCacheRefreshAt,
             turnNumber: state.turnNumber,
             lastTurnTps,
             totalInputTokens: totalIn,
