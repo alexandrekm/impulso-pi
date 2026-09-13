@@ -570,9 +570,14 @@
     "prompts/create-pr-personal.md": { "tags": ["personal"] },
 
     // ask-pr-approval: /ask-pr-approval posts the current PR to the team
-    // Slack channel for review via slackcli (the slack skill). The channel
-    // name comes from the SLACK_PR_CHANNEL env var (local shell config,
-    // never in git).
+    // Slack channel asking for approval via slackcli (the slack skill).
+    // Optional [priority] argument (low/medium/high/critical, default
+    // medium) picks the emoji; the message format is fixed — bold
+    // priority + hyperlinked repo#N header, then What/Scope/Diff lines.
+    // The channel name comes from the SLACK_PR_CHANNEL env var (local
+    // shell config, never in git).
+    // Adopted from a manual out-of-harness edit to the installed prompt
+    // (2026-09-11); take install.sh pull conflicts as repo-wins.
     "prompts/ask-pr-approval.md": { "tags": ["work"] },
     // border-on-user-messages: draws a `┌─ You ─┐` / `│ … │` / `└───┘`
     // box around every user message in the TUI transcript so your own
