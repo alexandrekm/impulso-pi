@@ -7,6 +7,7 @@
     "jira-authoring": ["code"],
     "commit": ["code"],
     "unslop": ["doc"],
-    "confluence": ["doc"]
+    "confluence": ["doc"],
+    "obsidian": ["doc"]
   }
 }
