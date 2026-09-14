@@ -561,6 +561,15 @@
     // gws-docs-authoring and unslop), so it stays out of the prompt in
     // code mode.
     "skills/confluence/": { "tags": ["work"] },
+    // obsidian: read/search/create/edit notes in the Obsidian vault via the
+    // official Obsidian CLI (shipped with the desktop app v1.12+, IPC to the
+    // running app — not a file reader). Covers daily notes, meeting notes,
+    // tasks, tags, properties, search, backlinks. Requires the app running
+    // with Settings → General → Advanced → Command line interface enabled
+    // and a ~/.local/bin/obsidian symlink to the app's obsidian-cli binary
+    // (no admin needed instead of /usr/local/bin registration). One vault
+    // (Motive). Gated to doc mode alongside confluence.
+    "skills/obsidian/": { "tags": ["work"] },
     // create-pr-personal: lightweight commit + PR workflow for personal
     // repos. Same shape as create-pr but stripped down — Conventional
     // Commits for the message + PR title, a short what/why PR body, no Jira,
