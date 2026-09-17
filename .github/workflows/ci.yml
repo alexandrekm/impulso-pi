@@ -37,6 +37,7 @@ jobs:
       - run: npm test
       - run: npm run check:coverage
       - run: npm run check:crap
+      - run: npm run check:context-record
 
       - name: shellcheck
         run: |

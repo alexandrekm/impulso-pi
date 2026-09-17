@@ -301,6 +301,26 @@ versioned).
   1h). Default `short` leaves the env untouched and preserves/restores any
   shell-provided value. Toggled in `/settings` → Providers → Prompt
   caching (a `config` feature); `/reload` applies.
+- `extensions/context-measure/` — **first-call context recorder**: a `measure`
+  provider (`measure/measure-model`) whose `streamSimple` receives pi's
+  fully composed request (`{ systemPrompt, messages, tools }`), appends a
+  per-request summary (system-prompt chars, per-tool schema chars, tool
+  count) to `<configDir>/context-measure.jsonl`, and answers locally with
+  `ok` — no network, no local server (the pi-native replacement for
+  SpecPi's synthetic-HTTP-provider method; pi aliases `@earendil-works/pi-ai`
+  imports in extensions to its bundled copy, so the provider IS the
+  endpoint). Zero request footprint: registers no tools, no prompt text, so
+  it ships `core` everywhere — live sessions can switch to
+  `measure/measure-model` any moment (records land in the jsonl), and
+  subagent children are captured too. `npm run measure:context` measures
+  stock vs. work/personal/base and writes the committed record
+  `investigation/context-measurement.json` (counts pi's intermediate
+  request representation, NOT the wire format — comparable across profiles
+  and time, not to wire-format charts). CI `npm run check:context-record`
+  fails when a PR changes profiles.jsonc / extensions/ / skills/ without
+  updating the record: the context-budget ratchet. Current numbers: stock
+  5.4k chars / 4 tools; profiles ~55-58k / 16-17 tools (~10.8x stock; the
+  `subagent` tool alone is 21k).
 - `npm:@narumitw/pi-btw` — `/btw` side-thread command: ask context-aware
   questions in a separate thread without derailing the main conversation
   (`/btw <question>` starts one; `/btw` opens a manager; `Ctrl+R` brings
