@@ -236,7 +236,18 @@ per-session search-tool usage from `tool_calls`, sessions split at the
 zvec-enablement cutoff (`?since=` epoch-ms or ISO date; default 2026-09-09,
 the home-index fix) and compared on turns, wall-clock (first→last user
 message, 12h cap), tokens, and zvec vs grep/find call mix, plus a per-day
-adoption chart — answers "did investigation time drop after zvec worked".
+adoption chart — answers "did investigation time drop after zvec worked". The
+`/api/stats/context` route feeds the **Context Budget** panel: it reads the
+first-call measurement record (`context-measurement.json`, see
+`extensions/context-measure/`; `npm run measure:context -- --record` writes
+the repo copy AND drops a machine-local copy next to the stats DB where
+this route finds it), shows per-target first-call cost (tool schema vs
+system prompt chars, ×stock multiplier), and joins per-tool schema chars
+with actual `tool_calls` usage: paid = schema × requests in range,
+per-call = paid ÷ calls — the hide-it-or-keep-it ranking (current winner:
+`subagent`, 21k schema chars, single-digit monthly calls). Join target:
+the profile's own record row, else `base` ("all" view);
+`PI_STATS_CONTEXT_RECORD` overrides the record path.
 A schema-version sentinel in `meta`
 resets file offsets once on upgrade so the new tables backfill from existing
 sessions.
