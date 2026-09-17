@@ -98,12 +98,15 @@
     // names, real costs, OpenRouter routing pins). Pi reads it from the
     // profile dir root, so config/ keys land at <target>/models.json via
     // dest (config/<file> defaults to the profile root, so the explicit
-    // dest here is documentation). Per-profile variants like command-guard:
-    // work pins BaseTen fp8 / Fireworks routing; the base variant seeds the
-    // generic ~/.pi/agent config with the same pins. On --base both are
-    // selected and models.base.json wins (alphabetical tie-break, the
-    // loser is flagged [shadowed]). models-store.json is pi's own runtime
-    // cache and is NOT user config — never sync it.
+    // dest here is documentation). The work profile pins BaseTen fp8 /
+    // Fireworks routing; base (~/.pi/agent) and personal deliberately stay
+    // UNPINNED — plain `pi` runs keep pi's built-in model catalog. The
+    // empty base variant exists only because --base selects every
+    // resource (no tag filter): it must shadow the work one (alphabetical
+    // tie-break, loser flagged [shadowed]) or the work pins would leak
+    // into ~/.pi/agent. {"providers":{}} loads as zero overrides — a
+    // no-op. models-store.json is pi's own runtime cache, NOT user
+    // config — never sync it.
     "config/models.work.json": {
       "tags": ["work"],
       "dest": "models.json",

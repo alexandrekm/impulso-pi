@@ -372,13 +372,18 @@ versioned).
 ## Work-profile resources
 
 - `config/models.work.json` → `models.json` — **pi-root model overrides**
-  (work + `--base` via `config/models.base.json`). Pins OpenRouter routing to
-  specific backends (GLM-5.3 → BaseTen fp8, Kimi K3 → Fireworks, no
-  fallbacks) with real per-model costs and display names; pi reads it from
-  the profile dir root. The `config/` resource namespace (see the key table
-  above) lands repo files at the target root. On `--base` both variants are
-  selected and the base one wins (alphabetical tie-break, [shadowed]).
-  `models-store.json` is pi's own runtime cache — never user config.
+  (work-only). Pins OpenRouter routing to specific backends (GLM-5.3 →
+  BaseTen fp8, Kimi K3 → Fireworks, no fallbacks) with real per-model
+  costs and display names; pi reads it from the profile dir root. The
+  `config/` resource namespace (see the key table above) lands repo files
+  at the target root. Base (`~/.pi/agent`) and personal deliberately stay
+  unpinned — plain `pi` runs keep pi's built-in model catalog. The empty
+  `config/models.base.json` exists only to shadow the work variant on
+  `--base` (which selects every resource): it wins the shared-dest
+  alphabetical tie-break and installs `{"providers":{}}` — zero
+  overrides, a no-op. `models-store.json` is pi's own runtime cache —
+  never user config.
+
 - `extensions/commit-guard/` — **commitlint enforcement on every `git commit`**
   (work-only). Hooks the bash `tool_call` (same pattern as command-guard),
   parses the commit message, blocks `--no-verify`/`-n`, and validates the
