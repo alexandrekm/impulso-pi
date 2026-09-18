@@ -95,18 +95,22 @@
     "npm:@alfonzjanfrithz/pi-websearch": { "tags": ["core"] },
 
     // models.json — pi-root model config (provider modelOverrides: display
-    // names, real costs, OpenRouter routing pins). Pi reads it from the
-    // profile dir root, so config/ keys land at <target>/models.json via
-    // dest (config/<file> defaults to the profile root, so the explicit
-    // dest here is documentation). The work profile pins BaseTen fp8 /
-    // Fireworks routing; base (~/.pi/agent) and personal deliberately stay
-    // UNPINNED — plain `pi` runs keep pi's built-in model catalog. The
-    // empty base variant exists only because --base selects every
-    // resource (no tag filter): it must shadow the work one (alphabetical
-    // tie-break, loser flagged [shadowed]) or the work pins would leak
-    // into ~/.pi/agent. {"providers":{}} loads as zero overrides — a
-    // no-op. models-store.json is pi's own runtime cache, NOT user
-    // config — never sync it.
+    // names + real costs). Pi reads it from the profile dir root, so
+    // config/ keys land at <target>/models.json via dest (config/<file>
+    // defaults to the profile root, so the explicit dest here is
+    // documentation). Routing is NOT pinned here anymore — static
+    // compat.openRouterRouting pins concentrated every concurrent session
+    // on one backend and hit provider rate limits; the
+    // openrouter-session-pin extension (work) now pins ONE backend per
+    // session, chosen at session start from openrouter-session-pin.json.
+    // Base (~/.pi/agent) and personal stay unpinned — plain `pi` runs keep
+    // pi's built-in model catalog. The empty base variant exists only
+    // because --base selects every resource (no tag filter): it must
+    // shadow the work one (alphabetical tie-break, loser flagged
+    // [shadowed]) or the work overrides would leak into ~/.pi/agent.
+    // {"providers":{}} loads as zero overrides — a no-op.
+    // models-store.json is pi's own runtime cache, NOT user config — never
+    // sync it.
     "config/models.work.json": {
       "tags": ["work"],
       "dest": "models.json",
@@ -314,6 +318,32 @@
     "extensions/commit-guard/rules.ts": {
       "tags": ["work"],
       "dest": "extensions/commit-guard/rules.ts",
+    },
+
+    // openrouter-session-pin: pin each pi session to ONE OpenRouter
+    // backend (work-only), replacing the old static compat.openRouterRouting
+    // pin in models.json (which routed every session on the machine to the
+    // same backend and hit provider rate limits). At session start each
+    // configured model gets one backend picked at random from
+    // <configDir>/openrouter-session-pin.json; every request this session
+    // sends carries provider:{only:[tag],allow_fallbacks:false} via the
+    // before_provider_request hook, so per-session prompt caches stay warm
+    // while concurrent sessions spread across backends. Pins persist by
+    // session id (openrouter-session-pin-state.json) so /reload and
+    // `pi -c` reuse the backend. The chosen backend also updates the live
+    // model's name + cost. /orpin lists pins, /orpin reroll re-picks.
+    // Toggled in /settings → Providers → OpenRouter.
+    "extensions/openrouter-session-pin/index.ts": {
+      "tags": ["work"],
+      "dest": "extensions/openrouter-session-pin/index.ts",
+    },
+    "extensions/openrouter-session-pin/pin.ts": {
+      "tags": ["work"],
+      "dest": "extensions/openrouter-session-pin/pin.ts",
+    },
+    "extensions/openrouter-session-pin/openrouter-session-pin.json": {
+      "tags": ["work"],
+      "dest": "openrouter-session-pin.json",
     },
 
     // Cursor models (Claude/GPT/Gemini/Grok/Composer) as a pi provider via

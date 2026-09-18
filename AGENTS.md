@@ -409,17 +409,33 @@ versioned).
 ## Work-profile resources
 
 - `config/models.work.json` → `models.json` — **pi-root model overrides**
-  (work-only). Pins OpenRouter routing to specific backends (GLM-5.3 →
-  BaseTen fp8, Kimi K3 → Fireworks, no fallbacks) with real per-model
-  costs and display names; pi reads it from the profile dir root. The
-  `config/` resource namespace (see the key table above) lands repo files
-  at the target root. Base (`~/.pi/agent`) and personal deliberately stay
+  (work-only). Real per-model costs and display names for the OpenRouter
+  models we use; routing is NOT pinned here (see openrouter-session-pin
+  below — static compat pins concentrated every session on one backend and
+  hit rate limits). pi reads it from the profile dir root. The `config/`
+  resource namespace (see the key table above) lands repo files at the
+  target root. Base (`~/.pi/agent`) and personal deliberately stay
   unpinned — plain `pi` runs keep pi's built-in model catalog. The empty
   `config/models.base.json` exists only to shadow the work variant on
   `--base` (which selects every resource): it wins the shared-dest
   alphabetical tie-break and installs `{"providers":{}}` — zero
   overrides, a no-op. `models-store.json` is pi's own runtime cache —
   never user config.
+
+- `extensions/openrouter-session-pin/` — **per-session OpenRouter backend
+  pinning** (work-only). At session start each configured model (GLM-5.3,
+  Kimi K3) gets ONE backend picked randomly from the candidate list in
+  `<configDir>/openrouter-session-pin.json`; every request the session
+  sends carries `provider:{only:[tag],allow_fallbacks:false}` via the
+  `before_provider_request` hook (same request field models.json's old
+  `compat.openRouterRouting` produced, but chosen per session). Keeps
+  each session's prompt cache warm while spreading concurrent sessions
+  across backends (BaseTen fp8/fp4, Modal, Fireworks…). Pins persist by
+  session id in `openrouter-session-pin-state.json` (30-day pruning) so
+  `/reload` and `pi -c` reuse the backend; `/orpin` lists pins, `/orpin
+  reroll` re-picks. Also patches the live model's name/cost so the footer
+  shows the actual backend. Toggled in `/settings` → Providers →
+  OpenRouter.
 
 - `extensions/commit-guard/` — **commitlint enforcement on every `git commit`**
   (work-only). Hooks the bash `tool_call` (same pattern as command-guard),
@@ -487,8 +503,9 @@ Two more CI gates tie complexity to tests:
 
 - **Coverage** is scoped to the modules held to the bar — the `--include`
   list in the `check:coverage` npm script (currently the guard engines,
-  the impulso-settings trio, subagent-telemetry, gws, system-prompt, and
-  the two border extensions; all ≥90% statements+branches). Thresholds
+  the impulso-settings trio, subagent-telemetry, gws, system-prompt,
+  openrouter-session-pin, and the two border extensions; all ≥90%
+  statements+branches). Thresholds
   apply to the *aggregate* of the included files. The remaining first-party
   modules (search_docs, modes, payload-exporter, on-demand-skills,
   cache-ttl, feature-flag, the guard entry files, editor.ts) have tests but

@@ -284,6 +284,15 @@ export const FEATURES: Feature[] = [
     values: ["short", "long"],
     defaultValue: "short",
   },
+  {
+    id: "openrouter-session-pin",
+    tab: "providers",
+    group: "OpenRouter",
+    label: "Session backend pinning",
+    description:
+      "Pin each session to ONE OpenRouter backend, picked randomly at session start from <configDir>/openrouter-session-pin.json (GLM-5.3 / Kimi K3 candidate lists) and injected per request. Keeps per-session prompt caches warm while spreading concurrent sessions across backends instead of rate-limiting one. Pins persist by session id, so /reload and resume reuse the backend. /orpin lists pins, /orpin reroll re-picks. /reload applies.",
+    kind: "local",
+  },
 
   // ── Tools & Safety ─────────────────────────────────────────────────────
   {
