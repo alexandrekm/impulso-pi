@@ -186,6 +186,24 @@ deliberately different semantics:
   features in `features.ts`: install.sh never resets them (it only fills the
   two compaction defaults when absent), so `/settings` toggles persist across
   syncs. Keys removed from `settingsDefaults` are left as-is (non-clobber).
+- **`profiles.profiles.<name>.settingsDefaults` (PROFILE-LAYERED):** a
+  profile entry may declare its own DEFAULTS, merged **over** the global ones
+  for that target only (plain objects deep-merge leaf-by-leaf; scalars and
+  arrays replace the global value wholesale — a model shortlist is a whole
+  list, not a union). `--base` gets the global defaults only. This is where
+  the work model seed lives (`defaultProvider`/`defaultModel`/
+  `enabledModels`): the OpenRouter GLM/Kimi pair plus the anthropic claude
+  shortlist (sonnet/opus-5, fable-5-1).
+- **`profiles.machines.<variant>.profileDefaults` (MACHINE-LAYERED):** seeds
+  that are a property of the **machine**, not the profile. The personal
+  profile runs on both machines — on the work laptop it uses the same
+  models as work; on the personal machine it uses the LiteLLM proxy
+  (`litellm/gpt-5.6-*`, `litellm/deepseek-flash` — explicit `litellm/`
+  prefixes so OpenRouter's lookalike `openai/gpt-5.6-*` ids never match).
+  install.sh picks the variant from the `IS_WORK` env var (`true` →
+  `machines.work`, anything else → `machines.personal`) and layers its
+  per-profile defaults **over** the profile layer; `--base` is never
+  machine-seeded. Order: global → profile → machine (later wins).
 
 ### Global vs. per-profile
 
@@ -449,6 +467,25 @@ versioned).
   rate-limited backend after a break. `/orpin` lists pins, `/orpin reroll`
   re-picks. Also patches the live model's name/cost so the footer shows the
   actual backend. Toggled in `/settings` → Providers → OpenRouter.
+
+- `extensions/openrouter-cost/` — **real-cost accrual for OpenRouter** (core).
+  pi computes per-request cost from the model catalog's static rates
+  (`calculateCost` in `packages/ai/src/models.ts`) and discards the real
+  amount OpenRouter reports — which depends on the serving backend and its
+  cache pricing (verified 2026-09: OpenRouter's endpoints API reports
+  `cache_read: 0` for backends that bill $0.007-0.03/Mtok). This extension
+  captures the `x-generation-id` response header via
+  `after_provider_response`, then at `message_end` polls the Generation API
+  (`GET /api/v1/generation?id=…`, record appears ~2-5s after the response)
+  and rewrites the message's `usage.cost` with the actual `total_cost`,
+  distributed across pi's cost buckets proportionally by token share — the
+  same pattern pi-provider-litellm uses for `x-litellm-response-cost`.
+  Bounded poll (4 × 1.5s, early-exit); on timeout/error the message keeps
+  pi's locally-calculated cost, so models.json and pin-config cost tables
+  remain as fallbacks. No-op without OpenRouter credentials in `auth.json`.
+  Trade-off: up to ~5s added per model response while the record appears
+  (pi awaits message_end handlers). Toggled in `/settings` → Providers →
+  OpenRouter. /reload applies.
 
 - `extensions/commit-guard/` — **commitlint enforcement on every `git commit`**
   (work-only). Hooks the bash `tool_call` (same pattern as command-guard),

@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "measuredAt": "2026-09-18T17:36:17.998Z",
-  "piVersion": "0.85.1",
+  "measuredAt": "2026-09-18T21:56:36.677Z",
+  "piVersion": "0.84.1",
   "nodeVersion": "v26.7.0",
   "platform": "darwin",
   "method": "First composed request captured by the context-measure recording provider (extensions/context-measure): pi booted headless (RPC, --no-session) against the real agent dir, one prompt to measure/measure-model. Counts are characters of pi's intermediate request representation (JSON.stringify of the composed system prompt, tool-definition array, and messages) — not a wire format, so not comparable to wire-format measurements, but comparable across profiles and time. contextChars = systemPromptChars + toolSchemaChars. Paths/dates inside prompts make counts vary slightly per machine. Not tokens, cost, or quality.",
@@ -9,10 +9,10 @@
     {
       "target": "stock",
       "record": {
-        "at": "2026-09-18T17:36:11.128Z",
+        "at": "2026-09-18T21:56:28.236Z",
         "requestId": 1,
         "model": "measure-model",
-        "systemPromptChars": 2616,
+        "systemPromptChars": 2763,
         "messageCount": 1,
         "messageChars": 95,
         "toolCount": 4,
@@ -23,22 +23,22 @@
           "write"
         ],
         "toolChars": {
-          "bash": 527,
+          "bash": 526,
           "edit": 1163,
           "read": 668,
           "write": 415
         },
-        "toolSchemaChars": 2778,
-        "contextChars": 5394
+        "toolSchemaChars": 2777,
+        "contextChars": 5540
       }
     },
     {
       "target": "work",
       "record": {
-        "at": "2026-09-18T17:36:13.725Z",
+        "at": "2026-09-18T21:56:30.996Z",
         "requestId": 1,
         "model": "measure-model",
-        "systemPromptChars": 10029,
+        "systemPromptChars": 10848,
         "messageCount": 1,
         "messageChars": 95,
         "toolCount": 17,
@@ -63,7 +63,7 @@
         ],
         "toolChars": {
           "ask_user_question": 3789,
-          "bash": 527,
+          "bash": 526,
           "bg_wait": 4299,
           "edit": 4506,
           "find": 1666,
@@ -77,20 +77,20 @@
           "websearch": 1900,
           "write": 415,
           "zvec_index": 1466,
-          "zvec_search": 2175,
+          "zvec_search": 2394,
           "zvec_status": 461
         },
-        "toolSchemaChars": 47959,
-        "contextChars": 57988
+        "toolSchemaChars": 48177,
+        "contextChars": 59025
       }
     },
     {
       "target": "personal",
       "record": {
-        "at": "2026-09-18T17:36:15.893Z",
+        "at": "2026-09-18T21:56:33.727Z",
         "requestId": 1,
         "model": "measure-model",
-        "systemPromptChars": 8372,
+        "systemPromptChars": 9191,
         "messageCount": 1,
         "messageChars": 95,
         "toolCount": 16,
@@ -114,7 +114,7 @@
         ],
         "toolChars": {
           "ask_user_question": 3789,
-          "bash": 527,
+          "bash": 526,
           "bg_wait": 4299,
           "edit": 4506,
           "find": 1666,
@@ -127,20 +127,20 @@
           "websearch": 1900,
           "write": 415,
           "zvec_index": 1466,
-          "zvec_search": 2175,
+          "zvec_search": 2394,
           "zvec_status": 461
         },
-        "toolSchemaChars": 46904,
-        "contextChars": 55276
+        "toolSchemaChars": 47122,
+        "contextChars": 56313
       }
     },
     {
       "target": "base",
       "record": {
-        "at": "2026-09-18T17:36:17.964Z",
+        "at": "2026-09-18T21:56:36.646Z",
         "requestId": 1,
         "model": "measure-model",
-        "systemPromptChars": 9662,
+        "systemPromptChars": 10481,
         "messageCount": 1,
         "messageChars": 95,
         "toolCount": 17,
@@ -165,11 +165,11 @@
         ],
         "toolChars": {
           "ask_user_question": 3789,
-          "bash": 527,
+          "bash": 526,
           "bg_wait": 4299,
           "edit": 4506,
           "find": 1666,
-          "grep": 1487,
+          "grep": 1494,
           "read": 1346,
           "recall": 604,
           "search_docs": 1054,
@@ -179,11 +179,11 @@
           "websearch": 1900,
           "write": 415,
           "zvec_index": 1466,
-          "zvec_search": 2175,
+          "zvec_search": 2394,
           "zvec_status": 461
         },
-        "toolSchemaChars": 47952,
-        "contextChars": 57614
+        "toolSchemaChars": 48177,
+        "contextChars": 58658
       }
     }
   ]
