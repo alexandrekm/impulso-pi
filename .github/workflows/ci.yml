@@ -48,6 +48,11 @@ jobs:
       - name: install.sh smoke test
         run: |
           set -e
+          # The tools section hits the npm registry (real downloads) and is
+          # orthogonal to what this smoke test verifies (file-sync logic);
+          # a registry stall has hung this step past the 10m job cap twice
+          # already. install.mjs skips tools when IMPULSO_SKIP_TOOLS is set.
+          export IMPULSO_SKIP_TOOLS=1
           TEST_AGENT_DIR="$(mktemp -d)"
           # Stub out the `pi` CLI so the smoke test doesn't need network
           # access or a real pi installation to exercise the file-sync logic.

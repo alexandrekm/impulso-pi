@@ -260,6 +260,12 @@ alive forever and the dashboard serves stale assets after an upgrade. In
 profiles mode it re-runs `service install` first to re-bake
 `PI_STATS_PROFILES_DIR` into the plist/unit, then restarts.
 
+The tools section hits the npm registry (real downloads, no overall
+timeout), so CI's install.sh smoke test sets `IMPULSO_SKIP_TOOLS=1` to skip
+it — a registry stall there hung the smoke-test step past the job's 10m
+cap twice (impulso-pi#100). The smoke test verifies file-sync logic, not
+tool installs, so skipping removes the step's entire network surface.
+
 ## Non-clobber sync
 
 `install.sh` tracks a hash of every synced file in
