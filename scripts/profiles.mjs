@@ -221,6 +221,15 @@ export function validateProfiles(profiles, repoDir) {
     }
   }
 
+  const settings = profiles.settings;
+  if (settings !== undefined) {
+    if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
+      errors.push('"settings" must be an object');
+    } else if ("packages" in settings) {
+      errors.push('"settings" must not contain "packages" (use npm: resources instead)');
+    }
+  }
+
   // machines — per-machine default overlays, selected by the IS_WORK env
   // var. Each variant declares profileDefaults keyed by profile name, with
   // the same shape rules as the global settingsDefaults.
