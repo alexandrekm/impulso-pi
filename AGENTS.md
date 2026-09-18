@@ -377,22 +377,33 @@ versioned).
   a thinking-level enum, and a remember toggle — all write to `pi-btw.json`,
  read fresh each `/btw` so no `/reload` is needed for model changes
 
-- `npm:@luminascale/pi-zvec-grep` + `extensions/pi-zvec-grep/config.json` +
-  `tools: @zvec/zvec-grep` — zvec-grep (`zg`) hybrid semantic + keyword
-  search as native pi tools (`zvec_search` / `zvec_index` / `zvec_status`,
-  `/zg` command). Additive: FFF keeps `find`/`grep` for exact strings;
-  `zvec_search` is for meaning-based / location-unknown questions.
-  Indexes live per-workspace at `<root>/.zvec-grep` (gitignored); the
-  global `zg` CLI is installed by install.sh's `tools` section. User config
-  at `<configDir>/pi-zvec-grep/config.json` — autoIndex on, toggled in
-  `/settings` → Search.
-  **Never index `$HOME`** (`zg index ~`): a home-rooted index makes every
-  `zg` call stat the entire home tree to compute freshness —
-  status/query hang for minutes from *any* cwd under `$HOME`, which
-  silently disabled zvec on every profile (2026-09; fixed by dropping the
-  index). `extensions/zvec-guard/` blocks `zvec_index` calls targeting
-  `$HOME` (index/rebuild modes; drop stays allowed as the remediation),
-  toggled in `/settings` → Search → Semantic search. Orca worktrees:
+- `git:github.com/alexandrekm/pi-zvec-grep` (our fork of
+  MikkelKappelPersson/pi-zvec-grep v0.3.1, see `investigation/ZVEC-ADOPTION-
+  REVIEW.md`) + `extensions/pi-zvec-grep/config.json` + `tools: @zvec/zvec-grep`
+  — zvec-grep (`zg`) hybrid semantic + keyword search as native pi tools
+  (`zvec_search` / `zvec_index` / `zvec_status`, `/zg` command). Additive:
+  FFF keeps `find`/`grep` for exact strings; `zvec_search` (whose `query`
+  param is **required** — the fork's adoption fix; the one organic call in
+  the wild died on an all-optional schema) is for meaning-based /
+  location-unknown questions. Indexes live per-workspace at
+  `<root>/.zvec-grep` (gitignored); the global `zg` CLI is installed by
+  install.sh's `tools` section. User config at
+  `<configDir>/pi-zvec-grep/config.json` — autoIndex on + `rootPolicy`,
+  toggled in `/settings` → Search. The fork + `extensions/zvec-guard/`
+  (mirrors the policy at pi's tool_call layer) enforce a **root policy**:
+  `$HOME` and umbrella roots (≥ `maxNestedRepos`, default 3, nested git
+  repos at depth ≤ 2) are never indexed — zg 0.2.x cannot index nested
+  repos at all, so an umbrella index is a near-empty stub that shadows
+  real leaf-repo indexes for sessions below it; `rootPolicy.allowRoots` is
+  the escape hatch, never unlocks `$HOME`, and drop always passes. The
+  fork's autoIndex also takes a cross-process lock
+  (`<root>/.zvec-grep/locks/autoindex.lock`, stale after 10 min) — racing
+  builds from concurrent sessions corrupted a 4.1 GB `~/code` index once.
+  Umbrella-worktree sessions run index-free: `fts` searches (`zg query
+  --rg`) still cover submodule content without an index. A short global
+  search-routing nudge ships as `config/APPEND_SYSTEM.md` (pi appends
+  `<agentDir>/APPEND_SYSTEM.md` to every system prompt) because work repos'
+  AGENTS.md files say nothing about zvec. Orca worktrees of plain repos:
   autoIndex builds the index at the first session start; copying the
   parent repo's `.zvec-grep` into a new worktree (then rewriting
   `manifest.json` rootPaths to the worktree path) gives turn-1 search —

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, describe, test } from "node:test";
 
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
 
@@ -10,9 +10,40 @@ import { homedir, tmpdir } from "node:os";
 const CONFIG_DIR = mkdtempSync(join(tmpdir(), "impulso-cfg-"));
 process.env.PI_CODING_AGENT_DIR = CONFIG_DIR;
 
-const { default: factory, bestRealPath, normalizeRoot } = await import("./zvec-guard.ts");
+const {
+  default: factory,
+  assessRoot,
+  bestRealPath,
+  countNestedRepos,
+  loadRootPolicy,
+  normalizeRoot,
+} = await import("./zvec-guard.ts");
 
 const MANIFEST = join(CONFIG_DIR, "impulso-settings.json");
+
+/** A throwaway tree with `count` nested git repos under `root/<name>/`. */
+function makeUmbrella(count: number, gitStyle: "dir" | "file" = "dir"): string {
+  const root = mkdtempSync(join(tmpdir(), "impulso-umbrella-"));
+  for (let i = 0; i < count; i += 1) {
+    const repo = join(root, `sub${i}`);
+    mkdirSync(repo, { recursive: true });
+    if (gitStyle === "dir") mkdirSync(join(repo, ".git"));
+    else writeFileSync(join(repo, ".git"), "gitdir: /elsewhere\n");
+  }
+  return root;
+}
+
+const ZVEC_CONFIG_DIR = join(CONFIG_DIR, "pi-zvec-grep");
+
+/** Write a pi-zvec-grep config with the given rootPolicy (user layer). */
+function setRootPolicy(policy: { allowRoots: string[]; maxNestedRepos: number }): void {
+  mkdirSync(ZVEC_CONFIG_DIR, { recursive: true });
+  writeFileSync(
+    join(ZVEC_CONFIG_DIR, "config.json"),
+    JSON.stringify({ rootPolicy: policy }),
+    "utf8",
+  );
+}
 
 function setDisabled(featureId: string | null): void {
   if (featureId === null) rmSync(MANIFEST, { force: true });
@@ -135,6 +166,92 @@ describe("bestRealPath", () => {
     const missing = join(tmpdir(), "does-not-exist-zvec-guard-test");
     assert.ok(!existsSync(missing));
     assert.equal(bestRealPath(missing), resolve(missing));
+  });
+});
+
+describe("root policy (umbrella roots)", () => {
+  test("countNestedRepos counts depth-1 .git dirs", () => {
+    assert.equal(countNestedRepos(makeUmbrella(3)), 3);
+  });
+
+  test("worktree-style .git files count as nested repos", () => {
+    assert.equal(countNestedRepos(makeUmbrella(3, "file")), 3);
+  });
+
+  test("depth-2 repos are counted (a directory-of-repos layout)", () => {
+    const root = mkdtempSync(join(tmpdir(), "impulso-deep-"));
+    mkdirSync(join(root, "group", "a", ".git"), { recursive: true });
+    mkdirSync(join(root, "group", "b", ".git"), { recursive: true });
+    mkdirSync(join(root, "group", "c", ".git"), { recursive: true });
+    assert.equal(countNestedRepos(root), 3);
+  });
+
+  test("a found repo is not descended into; noise dirs are skipped", () => {
+    const root = mkdtempSync(join(tmpdir(), "impulso-noise-"));
+    mkdirSync(join(root, "repo", ".git", "objects"), { recursive: true });
+    mkdirSync(join(root, "node_modules", "dep", ".git"), { recursive: true });
+    assert.equal(countNestedRepos(root), 1);
+  });
+
+  test("two nested repos stay under the default threshold of 3", () => {
+    assert.equal(assessRoot(makeUmbrella(2)).allowed, true);
+  });
+
+  test("three or more nested repos mark an umbrella root", () => {
+    const verdict = assessRoot(makeUmbrella(3));
+    assert.equal(verdict.allowed, false);
+    assert.match(verdict.reason ?? "", /umbrella/);
+    assert.match(verdict.reason ?? "", /allowRoots/);
+  });
+
+  test("the threshold is configurable via maxNestedRepos", () => {
+    assert.equal(assessRoot(makeUmbrella(2), { allowRoots: [], maxNestedRepos: 2 }).allowed, false);
+  });
+
+  test("allowRoots bypasses the umbrella rule (realpath-matched)", () => {
+    const umbrella = makeUmbrella(5);
+    assert.equal(assessRoot(umbrella, { allowRoots: [umbrella], maxNestedRepos: 3 }).allowed, true);
+    assert.equal(
+      assessRoot(realpathSync(umbrella), { allowRoots: [umbrella], maxNestedRepos: 3 }).allowed,
+      true,
+    );
+  });
+
+  test("allowRoots never unlocks $HOME", () => {
+    assert.equal(assessRoot("~", { allowRoots: ["~"], maxNestedRepos: 3 }).allowed, false);
+  });
+});
+
+describe("root policy config (pi-zvec-grep/config.json)", () => {
+  test("loadRootPolicy returns built-in defaults without a config file", () => {
+    rmSync(ZVEC_CONFIG_DIR, { recursive: true, force: true });
+    assert.deepEqual(loadRootPolicy(), { allowRoots: [], maxNestedRepos: 3 });
+  });
+
+  test("loadRootPolicy reads the user-layer rootPolicy", () => {
+    setRootPolicy({ allowRoots: ["~/umbrella-ok"], maxNestedRepos: 5 });
+    assert.deepEqual(loadRootPolicy(), { allowRoots: ["~/umbrella-ok"], maxNestedRepos: 5 });
+  });
+
+  test("invalid values fall back per sub-key, never to garbage", () => {
+    setRootPolicy({ allowRoots: ["ok", 42, ""] as unknown as string[], maxNestedRepos: -1 });
+    assert.deepEqual(loadRootPolicy(), { allowRoots: ["ok"], maxNestedRepos: 3 });
+  });
+
+  test("the hook blocks an umbrella root and honors allowRoots from the config", async () => {
+    rmSync(ZVEC_CONFIG_DIR, { recursive: true, force: true });
+    const umbrella = makeUmbrella(3);
+    const blocked = (await call(umbrella, "index")) as { block: boolean; reason: string };
+    assert.ok(blocked && blocked.block === true);
+    assert.match(blocked.reason, /umbrella/);
+
+    setRootPolicy({ allowRoots: [umbrella], maxNestedRepos: 3 });
+    assert.equal(await call(umbrella, "index"), undefined);
+    rmSync(ZVEC_CONFIG_DIR, { recursive: true, force: true });
+  });
+
+  test("drop on an umbrella root stays allowed (remediation path)", async () => {
+    assert.equal(await call(makeUmbrella(3), "drop"), undefined);
   });
 });
 

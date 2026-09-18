@@ -180,6 +180,17 @@
       "dest": "models.json",
     },
 
+    // APPEND_SYSTEM.md — pi natively appends <agentDir>/APPEND_SYSTEM.md to
+    // EVERY system prompt (resource-loader discovery; per-profile because
+    // agentDir is the profile dir in profiles mode). Used for one thing only:
+    // the search-routing nudge from the zvec adoption fix (2026-09-18) — the
+    // fork's tool guideline only reaches models that read guidelines
+    // closely, and work repos' AGENTS.md files say nothing about zvec. Keep
+    // this file SHORT: every char lands in every request on every profile
+    // (the context-record ratchet in CI catches growth — run
+    // `npm run measure:context -- --record` after editing).
+    "config/APPEND_SYSTEM.md": { "tags": ["core"] },
+
     // pi-subagents owns all child-process lifecycle. The exact release was
     // preflighted against Pi 0.84.4: scout uses a strict read/search tool
     // allowlist, starts fresh, and Orca is only a best-effort observer.
@@ -761,33 +772,46 @@
     // https://www.npmjs.com/package/@narumitw/pi-btw
     "npm:@narumitw/pi-btw": { "tags": ["core"] },
 
-    // pi-zvec-grep (MikkelKappelPersson): zvec-grep (zg) hybrid search as
+    // pi-zvec-grep (our fork of MikkelKappelPersson/pi-zvec-grep): zvec-grep
+    // (zg) hybrid search as
     // native pi tools — zvec_search (BM25+vector+ripgrep fusion over a local
     // per-workspace index), zvec_index, zvec_status, plus the /zg command.
     // Additive: it does NOT override find/grep — tool descriptions route
     // exact-string search to FFF/rg and reserve zvec_search for semantic,
     // location-unknown questions. Requires the global `zg` CLI, installed
-    // via the "tools" section below. User config (autoIndex, defaultLimit)
-    // lives at <configDir>/pi-zvec-grep/config.json — seeded by the file
-    // resource below with autoIndex on, and toggled in /settings → Search.
-    // https://github.com/MikkelKappelPersson/pi-zvec-grep
-    "npm:@luminascale/pi-zvec-grep": { "tags": ["core"] },
+    // via the "tools" section below. User config (autoIndex, defaultLimit,
+    // rootPolicy) lives at <configDir>/pi-zvec-grep/config.json — seeded by
+    // the file resource below with autoIndex on, and toggled in /settings →
+    // Search.
+    //
+    // Fork (2026-09-18, v0.4.0): installed from OUR fork, not upstream npm.
+    // The adoption investigation (investigation/ZVEC-ADOPTION-REVIEW.md)
+    // found the one organic zvec_search call died on an arg-validation error
+    // (every query field optional), umbrella-repo sessions all had near-
+    // empty 4-file indexes (zg cannot index nested git repos), and a 4.1 GB
+    // corrupt ~/code index from racing autoIndex builds. The fork makes
+    // `query` required, enforces a root policy ($HOME + umbrella roots
+    // blocked, allowRoots escape hatch) in both the tool and autoIndex, and
+    // adds a cross-process build lock. Upstream PR desirable once validated.
+    // https://github.com/alexandrekm/pi-zvec-grep (fork of
+    // MikkelKappelPersson/pi-zvec-grep)
+    "git:github.com/alexandrekm/pi-zvec-grep": { "tags": ["core"] },
     "extensions/pi-zvec-grep/config.json": {
       "tags": ["core"],
       "dest": "pi-zvec-grep/config.json",
     },
 
-    // zvec-guard: blocks zvec_index calls that would index $HOME. A
-    // home-rooted index (~/.zvec-grep, rootPaths = $HOME recursive) makes
-    // every zg call stat the entire home tree to compute freshness —
-    // status/query appear to hang for minutes from ANY cwd under $HOME,
-    // which silently disabled zvec on every profile (2026-09). zg has no
-    // built-in opt-out (a disabled-policy manifest is treated as
-    // unindexed and gets overwritten), so the guard stops the call in pi's
-    // tool_call hook. index/rebuild on $HOME are blocked; drop stays
-    // allowed (dropping a stray home index is the remediation). Toggled in
-    // /settings → Search → Semantic search (id `zvec-guard`). Core so
-    // every profile gets it.
+    // zvec-guard: blocks zvec_index calls against roots that must not be
+    // indexed — $HOME (a home-rooted index makes every zg call stat the
+    // entire home tree; this disabled zvec on every profile once, 2026-09)
+    // and umbrella roots (≥3 nested git repos at depth ≤ 2, which zg cannot
+    // index: the stub index only shadows real leaf-repo indexes for
+    // sessions below it). allowRoots in <configDir>/pi-zvec-grep/config.json
+    // is the escape hatch and never unlocks $HOME. index/rebuild are
+    // blocked; drop stays allowed (dropping a bad index is the
+    // remediation). Mirrors the fork's own root policy — defense in depth
+    // at pi's tool_call layer. Toggled in /settings → Search → Semantic
+    // search (id `zvec-guard`). Core so every profile gets it.
     "extensions/zvec-guard/zvec-guard.ts": {
       "tags": ["core"],
       "dest": "extensions/zvec-guard/index.ts",
@@ -809,7 +833,8 @@
   // package.json).
   "tools": {
     "pi-omp-stats": { "path": "packages/pi-omp-stats" },
-    // zvec-grep CLI (`zg`) — required by npm:@luminascale/pi-zvec-grep
+    // zvec-grep CLI (`zg`) — required by the pi-zvec-grep package above.
+    // External npm package: installed globally from the registry.
     // above. External npm package: installed globally from the registry.
     "@zvec/zvec-grep": {},
   },

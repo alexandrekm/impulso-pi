@@ -87,3 +87,83 @@ not to keep paying for the option.
   tools, and `zvec-guard`/autoIndex make sense only while the tools exist.
 - The zg home-index outage history is real (2026-09) — if the verdict is
   "keep", don't remove `zvec-guard` as part of this work.
+
+---
+
+# Outcome — verdict: KEEP + FIX (2026-09-18)
+
+Written after the investigation; numbers from the stats DB (`~/.pi/agent/
+pi-omp-stats*.db`), not memory.
+
+## What the data said
+
+Tool calls since the 2026-09-09 enablement cutoff (2026-09-18):
+
+| tool | calls | | tool | calls |
+| --- | --- | --- | --- | --- |
+| bash | 7,641 | | find | 138 |
+| read | 1,405 | | **zvec_search** | **2** |
+| edit | 1,037 | | **zvec_index** | **1** |
+| grep | 155 | | | |
+
+Both `zvec_search` calls were post-cutoff: one was rollout testing in
+impulso-pi/zvec-2; the ONE organic call (2026-09-17, devboxes, GLM-5.3) was a
+perfect use case ("where is devbox tooling handled") that **failed on argument
+validation** — the model passed `{limit, root}` with no query (every query
+field was optional in the schema), got `isError`, fell back to `bash grep`,
+and never touched zvec again. First-try failure kills adoption.
+
+Deeper structural finding: **every workspace in the umbrella-repo workflow
+(Orca worktrees of mtv-inference, and mtv-ai-infra) had a 4-file index** —
+zg 0.2.x hard-skips nested git repos when indexing (verified empirically:
+`--no-ignore` and explicit `-g` globs cannot include them), so an umbrella
+index can only ever contain root-level files, and that stub *shadows* real
+leaf-repo indexes (zg resolves the nearest ancestor index — a session in
+`lib-py-inference-client/examples` resolved up to the 4-file mtv-inference
+index). Meanwhile a 4.1 GB `~/code` index (built by a session with cwd
+`~/code`, resolved to by every `~/code/*` session) was corrupt — racing
+autoIndex builds from concurrent sessions ("crash residue", read-only-mode
+IDMap errors on every `zg status`). `zg query --rg` (the fts path) searches
+nested-repo content live and works without any index.
+
+So "unused" was three fixable causes stacked, not a verdict on the concept:
+(1) an un-failable schema was failable, (2) umbrella sessions structurally
+had nothing to search, (3) nothing routed the models (96% GLM-5.3; one
+guideline line among 16-17 tools) to zvec before their grep habit.
+
+## What shipped (impulso-pi + fork)
+
+1. **Fork `git:github.com/alexandrekm/pi-zvec-grep`** (v0.4.0, from upstream
+   v0.3.1) replaces `npm:@luminascale/pi-zvec-grep` in profiles.jsonc:
+   - `zvec_search.query` is **required** — the empty-call failure mode is
+     unrepresentable; description and guideline say so.
+   - Root policy (`rootPolicy` config: `allowRoots`, `maxNestedRepos`=3):
+     `zvec_index` (tool + autoIndex) refuses `$HOME` and umbrella roots with
+     an explanatory error; `/zg` (human-typed) stays unguarded.
+   - Cross-process autoIndex lock (`locks/autoindex.lock`, stale 10 min).
+   - `normalizeRoot` now expands `~`; test suite green on macOS (was 6
+     pre-existing failures here, incl. a racy wait).
+   Upstream PR desirable once validated in daily use.
+2. **zvec-guard v2** (`extensions/zvec-guard/`): mirrors the same policy at
+   pi's tool_call layer — defense in depth, same config file.
+3. **Dropped the bad indexes** (2026-09-18): `~/code/.zvec-grep` (4.1 GB,
+   corrupt), `~/code/mtv/mtv-inference/.zvec-grep` (4 files), and the 4-file
+   indexes in devboxes / triton-images / local-dev / tf-inference-module /
+   mtv-ai-infra worktrees. Umbrella sessions now run index-free — fts
+   searches still cover submodule content; semantic gets a clean
+   "no index" hint instead of empty results.
+4. **`config/APPEND_SYSTEM.md`** (core resource → `<profile>/APPEND_SYSTEM.md`):
+   a ~2-line search-routing nudge in every system prompt — work repos'
+   AGENTS.md files say nothing about zvec, and GLM-5.3 doesn't read tool
+   guidelines closely. Context-record ratchet re-run (CI gate).
+
+## What to watch next
+
+The Search Adoption panel (`?since=1788912000000`, the 2026-09-09 cutoff) is
+the scoreboard: expect zvec_search calls to appear in plain-repo sessions
+(docs/triton, impulso-pi worktrees). Umbrella worktrees will stay near zero
+by design — structural, until zg grows nested-repo indexing; if that lands,
+revisit whether umbrella roots should be allowlisted. If adoption stays ~0
+in plain repos for another few weeks with the schema/prompt fixes live, the
+honest verdict flips to retire (the ~4.1k schema chars + this machinery
+would then be dead weight) — this doc is the evidence trail for that call.
