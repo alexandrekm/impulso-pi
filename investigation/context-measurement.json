@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "measuredAt": "2026-09-18T21:56:36.677Z",
+  "measuredAt": "2026-09-18T23:40:37.297Z",
   "piVersion": "0.84.1",
   "nodeVersion": "v26.7.0",
   "platform": "darwin",
@@ -9,10 +9,10 @@
     {
       "target": "stock",
       "record": {
-        "at": "2026-09-18T21:56:28.236Z",
+        "at": "2026-09-18T23:40:29.931Z",
         "requestId": 1,
         "model": "measure-model",
-        "systemPromptChars": 2763,
+        "systemPromptChars": 2769,
         "messageCount": 1,
         "messageChars": 95,
         "toolCount": 4,
@@ -29,13 +29,13 @@
           "write": 415
         },
         "toolSchemaChars": 2777,
-        "contextChars": 5540
+        "contextChars": 5546
       }
     },
     {
       "target": "work",
       "record": {
-        "at": "2026-09-18T21:56:30.996Z",
+        "at": "2026-09-18T23:40:32.415Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 10848,
@@ -87,7 +87,7 @@
     {
       "target": "personal",
       "record": {
-        "at": "2026-09-18T21:56:33.727Z",
+        "at": "2026-09-18T23:40:34.624Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 9191,
@@ -137,7 +137,7 @@
     {
       "target": "base",
       "record": {
-        "at": "2026-09-18T21:56:36.646Z",
+        "at": "2026-09-18T23:40:37.262Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 10481,
