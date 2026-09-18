@@ -220,6 +220,15 @@ export const FEATURES: Feature[] = [
       "Save every provider request payload + response under <configDir>/payloads/. /payload-exporter on|off|toggle|status.",
     kind: "local",
   },
+  {
+    id: "context-measure",
+    tab: "obs",
+    group: "Diagnostics",
+    label: "Context recorder provider",
+    description:
+      "Registers the 'measure' provider (measure/measure-model): records what each composed request is made of (system-prompt chars, per-tool schema chars, tool count) to <configDir>/context-measure.jsonl and answers locally with 'ok' — no network. Zero request footprint (no tools, no prompt text). npm run measure:context measures stock vs. work/personal/base and writes the committed record; CI fails if a PR changes profiles.jsonc/extensions/skills without updating it.",
+    kind: "local",
+  },
 
   // ── Providers ──────────────────────────────────────────────────────────
   {

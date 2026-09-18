@@ -348,14 +348,25 @@ describe("runCommitlint", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
-  test("failing binary → ok:false with the report", () => {
+  test("failing binary → ok:false with the report", async () => {
     const dir = fakeBin(
       mkdtempSync(join(tmpdir(), "cg-run-")),
       'echo "✖ subject may not be empty" >&2; exit 1',
     );
     try {
-      const r = runCommitlint(dir, "bad");
-      assert.ok(r && r.ok === false);
+      // runCommitlint collapses any spawn error (crashed binary, EACCES, and
+      // transient fork failures on a loaded runner) into undefined — a real
+      // binary that executes and exits 1 must never do that, so retry a few
+      // times before failing: only a persistent spawn failure gets through,
+      // and the assertion message then carries the last result for triage.
+      // (Seen in the wild: impulso-pi#100, one CI run of three.)
+      let r = runCommitlint(dir, "bad");
+      for (let attempt = 0; r === undefined && attempt < 3; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        r = runCommitlint(dir, "bad");
+      }
+      assert.ok(r, "runCommitlint returned undefined: spawn failed 4x in a row");
+      assert.ok(r.ok === false, `expected ok:false, got: ${JSON.stringify(r)}`);
       assert.match((r as { output: string }).output, /subject may not be empty/);
     } finally {
       rmSync(dir, { recursive: true, force: true });

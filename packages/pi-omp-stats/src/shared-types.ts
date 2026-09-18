@@ -281,6 +281,50 @@ export interface ToolDashboardStats {
   searchMix: SearchMixStats;
 }
 
+/* Context budget: the first-call measurement record written by
+ * `npm run measure:context -- --record` (extensions/context-measure),
+ * read live from the stats dir, joined with tool_calls usage. */
+
+export interface ContextBudgetTarget {
+  target: string;
+  at: string;
+  toolCount: number;
+  systemPromptChars: number;
+  toolSchemaChars: number;
+  contextChars: number;
+  toolNames: string[];
+  toolChars: Record<string, number>;
+  /** contextChars ÷ the stock row's contextChars (null without stock). */
+  multipleOfStock: number | null;
+}
+
+export interface ContextBudgetToolRow {
+  tool: string;
+  /** Characters this tool's definition costs in every request (from the
+   * record; null when the record doesn't know the tool). */
+  schemaChars: number | null;
+  calls: number;
+  sessions: number;
+  errors: number;
+  /** schemaChars × requestsInPeriod — characters paid for this tool's
+   * presence across the selected range (null when schemaChars is null). */
+  paidChars: number | null;
+  /** paidChars ÷ calls — the hide-it-or-keep-it number (null when no calls). */
+  charsPerCall: number | null;
+}
+
+export interface ContextBudgetStats {
+  measuredAt: string | null;
+  piVersion: string | null;
+  /** Record target used for the usage join (profile match, else "base"). */
+  joinTarget: string | null;
+  /** Assistant requests in the selected range (what paidChars multiplies). */
+  requestsInPeriod: number;
+  targets: ContextBudgetTarget[];
+  perTool: ContextBudgetToolRow[];
+  method: string;
+}
+
 /* Providers. Only the portable subset is implemented; the omp auth-broker
  * usage-window series and subscription insights are dropped (TODO(port)). */
 

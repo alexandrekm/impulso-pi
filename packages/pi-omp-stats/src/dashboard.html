@@ -994,6 +994,19 @@
               <line x1="21" y1="21" x2="16.65" y2="16.65" /></svg
             >Search
           </button>
+          <button data-tab="context">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M3 3v18h18" />
+              <path d="M7 16l4-8 4 5 3-3" /></svg
+            >Context
+          </button>
           <div class="nav-label">Spend</div>
           <button data-tab="costs">
             <svg
@@ -1221,6 +1234,7 @@
         behavior = null,
         tools = null,
         searchAdoption = null,
+        contextBudget = null,
         providers = null,
         recent = null,
         errorsList = null,
@@ -1242,6 +1256,7 @@
         folders: "Folders",
         tools: "Tools",
         search: "Search Adoption",
+        context: "Context Budget",
         behavior: "Behavior",
         costs: "Costs",
         providers: "Providers",
@@ -2024,6 +2039,9 @@
           } else if (tab === "search") {
             searchAdoption = await api("/api/stats/search-adoption?range=" + range());
             renderSearchAdoption();
+          } else if (tab === "context") {
+            contextBudget = await api("/api/stats/context?range=" + range());
+            renderContextBudget();
           } else if (tab === "behavior") {
             behavior = await api("/api/stats/behavior?range=" + range());
             renderBehavior();
@@ -2227,6 +2245,108 @@
           series.push({ timestamp: p.timestamp, tool: "grep/find", calls: p.exact });
         }
         drawStackedArea("search-adoption-chart", series, "calls", "Calls");
+      }
+
+      /* Context Budget: first-call cost per profile + chars-per-use join. */
+      function renderContextBudget() {
+        const s = contextBudget;
+        if (!s) {
+          main.innerHTML = `<div class="empty">No data</div>`;
+          return;
+        }
+        if (!s.targets || s.targets.length === 0) {
+          main.innerHTML = `<div class="empty">No context-measurement record found. Run <code>npm run measure:context -- --record</code> in the impulso-pi repo (it drops a copy next to the stats DB for this dashboard).</div>`;
+          return;
+        }
+        const joinRow = s.targets.find((t) => t.target === s.joinTarget);
+        const topTool = (s.perTool || [])[0];
+        const join = joinRow || s.targets[0];
+        const stock = s.targets.find((t) => t.target === "stock");
+        const cards = `
+  ${card("First call (" + join.target + ")", fmtNum(join.contextChars) + " chars", `${join.toolCount} tools · measured ${s.measuredAt ? s.measuredAt.slice(0, 10) : "?"}`, "var(--blue)")}
+  ${card("vs stock pi", join.multipleOfStock != null ? join.multipleOfStock.toFixed(1) + "x" : "—", stock ? `stock ${fmtNum(stock.contextChars)} chars` : "no stock row", "var(--red)")}
+  ${card("Biggest tool", topTool ? topTool.tool : "—", topTool && topTool.schemaChars != null ? `${fmtNum(topTool.schemaChars)} chars/request · ${fmtNum(topTool.calls)} calls` : "", "var(--mauve, #cba6f7)")}
+  ${card("Requests in range", fmtNum(s.requestsInPeriod), "paidChars = schema chars × requests", "var(--teal)")}
+`;
+        main.innerHTML = `<div class="cards">${cards}</div>
+    <div class="chart-wrap"><h3>First model call per target — tool schema vs system prompt (chars)</h3><canvas id="context-chart"></canvas></div>
+    <div class="section-title">Per target</div>
+    <div id="context-targets"></div>
+    <div class="section-title">Cost vs use — ${escapeHtml(s.joinTarget || "")} tools × ${fmtNum(s.requestsInPeriod)} requests</div>
+    <div id="context-perTool"></div>
+    <div class="kpi-note" style="padding:2px 0 0">Recorded by extensions/context-measure (recording provider, no network): counts are characters of pi's intermediate request representation, comparable across profiles and over time but not to wire-format measurements. Schema chars are paid in <em>every</em> request whether the tool is called or not; paid = schema × requests in range; per-call = paid ÷ calls. A tool with high schema chars and few calls is the hide-it candidate; a called-often tool earns its slot. Join uses the ${escapeHtml(s.joinTarget || "")} record row for this profile.</div>
+  `;
+        main.querySelector("#context-targets").innerHTML = table(
+          ["Target", "Tools", "System", "Tool schema", "Context", "× stock"],
+          (s.targets || []).map((t) => [
+            `<span class="model" style="color:var(--accent)">${t.target}</span>`,
+            fmtNum(t.toolCount),
+            fmtNum(t.systemPromptChars),
+            fmtNum(t.toolSchemaChars),
+            fmtNum(t.contextChars),
+            t.multipleOfStock != null ? t.multipleOfStock.toFixed(1) + "x" : "—",
+          ]),
+          ["", "num", "num", "num", "num", "num"],
+        );
+        main.querySelector("#context-perTool").innerHTML = table(
+          [
+            "Tool",
+            "Schema chars / request",
+            "Calls",
+            "Sessions",
+            "Errors",
+            "Paid chars",
+            "Chars / call",
+          ],
+          (s.perTool || []).map((r) => [
+            `<span class="model" style="color:var(--accent)">${escapeHtml(r.tool)}</span>`,
+            r.schemaChars != null ? fmtNum(r.schemaChars) : "—",
+            fmtNum(r.calls),
+            fmtNum(r.sessions),
+            r.errors > 0 ? `<span style="color:var(--red)">${fmtNum(r.errors)}</span>` : "0",
+            r.paidChars != null ? fmtNum(r.paidChars) : "—",
+            r.charsPerCall != null ? fmtNum(r.charsPerCall) : r.calls > 0 ? "∞" : "never called",
+          ]),
+          ["", "num", "num", "num", "num", "num", "num"],
+        );
+        drawContextChart("context-chart", s.targets);
+      }
+
+      function drawContextChart(canvasId, targets) {
+        if (!chartReady || typeof Chart === "undefined" || !targets || targets.length === 0) return;
+        const ctx = ensureChart(canvasId);
+        if (!ctx) return;
+        const palette = PALETTE();
+        charts[canvasId] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: targets.map((t) => t.target),
+            datasets: [
+              {
+                label: "Tool schema",
+                data: targets.map((t) => t.toolSchemaChars),
+                backgroundColor: palette[0] + "8c",
+                borderColor: palette[0],
+                borderWidth: 1,
+              },
+              {
+                label: "System prompt",
+                data: targets.map((t) => t.systemPromptChars),
+                backgroundColor: palette[1] + "8c",
+                borderColor: palette[1],
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            ...yTitle(baseChartOpts(), "characters"),
+            indexAxis: "y",
+            scales: {
+              x: { stacked: true },
+              y: { stacked: true },
+            },
+          },
+        });
       }
 
       function renderBehavior() {

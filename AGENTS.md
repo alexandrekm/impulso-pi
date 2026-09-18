@@ -236,7 +236,18 @@ per-session search-tool usage from `tool_calls`, sessions split at the
 zvec-enablement cutoff (`?since=` epoch-ms or ISO date; default 2026-09-09,
 the home-index fix) and compared on turns, wall-clock (first→last user
 message, 12h cap), tokens, and zvec vs grep/find call mix, plus a per-day
-adoption chart — answers "did investigation time drop after zvec worked".
+adoption chart — answers "did investigation time drop after zvec worked". The
+`/api/stats/context` route feeds the **Context Budget** panel: it reads the
+first-call measurement record (`context-measurement.json`, see
+`extensions/context-measure/`; `npm run measure:context -- --record` writes
+the repo copy AND drops a machine-local copy next to the stats DB where
+this route finds it), shows per-target first-call cost (tool schema vs
+system prompt chars, ×stock multiplier), and joins per-tool schema chars
+with actual `tool_calls` usage: paid = schema × requests in range,
+per-call = paid ÷ calls — the hide-it-or-keep-it ranking (current winner:
+`subagent`, 21k schema chars, single-digit monthly calls). Join target:
+the profile's own record row, else `base` ("all" view);
+`PI_STATS_CONTEXT_RECORD` overrides the record path.
 A schema-version sentinel in `meta`
 resets file offsets once on upgrade so the new tables backfill from existing
 sessions.
@@ -248,6 +259,12 @@ up the freshly-built binary — without this, KeepAlive keeps the old process
 alive forever and the dashboard serves stale assets after an upgrade. In
 profiles mode it re-runs `service install` first to re-bake
 `PI_STATS_PROFILES_DIR` into the plist/unit, then restarts.
+
+The tools section hits the npm registry (real downloads, no overall
+timeout), so CI's install.sh smoke test sets `IMPULSO_SKIP_TOOLS=1` to skip
+it — a registry stall there hung the smoke-test step past the job's 10m
+cap twice (impulso-pi#100). The smoke test verifies file-sync logic, not
+tool installs, so skipping removes the step's entire network surface.
 
 ## Non-clobber sync
 
@@ -301,6 +318,26 @@ versioned).
   1h). Default `short` leaves the env untouched and preserves/restores any
   shell-provided value. Toggled in `/settings` → Providers → Prompt
   caching (a `config` feature); `/reload` applies.
+- `extensions/context-measure/` — **first-call context recorder**: a `measure`
+  provider (`measure/measure-model`) whose `streamSimple` receives pi's
+  fully composed request (`{ systemPrompt, messages, tools }`), appends a
+  per-request summary (system-prompt chars, per-tool schema chars, tool
+  count) to `<configDir>/context-measure.jsonl`, and answers locally with
+  `ok` — no network, no local server (the pi-native replacement for
+  SpecPi's synthetic-HTTP-provider method; pi aliases `@earendil-works/pi-ai`
+  imports in extensions to its bundled copy, so the provider IS the
+  endpoint). Zero request footprint: registers no tools, no prompt text, so
+  it ships `core` everywhere — live sessions can switch to
+  `measure/measure-model` any moment (records land in the jsonl), and
+  subagent children are captured too. `npm run measure:context` measures
+  stock vs. work/personal/base and writes the committed record
+  `investigation/context-measurement.json` (counts pi's intermediate
+  request representation, NOT the wire format — comparable across profiles
+  and time, not to wire-format charts). CI `npm run check:context-record`
+  fails when a PR changes profiles.jsonc / extensions/ / skills/ without
+  updating the record: the context-budget ratchet. Current numbers: stock
+  5.4k chars / 4 tools; profiles ~55-58k / 16-17 tools (~10.8x stock; the
+  `subagent` tool alone is 21k).
 - `npm:@narumitw/pi-btw` — `/btw` side-thread command: ask context-aware
   questions in a separate thread without derailing the main conversation
   (`/btw <question>` starts one; `/btw` opens a manager; `Ctrl+R` brings

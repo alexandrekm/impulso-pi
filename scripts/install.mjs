@@ -1054,6 +1054,15 @@ export function installStandaloneTools(profiles) {
   const entries = Object.entries(tools);
   const freshlyInstalled = [];
   if (entries.length === 0) return freshlyInstalled;
+  // CI sets this for the install.sh smoke test: the tools section hits the
+  // npm registry (real downloads, no overall timeout), which is orthogonal
+  // to what the smoke test verifies (file-sync logic) and is the one part
+  // of the step that can stall past the job's timeout cap on a slow
+  // runner network. Skip it there.
+  if (process.env.IMPULSO_SKIP_TOOLS) {
+    console.error("  standalone tools: IMPULSO_SKIP_TOOLS set, skipping");
+    return freshlyInstalled;
+  }
   if (!hasCmd("npm")) {
     console.error("  standalone tools: 'npm' not found on PATH, skipping");
     return freshlyInstalled;

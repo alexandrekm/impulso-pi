@@ -1632,6 +1632,50 @@ export function getToolStats(cutoff?: number): ToolUsageStats[] {
   return rows.map(rowToToolUsage);
 }
 
+/** Per-tool call counts for the context-budget join (calls + sessions + errors). */
+export function getToolCallCounts(
+  cutoff?: number,
+): Array<{ tool: string; calls: number; sessions: number; errors: number }> {
+  if (!db) return [];
+  const hasCutoff = cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT t.tool_name AS tool,
+			COUNT(*) AS calls,
+			COUNT(DISTINCT t.session_file) AS sessions,
+			COALESCE(SUM(CASE WHEN t.is_error = 1 THEN 1 ELSE 0 END), 0) AS errors
+		FROM tool_calls t
+		${hasCutoff ? "WHERE t.timestamp >= ?" : ""}
+		GROUP BY t.tool_name
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(cutoff)
+    : db.prepare(sql).all()) as unknown as Array<{
+    tool: string;
+    calls: number;
+    sessions: number;
+    errors: number;
+  }>;
+  return rows.map((r) => ({
+    tool: r.tool,
+    calls: r.calls,
+    sessions: r.sessions,
+    errors: r.errors ?? 0,
+  }));
+}
+
+/** Assistant requests in range — the multiplier behind paidChars. */
+export function getRequestCount(cutoff?: number): number {
+  if (!db) return 0;
+  if (cutoff !== undefined && cutoff > 0) {
+    return (
+      db.prepare("SELECT COUNT(*) AS n FROM messages WHERE timestamp >= ?").get(cutoff) as {
+        n: number;
+      }
+    ).n;
+  }
+  return (db.prepare("SELECT COUNT(*) AS n FROM messages").get() as { n: number }).n;
+}
+
 export function getToolStatsByModel(cutoff?: number): ToolModelStats[] {
   if (!db) return [];
   const hasCutoff = cutoff !== undefined && cutoff > 0;

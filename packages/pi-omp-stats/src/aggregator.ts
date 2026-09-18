@@ -13,6 +13,8 @@
 
 import * as fs from "node:fs/promises";
 import type { Stats } from "node:fs";
+import { readFileSync } from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import {
   getBehaviorByModel,
@@ -50,6 +52,8 @@ import {
   getStatsByModel,
   getStatsByProvider,
   getToolStats,
+  getToolCallCounts,
+  getRequestCount,
   getToolStatsByModel,
   getToolTimeSeries,
   getSearchCallRows,
@@ -86,10 +90,14 @@ import {
   readSessionFolder,
   resolveSessionsDir,
   resolveSessionsSources,
+  resolveStatsDir,
   type SessionsSource,
 } from "./parser.js";
 import type {
   BehaviorDashboardStats,
+  ContextBudgetStats,
+  ContextBudgetTarget,
+  ContextBudgetToolRow,
   DashboardStats,
   ProviderDashboardStats,
   SearchAdoptionPeriod,
@@ -649,6 +657,145 @@ export async function getSearchAdoptionStats(
       ...s,
       period: s.startTs < since ? ("before" as const) : ("after" as const),
     })),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Context budget: first-call measurement record + tool_calls usage join      */
+/* -------------------------------------------------------------------------- */
+
+/** The context-measurement record the dashboard reads (PI_STATS_CONTEXT_RECORD
+ *  overrides; default sits next to the stats DB, where
+ *  `npm run measure:context -- --record` copies it). */
+export function getContextRecordPath(): string {
+  const override = process.env.PI_STATS_CONTEXT_RECORD?.trim();
+  if (override) {
+    return override.startsWith("~/") ? path.join(os.homedir(), override.slice(2)) : override;
+  }
+  return path.join(resolveStatsDir(), "context-measurement.json");
+}
+
+interface RawRecordRow {
+  target: string;
+  record: {
+    at: string;
+    toolCount: number;
+    systemPromptChars: number;
+    toolSchemaChars: number;
+    contextChars: number;
+    toolNames: string[];
+    toolChars: Record<string, number>;
+  };
+}
+
+function readContextRecord(): {
+  measuredAt: string;
+  piVersion: string | null;
+  method: string;
+  targets: RawRecordRow[];
+} | null {
+  try {
+    const parsed = JSON.parse(readFileSync(getContextRecordPath(), "utf8")) as {
+      measuredAt?: string;
+      piVersion?: string;
+      method?: string;
+      targets?: RawRecordRow[];
+    };
+    if (!Array.isArray(parsed.targets) || parsed.targets.length === 0) return null;
+    return {
+      measuredAt: parsed.measuredAt ?? "",
+      piVersion: parsed.piVersion ?? null,
+      method: parsed.method ?? "",
+      targets: parsed.targets,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Record row for the usage join: the profile's own row when present, else
+ *  "base" (closest to "everywhere"), else the first row. */
+function pickJoinTarget(
+  profile: string | null | undefined,
+  rows: RawRecordRow[],
+): RawRecordRow | null {
+  const byId = (id: string) => rows.find((row) => row.target === id) ?? null;
+  if (profile && profile !== "all" && profile !== "default" && byId(profile)) return byId(profile);
+  return byId("base") ?? rows[0];
+}
+
+function toBudgetTarget(row: RawRecordRow, stock: RawRecordRow | null): ContextBudgetTarget {
+  const rec = row.record;
+  const stockChars = stock ? stock.record.contextChars : null;
+  return {
+    target: row.target,
+    at: rec.at,
+    toolCount: rec.toolCount,
+    systemPromptChars: rec.systemPromptChars,
+    toolSchemaChars: rec.toolSchemaChars,
+    contextChars: rec.contextChars,
+    toolNames: rec.toolNames,
+    toolChars: rec.toolChars,
+    multipleOfStock:
+      stockChars && stockChars > 0 ? Math.round((rec.contextChars / stockChars) * 10) / 10 : null,
+  };
+}
+
+/** First-call context cost per profile, joined with actual tool usage: the
+ *  chars-per-use ranking that tells you which tools to hide or retire. */
+export async function getContextBudgetStats(
+  range?: string | null,
+  profile?: string | null,
+): Promise<ContextBudgetStats> {
+  await initDb();
+  const { cutoff } = getTimeRangeConfig(range);
+  const requests = getRequestCount(cutoff ?? undefined);
+  const record = readContextRecord();
+  if (!record) {
+    return {
+      measuredAt: null,
+      piVersion: null,
+      joinTarget: null,
+      requestsInPeriod: requests,
+      targets: [],
+      perTool: [],
+      method: "",
+    };
+  }
+  const stockRow = record.targets.find((row) => row.target === "stock") ?? null;
+  const join = pickJoinTarget(profile, record.targets);
+  const counts = new Map(getToolCallCounts(cutoff ?? undefined).map((row) => [row.tool, row]));
+  const tools = new Set<string>([
+    ...(join ? Object.keys(join.record.toolChars) : []),
+    ...counts.keys(),
+  ]);
+  const perTool: ContextBudgetToolRow[] = [...tools].map((tool) => {
+    const schemaChars = join ? (join.record.toolChars[tool] ?? null) : null;
+    const usage = counts.get(tool);
+    const paidChars = schemaChars != null ? schemaChars * requests : null;
+    const calls = usage?.calls ?? 0;
+    return {
+      tool,
+      schemaChars,
+      calls,
+      sessions: usage?.sessions ?? 0,
+      errors: usage?.errors ?? 0,
+      paidChars,
+      charsPerCall: paidChars != null && calls > 0 ? Math.round(paidChars / calls) : null,
+    };
+  });
+  perTool.sort(
+    (a, b) =>
+      (b.paidChars ?? 0) - (a.paidChars ?? 0) || b.calls - a.calls || a.tool.localeCompare(b.tool),
+  );
+  return {
+    measuredAt: record.measuredAt || null,
+    piVersion: record.piVersion,
+    joinTarget: join ? join.target : null,
+    requestsInPeriod: requests,
+    targets: record.targets.map((row) => toBudgetTarget(row, stockRow)),
+    perTool,
+    method: record.method,
   };
 }
 
