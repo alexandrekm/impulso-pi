@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "measuredAt": "2026-09-18T21:07:16.763Z",
-  "piVersion": "0.85.1",
+  "measuredAt": "2026-09-18T21:34:21.724Z",
+  "piVersion": "0.84.1",
   "nodeVersion": "v26.7.0",
   "platform": "darwin",
   "method": "First composed request captured by the context-measure recording provider (extensions/context-measure): pi booted headless (RPC, --no-session) against the real agent dir, one prompt to measure/measure-model. Counts are characters of pi's intermediate request representation (JSON.stringify of the composed system prompt, tool-definition array, and messages) — not a wire format, so not comparable to wire-format measurements, but comparable across profiles and time. contextChars = systemPromptChars + toolSchemaChars. Paths/dates inside prompts make counts vary slightly per machine. Not tokens, cost, or quality.",
@@ -9,10 +9,10 @@
     {
       "target": "stock",
       "record": {
-        "at": "2026-09-18T21:07:11.506Z",
+        "at": "2026-09-18T21:34:13.936Z",
         "requestId": 1,
         "model": "measure-model",
-        "systemPromptChars": 2616,
+        "systemPromptChars": 2763,
         "messageCount": 1,
         "messageChars": 95,
         "toolCount": 4,
@@ -23,19 +23,19 @@
           "write"
         ],
         "toolChars": {
-          "bash": 527,
+          "bash": 526,
           "edit": 1163,
           "read": 668,
           "write": 415
         },
-        "toolSchemaChars": 2778,
-        "contextChars": 5394
+        "toolSchemaChars": 2777,
+        "contextChars": 5540
       }
     },
     {
       "target": "work",
       "record": {
-        "at": "2026-09-18T21:07:13.181Z",
+        "at": "2026-09-18T21:34:16.087Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 10848,
@@ -63,7 +63,7 @@
         ],
         "toolChars": {
           "ask_user_question": 3789,
-          "bash": 527,
+          "bash": 526,
           "bg_wait": 4299,
           "edit": 4506,
           "find": 1666,
@@ -80,14 +80,14 @@
           "zvec_search": 2394,
           "zvec_status": 461
         },
-        "toolSchemaChars": 48178,
-        "contextChars": 59026
+        "toolSchemaChars": 48177,
+        "contextChars": 59025
       }
     },
     {
       "target": "personal",
       "record": {
-        "at": "2026-09-18T21:07:14.927Z",
+        "at": "2026-09-18T21:34:18.863Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 9191,
@@ -114,7 +114,7 @@
         ],
         "toolChars": {
           "ask_user_question": 3789,
-          "bash": 527,
+          "bash": 526,
           "bg_wait": 4299,
           "edit": 4506,
           "find": 1666,
@@ -130,14 +130,14 @@
           "zvec_search": 2394,
           "zvec_status": 461
         },
-        "toolSchemaChars": 47123,
-        "contextChars": 56314
+        "toolSchemaChars": 47122,
+        "contextChars": 56313
       }
     },
     {
       "target": "base",
       "record": {
-        "at": "2026-09-18T21:07:16.729Z",
+        "at": "2026-09-18T21:34:21.690Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 10481,
@@ -165,7 +165,7 @@
         ],
         "toolChars": {
           "ask_user_question": 3789,
-          "bash": 527,
+          "bash": 526,
           "bg_wait": 4299,
           "edit": 4506,
           "find": 1666,
@@ -182,8 +182,8 @@
           "zvec_search": 2394,
           "zvec_status": 461
         },
-        "toolSchemaChars": 48178,
-        "contextChars": 58659
+        "toolSchemaChars": 48177,
+        "contextChars": 58658
       }
     }
   ]

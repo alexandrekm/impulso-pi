@@ -44,6 +44,23 @@
         "label": "Fireworks US",
         "cost": { "input": 3.3, "output": 16.5, "cacheRead": 0.33 }
       }
+    ],
+    "deepseek/deepseek-v4.1-flash": [
+      {
+        "tag": "fireworks",
+        "label": "Fireworks",
+        "cost": { "input": 0.22, "output": 0.66, "cacheRead": 0 }
+      },
+      {
+        "tag": "baseten/fp8",
+        "label": "BaseTen fp8",
+        "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0 }
+      },
+      {
+        "tag": "modal",
+        "label": "Modal",
+        "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0 }
+      }
     ]
   }
 }
