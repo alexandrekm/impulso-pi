@@ -293,6 +293,15 @@ export const FEATURES: Feature[] = [
       "Pin each session to ONE OpenRouter backend, picked randomly at session start from <configDir>/openrouter-session-pin.json (GLM-5.3 / Kimi K3 candidate lists) and injected per request. Keeps per-session prompt caches warm while spreading concurrent sessions across backends instead of rate-limiting one. Pins persist by session id, so /reload and resume reuse the backend; a request after an idle gap (idleRerollMinutes, default 10 — the backend cache has expired by then anyway) re-rolls for free. /orpin lists pins, /orpin reroll re-picks. /reload applies.",
     kind: "local",
   },
+  {
+    id: "openrouter-cost",
+    tab: "providers",
+    group: "OpenRouter",
+    label: "Real-cost accrual",
+    description:
+      "Rewrite every assistant message's usage.cost with OpenRouter's ACTUAL billing: the x-generation-id response header is captured per request, and the Generation API (which reports the real total_cost, including per-backend cache pricing) is polled at message_end within a ~4.5s budget. Static cost tables (models.json overrides, openrouter-session-pin candidate costs) remain as the fallback when the record is not ready in time. No-op without OpenRouter credentials. Adds up to a few seconds per model response while the record appears. /reload applies.",
+    kind: "local",
+  },
 
   // ── Tools & Safety ─────────────────────────────────────────────────────
   {

@@ -408,7 +408,21 @@
       "tags": ["work"],
       "dest": "openrouter-session-pin.json",
     },
-
+    // openrouter-cost — real-cost accrual: rewrite each assistant message's
+    // usage.cost with OpenRouter's actual billing (Generation API), captured
+    // via the x-generation-id response header. Static cost tables (models.json,
+    // openrouter-session-pin candidate costs) stay as the fallback when the
+    // record doesn't appear within the bounded poll window. Core: harmless
+    // no-op on profiles without OpenRouter credentials. /settings →
+    // Providers → OpenRouter. /reload applies.
+    "extensions/openrouter-cost/index.ts": {
+      "tags": ["core"],
+      "dest": "extensions/openrouter-cost/index.ts",
+    },
+    "extensions/openrouter-cost/openrouter-cost.ts": {
+      "tags": ["core"],
+      "dest": "extensions/openrouter-cost/openrouter-cost.ts",
+    },
     // Cursor models (Claude/GPT/Gemini/Grok/Composer) as a pi provider via
     // @rahularya01/pi-cursor. OAuth login (/login cursor), live GetUsableModels
     // discovery, native Connect/protobuf streaming over HTTP/2, and a tool

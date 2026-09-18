@@ -468,6 +468,25 @@ versioned).
   re-picks. Also patches the live model's name/cost so the footer shows the
   actual backend. Toggled in `/settings` → Providers → OpenRouter.
 
+- `extensions/openrouter-cost/` — **real-cost accrual for OpenRouter** (core).
+  pi computes per-request cost from the model catalog's static rates
+  (`calculateCost` in `packages/ai/src/models.ts`) and discards the real
+  amount OpenRouter reports — which depends on the serving backend and its
+  cache pricing (verified 2026-09: OpenRouter's endpoints API reports
+  `cache_read: 0` for backends that bill $0.007-0.03/Mtok). This extension
+  captures the `x-generation-id` response header via
+  `after_provider_response`, then at `message_end` polls the Generation API
+  (`GET /api/v1/generation?id=…`, record appears ~2-5s after the response)
+  and rewrites the message's `usage.cost` with the actual `total_cost`,
+  distributed across pi's cost buckets proportionally by token share — the
+  same pattern pi-provider-litellm uses for `x-litellm-response-cost`.
+  Bounded poll (4 × 1.5s, early-exit); on timeout/error the message keeps
+  pi's locally-calculated cost, so models.json and pin-config cost tables
+  remain as fallbacks. No-op without OpenRouter credentials in `auth.json`.
+  Trade-off: up to ~5s added per model response while the record appears
+  (pi awaits message_end handlers). Toggled in `/settings` → Providers →
+  OpenRouter. /reload applies.
+
 - `extensions/commit-guard/` — **commitlint enforcement on every `git commit`**
   (work-only). Hooks the bash `tool_call` (same pattern as command-guard),
   parses the commit message, blocks `--no-verify`/`-n`, and validates the
