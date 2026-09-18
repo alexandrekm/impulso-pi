@@ -424,13 +424,18 @@ versioned).
   submodule content index-free. A short global
   search-routing nudge ships as `config/APPEND_SYSTEM.md` (pi appends
   `<agentDir>/APPEND_SYSTEM.md` to every system prompt) because work repos'
-  AGENTS.md files say nothing about zvec. Orca worktrees of plain repos:
-  autoIndex builds the index at the first session start; copying the
-  parent repo's `.zvec-grep` into a new worktree (then rewriting
-  `manifest.json` rootPaths to the worktree path) gives turn-1 search —
-  zg tracks files by absolute path, so the copied index can't be
-  incrementally updated, but it is immediately searchable and autoIndex
-  rebuilds it in the background.
+  AGENTS.md files say nothing about zvec. Worktrees: autoIndex SEEDS a fresh
+  worktree at the first session start — it copies the main checkout's base
+  `.zvec-grep` in, REWRITES `manifest.json` rootPaths to the worktree, and
+  updates it in the background (turn-1 search from the seed, correct
+  content from the update; never writes back to the main). For umbrella
+  repos the bases must live in the SUBMODULE checkouts of the main
+  (`<main>/<submodule>/.zvec-grep`), never at the superproject root —
+  that's what seeds each submodule inside a worktree, and the user's
+  after-pull reindex command targets those. Do NOT hand-copy
+  `.zvec-grep` into worktrees (e.g. from a setup script): without the
+  rootPaths rewrite the copy is a frozen snapshot of the main, and an
+  umbrella-root copy would shadow every submodule repo in the worktree.
 
 - `extensions/impulso-settings/` — `/impulso` AND `/settings` settings page:
   an OMP-style tabbed TUI (built on `@earendil-works/pi-tui`) that lists every
