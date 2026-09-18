@@ -54,9 +54,12 @@ export function wireOpenRouterCost(
   const apiFor = (): { api: GenerationApi; id: string } | undefined => {
     const id = pending.get(PROVIDER);
     if (!id) return undefined;
+    // An injected api (test seam) carries its own credentials; only the
+    // real client needs auth.json — so the key lookup is skipped for it.
+    if (deps.api) return { api: deps.api, id };
     const key = readOpenRouterKey(configDir);
     if (!key) return undefined;
-    return { api: deps.api ?? makeGenerationApi(key, fetch), id };
+    return { api: makeGenerationApi(key, fetch), id };
   };
 
   pi.on("after_provider_response", (event: any, ctx: any) => {
