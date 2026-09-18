@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "measuredAt": "2026-09-18T17:36:17.998Z",
+  "measuredAt": "2026-09-18T21:07:16.763Z",
   "piVersion": "0.85.1",
   "nodeVersion": "v26.7.0",
   "platform": "darwin",
@@ -9,7 +9,7 @@
     {
       "target": "stock",
       "record": {
-        "at": "2026-09-18T17:36:11.128Z",
+        "at": "2026-09-18T21:07:11.506Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 2616,
@@ -35,10 +35,10 @@
     {
       "target": "work",
       "record": {
-        "at": "2026-09-18T17:36:13.725Z",
+        "at": "2026-09-18T21:07:13.181Z",
         "requestId": 1,
         "model": "measure-model",
-        "systemPromptChars": 10029,
+        "systemPromptChars": 10848,
         "messageCount": 1,
         "messageChars": 95,
         "toolCount": 17,
@@ -77,20 +77,20 @@
           "websearch": 1900,
           "write": 415,
           "zvec_index": 1466,
-          "zvec_search": 2175,
+          "zvec_search": 2394,
           "zvec_status": 461
         },
-        "toolSchemaChars": 47959,
-        "contextChars": 57988
+        "toolSchemaChars": 48178,
+        "contextChars": 59026
       }
     },
     {
       "target": "personal",
       "record": {
-        "at": "2026-09-18T17:36:15.893Z",
+        "at": "2026-09-18T21:07:14.927Z",
         "requestId": 1,
         "model": "measure-model",
-        "systemPromptChars": 8372,
+        "systemPromptChars": 9191,
         "messageCount": 1,
         "messageChars": 95,
         "toolCount": 16,
@@ -127,20 +127,20 @@
           "websearch": 1900,
           "write": 415,
           "zvec_index": 1466,
-          "zvec_search": 2175,
+          "zvec_search": 2394,
           "zvec_status": 461
         },
-        "toolSchemaChars": 46904,
-        "contextChars": 55276
+        "toolSchemaChars": 47123,
+        "contextChars": 56314
       }
     },
     {
       "target": "base",
       "record": {
-        "at": "2026-09-18T17:36:17.964Z",
+        "at": "2026-09-18T21:07:16.729Z",
         "requestId": 1,
         "model": "measure-model",
-        "systemPromptChars": 9662,
+        "systemPromptChars": 10481,
         "messageCount": 1,
         "messageChars": 95,
         "toolCount": 17,
@@ -169,7 +169,7 @@
           "bg_wait": 4299,
           "edit": 4506,
           "find": 1666,
-          "grep": 1487,
+          "grep": 1494,
           "read": 1346,
           "recall": 604,
           "search_docs": 1054,
@@ -179,11 +179,11 @@
           "websearch": 1900,
           "write": 415,
           "zvec_index": 1466,
-          "zvec_search": 2175,
+          "zvec_search": 2394,
           "zvec_status": 461
         },
-        "toolSchemaChars": 47952,
-        "contextChars": 57614
+        "toolSchemaChars": 48178,
+        "contextChars": 58659
       }
     }
   ]

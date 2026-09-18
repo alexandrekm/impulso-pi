@@ -186,6 +186,24 @@ deliberately different semantics:
   features in `features.ts`: install.sh never resets them (it only fills the
   two compaction defaults when absent), so `/settings` toggles persist across
   syncs. Keys removed from `settingsDefaults` are left as-is (non-clobber).
+- **`profiles.profiles.<name>.settingsDefaults` (PROFILE-LAYERED):** a
+  profile entry may declare its own DEFAULTS, merged **over** the global ones
+  for that target only (plain objects deep-merge leaf-by-leaf; scalars and
+  arrays replace the global value wholesale — a model shortlist is a whole
+  list, not a union). `--base` gets the global defaults only. This is where
+  the work model seed lives (`defaultProvider`/`defaultModel`/
+  `enabledModels`): the OpenRouter GLM/Kimi pair plus the anthropic claude
+  shortlist (sonnet/opus-5, fable-5-1).
+- **`profiles.machines.<variant>.profileDefaults` (MACHINE-LAYERED):** seeds
+  that are a property of the **machine**, not the profile. The personal
+  profile runs on both machines — on the work laptop it uses the same
+  models as work; on the personal machine it uses the LiteLLM proxy
+  (`litellm/gpt-5.6-*`, `litellm/deepseek-flash` — explicit `litellm/`
+  prefixes so OpenRouter's lookalike `openai/gpt-5.6-*` ids never match).
+  install.sh picks the variant from the `IS_WORK` env var (`true` →
+  `machines.work`, anything else → `machines.personal`) and layers its
+  per-profile defaults **over** the profile layer; `--base` is never
+  machine-seeded. Order: global → profile → machine (later wins).
 
 ### Global vs. per-profile
 

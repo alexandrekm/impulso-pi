@@ -22,24 +22,15 @@
   // extension-managed namespaces on fresh machines without clobbering
   // per-user tuning. Keys removed here are left as-is (non-clobber).
   "settingsDefaults": {
-    // Model seed — fill-only, NEVER overwritten once present. Fresh machines
-    // get this starting point; local edits to settings.json (default model,
-    // Ctrl+P cycle shortlist) survive every sync. To change your setup, edit
-    // the profile's settings.json directly (or via pi's /model + Ctrl+P);
-    // edit these lines only to change what NEW installs start with.
+    // Model seed — MOVED out of the global defaults (a global seed landed
+    // the work OpenRouter shortlist on every target). Profiles declare their
+    // own seeds in profiles.profiles.<name>.settingsDefaults; anything that
+    // is a property of the MACHINE, not the profile, goes in "machines"
+    // below (the personal profile runs on both machines).
     //   defaultProvider/defaultModel — the session's starting model.
     //   enabledModels — Ctrl+P model-cycle shortlist (--models format: exact
     //     ids or globs, optional :thinking suffix; matched against
-    //     provider/id or bare id). Order = cycle order. :batch variants are
-    //     separate ids and are not matched by the exact forms below.
-    "defaultProvider": "openrouter",
-    "defaultModel": "z-ai/glm-5.3",
-    "enabledModels": [
-      "z-ai/glm-5.3",
-      "moonshotai/kimi-k3",
-      "anthropic/claude-sonnet-5",
-      "anthropic/claude-opus-5",
-    ],
+    //     provider/id or bare id). Order = cycle order.
     // pi-observational-memory: by default the proactive compaction trigger
     // fires at a fixed 81k-token threshold (calibrated mode), which compacts
     // far too often on large-context models. Ratio mode + 0.6 makes it fire
@@ -84,8 +75,75 @@
   },
 
   "profiles": {
-    "work": { "tags": ["work"] },
+    "work": {
+      "tags": ["work"],
+      // Work model seed — fill-only, layered over the global settingsDefaults.
+      // Fresh machines start with the OpenRouter GLM/Kimi pair (pinned per
+      // session by openrouter-session-pin) plus the anthropic claude
+      // shortlist (latest opus + latest fable). Local edits to settings.json
+      // survive every sync.
+      "settingsDefaults": {
+        "defaultProvider": "openrouter",
+        "defaultModel": "z-ai/glm-5.3",
+        "enabledModels": [
+          "openrouter/z-ai/glm-5.3",
+          "openrouter/moonshotai/kimi-k3",
+          "anthropic/claude-sonnet-5",
+          "anthropic/claude-opus-5",
+          "anthropic/claude-fable-5-1",
+        ],
+      },
+    },
+    // Personal profile — no model seed here: the personal profile runs on
+    // BOTH machines and its models are a property of the machine. See the
+    // "machines" block below (selected by the IS_WORK env var).
     "personal": { "tags": ["personal"] },
+  },
+
+  // ---- machine variants --------------------------------------------------
+  // The personal profile runs on BOTH machines, but its model set is a
+  // property of the machine, not the profile: on the work laptop it uses
+  // the same OpenRouter/anthropic models as the work profile; on the
+  // personal machine it uses the self-hosted LiteLLM proxy. install.sh
+  // picks the variant from the IS_WORK env var (exported machine-wide on
+  // the work laptop, unset/false on the personal one) and layers the
+  // matching profileDefaults OVER the per-profile settingsDefaults.
+  // --base is never machine-seeded.
+  "machines": {
+    // IS_WORK=true — the work laptop.
+    "work": {
+      "profileDefaults": {
+        "personal": {
+          "defaultProvider": "openrouter",
+          "defaultModel": "z-ai/glm-5.3",
+          "enabledModels": [
+            "openrouter/z-ai/glm-5.3",
+            "openrouter/moonshotai/kimi-k3",
+            "anthropic/claude-sonnet-5",
+            "anthropic/claude-opus-5",
+            "anthropic/claude-fable-5-1",
+          ],
+        },
+      },
+    },
+    // IS_WORK unset/false — the personal machine. LiteLLM proxy models
+    // (pi-provider-litellm registers them under the "litellm" provider);
+    // explicit litellm/ prefixes keep the shortlist off OpenRouter's
+    // lookalike openai/gpt-5.6-* ids.
+    "personal": {
+      "profileDefaults": {
+        "personal": {
+          "defaultProvider": "litellm",
+          "defaultModel": "gpt-5.6-sol",
+          "enabledModels": [
+            "litellm/gpt-5.6-sol",
+            "litellm/gpt-5.6-luna",
+            "litellm/gpt-5.6-terra",
+            "litellm/deepseek-flash",
+          ],
+        },
+      },
+    },
   },
 
   "resources": {

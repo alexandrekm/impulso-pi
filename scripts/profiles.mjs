@@ -206,15 +206,50 @@ export function validateProfiles(profiles, repoDir) {
         if (!tagSet.has(t)) errors.push(`profile "${name}" has unknown tag "${t}"`);
         if (t === "core") errors.push(`profile "${name}" must not list "core" (it is implicit)`);
       }
+      // Per-profile settingsDefaults (layered over the global ones at
+      // install time): same shape rules as the global settingsDefaults.
+      const pd = p?.settingsDefaults;
+      if (pd !== undefined) {
+        if (typeof pd !== "object" || pd === null || Array.isArray(pd)) {
+          errors.push(`profile "${name}" .settingsDefaults must be an object`);
+        } else if ("packages" in pd) {
+          errors.push(
+            `profile "${name}" .settingsDefaults must not contain "packages" (use npm: resources instead)`,
+          );
+        }
+      }
     }
   }
 
-  const settings = profiles.settings;
-  if (settings !== undefined) {
-    if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
-      errors.push('"settings" must be an object');
-    } else if ("packages" in settings) {
-      errors.push('"settings" must not contain "packages" (use npm: resources instead)');
+  // machines — per-machine default overlays, selected by the IS_WORK env
+  // var. Each variant declares profileDefaults keyed by profile name, with
+  // the same shape rules as the global settingsDefaults.
+  const machines = profiles.machines;
+  if (machines !== undefined) {
+    if (typeof machines !== "object" || machines === null || Array.isArray(machines)) {
+      errors.push('"machines" must be an object keyed by machine variant');
+    } else {
+      for (const [variant, m] of Object.entries(machines)) {
+        const pd = m?.profileDefaults;
+        if (typeof pd !== "object" || pd === null || Array.isArray(pd)) {
+          errors.push(`machines."${variant}" .profileDefaults must be an object`);
+          continue;
+        }
+        for (const [profileName, d] of Object.entries(pd)) {
+          if (!(profileName in (profiles.profiles || {}))) {
+            errors.push(`machines."${variant}" seeds unknown profile "${profileName}"`);
+          }
+          if (typeof d !== "object" || d === null || Array.isArray(d)) {
+            errors.push(
+              `machines."${variant}" .profileDefaults."${profileName}" must be an object`,
+            );
+          } else if ("packages" in d) {
+            errors.push(
+              `machines."${variant}" .profileDefaults."${profileName}" must not contain "packages"`,
+            );
+          }
+        }
+      }
     }
   }
 

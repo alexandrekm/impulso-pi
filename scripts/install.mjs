@@ -785,12 +785,27 @@ function migrateLegacyCreatePrPersonal(t) {
 //   profiles.settingsDefaults — DEFAULTS. Deep fill-only: a key (and its
 //                              nested sub-keys) is written ONLY when absent
 //                              in settings.json, so user overrides made via
-//                              /settings survive sync. Used to seed safe
-//                              initial values for extension-managed namespaces
-//                              (e.g. observational-memory compaction
-//                              thresholds) on fresh machines without clobbering
-//                              per-user tuning. Keys removed from profiles.jsonc
-//                              are left as-is (non-clobber).
+//                              /settings survive sync. Used to seed safe initial
+//                              values for extension-managed namespaces (e.g.
+//                              observational-memory compaction thresholds) on
+//                              fresh machines without clobbering per-user
+//                              tuning. Keys removed from profiles.jsonc are
+//                              left as-is (non-clobber).
+//
+//   profiles.profiles.<name>.settingsDefaults — PROFILE-LAYERED defaults.
+//                              A profile entry may declare its own defaults,
+//                              merged OVER the global ones (profile wins:
+//                              plain objects deep-merge leaf-by-leaf, scalars and
+//                              arrays replace the global value wholesale).
+//
+//   profiles.machines.<variant>.profileDefaults — MACHINE-LAYERED defaults.
+//                              Seeds that are a property of the MACHINE, not
+//                              the profile (the personal profile runs on
+//                              both machines but uses different models on
+//                              each). The variant is picked from the IS_WORK
+//                              env var (true → "work", else → "personal") and
+//                              its per-profile defaults merge OVER the
+//                              profile layer. --base is never machine-seeded.
 export function isPlainObject(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -816,9 +831,29 @@ export function fillSettingsDefaults(current, defaults) {
   return out;
 }
 
+// Layer a profile's own settingsDefaults over the global ones: plain-object
+// keys deep-merge leaf-by-leaf; scalars and arrays REPLACE the global value —
+// a profile's model shortlist is a whole list, not a union with the global one.
+export function mergeProfileDefaults(base, over) {
+  if (!isPlainObject(over)) return base;
+  if (!isPlainObject(base)) return over;
+  const out = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    out[k] = isPlainObject(v) && isPlainObject(base[k]) ? mergeProfileDefaults(base[k], v) : v;
+  }
+  return out;
+}
+
 export function doInstallSettings(t, profiles) {
   const settings = profiles.settings;
-  const defaults = profiles.settingsDefaults;
+  // Layering order (later wins): global settingsDefaults → per-profile
+  // settingsDefaults → machine-variant profileDefaults (IS_WORK).
+  // --base is never machine-seeded.
+  const profileDefaults = t.base ? undefined : profiles.profiles?.[t.name]?.settingsDefaults;
+  let defaults = mergeProfileDefaults(profiles.settingsDefaults, profileDefaults);
+  const machineVariant = profiles.machines?.[process.env.IS_WORK === "true" ? "work" : "personal"];
+  const machineDefaults = t.base ? undefined : machineVariant?.profileDefaults?.[t.name];
+  defaults = mergeProfileDefaults(defaults, machineDefaults);
   const hasManaged = settings && Object.keys(settings).length > 0;
   const hasDefaults = defaults && Object.keys(defaults).length > 0;
   if (!hasManaged && !hasDefaults) return;
