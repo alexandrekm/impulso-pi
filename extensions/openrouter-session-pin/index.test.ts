@@ -14,6 +14,7 @@ const moduleUrl = (name: string) => `./index.ts?case=${name}`;
 
 const MODEL = "z-ai/glm-5.3";
 const CONFIG = {
+  idleRerollMinutes: 10,
   models: {
     [MODEL]: [
       { tag: "a/1", label: "A" },
@@ -32,9 +33,9 @@ interface Harness {
   restore(): void;
 }
 
-function setup(disabled: boolean): Harness {
+function setup(disabled: boolean, config: unknown = CONFIG): Harness {
   const dir = mkdtempSync(join(tmpdir(), "orpin-test-"));
-  writeFileSync(join(dir, "openrouter-session-pin.json"), JSON.stringify(CONFIG));
+  writeFileSync(join(dir, "openrouter-session-pin.json"), JSON.stringify(config));
   if (disabled) {
     writeFileSync(
       join(dir, "impulso-settings.json"),
@@ -59,8 +60,8 @@ function setup(disabled: boolean): Harness {
 // resolves its config dir at import time — in real pi that's once per
 // process, so a cached test module would keep pointing at a deleted dir).
 let caseCounter = 0;
-async function makePi(disabled = false) {
-  const h = setup(disabled);
+async function makePi(disabled = false, config: unknown = CONFIG) {
+  const h = setup(disabled, config);
   const factory = (await import(`./index.ts?case=${disabled ? "off" : "on"}-${caseCounter++}`))
     .default;
   factory({
@@ -299,5 +300,91 @@ describe("openrouter-session-pin factory", () => {
       assert.ok(["a/1", "b/2"].includes(patched.provider.only[0]));
     }
     h.restore();
+  });
+
+  test("idle re-roll: a request after the idle gap moves to the other backend", async () => {
+    // 0.001 min = 60ms threshold — real sleeps, but tiny.
+    const h = await makePi(false, { ...CONFIG, idleRerollMinutes: 0.001 });
+    const hook = h.handlers.get("before_provider_request")!;
+    const ctx = { sessionManager: { getSessionId: () => "s-idle" }, ui: { notify: () => {} } };
+    const first = (await hook({ payload: { model: MODEL } }, ctx)) as any;
+    const touched = JSON.parse(
+      readFileSync(join(h.dir, "openrouter-session-pin-state.json"), "utf8"),
+    );
+    assert.ok(touched.sessions["s-idle"].lastRequestAt[MODEL] > 0);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const second = (await hook({ payload: { model: MODEL } }, ctx)) as any;
+    // Exclusion guarantees the re-roll actually moved.
+    assert.notEqual(second.provider.only[0], first.provider.only[0]);
+    const after = JSON.parse(
+      readFileSync(join(h.dir, "openrouter-session-pin-state.json"), "utf8"),
+    );
+    assert.equal(after.sessions["s-idle"].pins[MODEL], second.provider.only[0]);
+    h.restore();
+  });
+
+  test("idle re-roll disabled (idleRerollMinutes: 0) keeps the pin forever", async () => {
+    const h = await makePi(false, { ...CONFIG, idleRerollMinutes: 0 });
+    const hook = h.handlers.get("before_provider_request")!;
+    const ctx = { sessionManager: { getSessionId: () => "s-pinned" }, ui: { notify: () => {} } };
+    const first = (await hook({ payload: { model: MODEL } }, ctx)) as any;
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const second = (await hook({ payload: { model: MODEL } }, ctx)) as any;
+    assert.equal(second.provider.only[0], first.provider.only[0]);
+    h.restore();
+  });
+
+  test("a resumed idle session re-rolls; lastRequestAt beats assignment time", async () => {
+    const stale = Date.now() - 60 * 60_000; // 1h ago: past any cache TTL
+    const fresh = Date.now() - 1000;
+    const makeState = (lastRequestAt: number | null) => ({
+      sessions: {
+        "s-resume": {
+          pins: { [MODEL]: "b/2" },
+          updatedAt: stale, // assignment was an hour ago
+          ...(lastRequestAt === null ? {} : { lastRequestAt: { [MODEL]: lastRequestAt } }),
+        },
+      },
+    });
+
+    // Stale by lastRequestAt: the pin re-rolls off b/2.
+    const h1 = setup(false);
+    writeFileSync(
+      join(h1.dir, "openrouter-session-pin-state.json"),
+      JSON.stringify(makeState(stale)),
+    );
+    const f1 = (await import(moduleUrl("resume-stale"))).default;
+    const handlers1 = new Map<string, any>();
+    f1({
+      on: (n: string, fn: any) => handlers1.set(n, fn),
+      registerCommand: () => {},
+      events: { emit: () => {}, on: () => {} },
+    });
+    const rePatched = (await handlers1.get("before_provider_request")!(
+      { payload: { model: MODEL } },
+      { sessionManager: { getSessionId: () => "s-resume" }, ui: { notify: () => {} } },
+    )) as any;
+    assert.equal(rePatched.provider.only[0], "a/1");
+    h1.restore();
+
+    // Recent activity (lastRequestAt wins over the old assignment): pin kept.
+    const h2 = setup(false);
+    writeFileSync(
+      join(h2.dir, "openrouter-session-pin-state.json"),
+      JSON.stringify(makeState(fresh)),
+    );
+    const f2 = (await import(moduleUrl("resume-fresh"))).default;
+    const handlers2 = new Map<string, any>();
+    f2({
+      on: (n: string, fn: any) => handlers2.set(n, fn),
+      registerCommand: () => {},
+      events: { emit: () => {}, on: () => {} },
+    });
+    const keptPatched = (await handlers2.get("before_provider_request")!(
+      { payload: { model: MODEL } },
+      { sessionManager: { getSessionId: () => "s-resume" }, ui: { notify: () => {} } },
+    )) as any;
+    assert.equal(keptPatched.provider.only[0], "b/2");
+    h2.restore();
   });
 });

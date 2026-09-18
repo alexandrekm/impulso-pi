@@ -1,4 +1,5 @@
 {
+  "idleRerollMinutes": 10,
   "models": {
     "z-ai/glm-5.3": [
       {

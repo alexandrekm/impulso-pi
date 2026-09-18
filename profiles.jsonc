@@ -330,7 +330,10 @@
     // before_provider_request hook, so per-session prompt caches stay warm
     // while concurrent sessions spread across backends. Pins persist by
     // session id (openrouter-session-pin-state.json) so /reload and
-    // `pi -c` reuse the backend. The chosen backend also updates the live
+    // `pi -c` reuse the backend; a request after an idle gap
+    // (idleRerollMinutes, default 10 in the config) re-rolls for free —
+    // the backend's prefix cache has expired by then anyway. The chosen
+    // backend also updates the live
     // model's name + cost. /orpin lists pins, /orpin reroll re-picks.
     // Toggled in /settings → Providers → OpenRouter.
     "extensions/openrouter-session-pin/index.ts": {

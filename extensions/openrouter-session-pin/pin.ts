@@ -38,11 +38,18 @@ export interface BackendCandidate {
 /** Candidate backends per model id (e.g. "z-ai/glm-5.3"). Empty = unpinned. */
 export interface PinConfig {
   models: Record<string, BackendCandidate[]>;
+  /** Re-roll the pin when the next request comes after this many idle
+   *  minutes: the backend's prefix cache has expired by then anyway, so the
+   *  re-roll is free and spreads long-lived sessions over time. 0 disables. */
+  idleRerollMinutes: number;
 }
 
 interface SessionEntry {
   pins: Record<string, string>;
+  /** Last activity (assignment or request touch), used for 30-day pruning. */
   updatedAt: number;
+  /** Last request time per model id; falls back to `updatedAt`. */
+  lastRequestAt?: Record<string, number>;
 }
 
 /** Persisted map of session id -> model id -> backend tag. */
@@ -74,13 +81,23 @@ function toCandidate(value: BackendCandidate): BackendCandidate {
   return { tag: value.tag, label, cost: value.cost };
 }
 
+/** Default idle re-roll threshold: backend prefix caches are minutes-scale. */
+const DEFAULT_IDLE_REROLL_MINUTES = 10;
+
+function parseIdleMinutes(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : DEFAULT_IDLE_REROLL_MINUTES;
+}
+
 /** Parse openrouter-session-pin.json. Tolerant: junk/missing -> no pinning. */
 export function parseConfig(raw: string): PinConfig {
   try {
-    const data = JSON.parse(raw) as { models?: unknown };
+    const data = JSON.parse(raw) as { models?: unknown; idleRerollMinutes?: unknown };
     const models = data?.models;
-    if (models === null || typeof models !== "object") return { models: {} };
-    const out: PinConfig = { models: {} };
+    const idleRerollMinutes = parseIdleMinutes(data?.idleRerollMinutes);
+    if (models === null || typeof models !== "object") return { models: {}, idleRerollMinutes };
+    const out: PinConfig = { models: {}, idleRerollMinutes };
     for (const [modelId, candidates] of Object.entries(models)) {
       const valid = (Array.isArray(candidates) ? candidates : [])
         .filter(isCandidate)
@@ -89,7 +106,7 @@ export function parseConfig(raw: string): PinConfig {
     }
     return out;
   } catch {
-    return { models: {} };
+    return { models: {}, idleRerollMinutes: DEFAULT_IDLE_REROLL_MINUTES };
   }
 }
 
@@ -158,6 +175,17 @@ export function readPersistedPin(
   return state.sessions[sessionId]?.pins?.[modelId];
 }
 
+/** When this session+model last made a request: the per-model touch time
+ *  when present, else the entry's assignment/activity time. */
+export function readPersistedLastSeen(
+  state: PinState,
+  sessionId: string,
+  modelId: string,
+): number | undefined {
+  const entry = state.sessions[sessionId];
+  return entry?.lastRequestAt?.[modelId] ?? entry?.updatedAt;
+}
+
 /** Return a new state with the pin recorded (and the session touched). */
 export function recordPin(
   state: PinState,
@@ -170,7 +198,34 @@ export function recordPin(
   return {
     sessions: {
       ...state.sessions,
-      [sessionId]: { pins: { ...entry.pins, [modelId]: tag }, updatedAt: now },
+      [sessionId]: {
+        pins: { ...entry.pins, [modelId]: tag },
+        updatedAt: now,
+        lastRequestAt: { ...entry.lastRequestAt, [modelId]: now },
+      },
+    },
+  };
+}
+
+/** Return a new state with the request touch recorded: bumps both the
+ *  per-model lastRequestAt and the entry's activity time (pruning stays
+ *  accurate for long-lived, active sessions). */
+export function touchPin(
+  state: PinState,
+  sessionId: string,
+  modelId: string,
+  now: number,
+): PinState {
+  const entry = state.sessions[sessionId];
+  if (!entry) return state;
+  return {
+    sessions: {
+      ...state.sessions,
+      [sessionId]: {
+        pins: entry.pins,
+        updatedAt: now,
+        lastRequestAt: { ...entry.lastRequestAt, [modelId]: now },
+      },
     },
   };
 }
@@ -198,6 +253,34 @@ export function pickBackend(
   random: () => number = Math.random,
 ): BackendCandidate {
   return candidates[Math.floor(random() * candidates.length)];
+}
+
+/** Pick a backend, preferring ones other than `excludeTag` (idle re-rolls
+ *  should actually move; falls back to any candidate when there is no
+ *  alternative, e.g. a single-candidate rotation). */
+export function pickBackendExcluding(
+  candidates: BackendCandidate[],
+  excludeTag: string | undefined,
+  random: () => number = Math.random,
+): BackendCandidate {
+  if (excludeTag) {
+    const alternatives = candidates.filter((candidate) => candidate.tag !== excludeTag);
+    if (alternatives.length > 0) return pickBackend(alternatives, random);
+  }
+  return pickBackend(candidates, random);
+}
+
+/** True when the pin should re-roll before the next request: the session
+ *  has been idle long enough that the backend's prefix cache for it is
+ *  gone anyway, so switching costs nothing and spreads the load. A pin
+ *  with no known last-seen time (fresh process, no state) is kept. */
+export function isPinStale(
+  lastSeen: number | undefined,
+  idleRerollMinutes: number,
+  now: number,
+): boolean {
+  if (idleRerollMinutes <= 0 || lastSeen === undefined) return false;
+  return now - lastSeen > idleRerollMinutes * 60_000;
 }
 
 /**

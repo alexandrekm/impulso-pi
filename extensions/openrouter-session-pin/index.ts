@@ -17,6 +17,14 @@
 // the same backend instead of causing a cache miss; /fork and /new get a
 // fresh random pick.
 //
+// Idle re-roll (idleRerollMinutes, default 10): when the next request comes
+// after a longer idle gap, the backend's prefix cache has expired anyway,
+// so the pin re-rolls for free — long-lived sessions keep spreading across
+// backends instead of being frozen on their first pick, and naturally move
+// off a slow or rate-limited backend after a break. Requests also touch the
+// persisted state (lastRequestAt) so a resumed session judges staleness by
+// its true last activity, not its assignment time.
+//
 // Commands:
 //   /orpin          list this session's pinned backends
 //   /orpin reroll   re-pick the current model's backend (accepts one cache miss)
@@ -34,13 +42,17 @@ import {
   type BackendCandidate,
   type PinConfig,
   isCandidateTag,
+  isPinStale,
   loadState,
   parseConfig,
   patchPayload,
   pickBackend,
+  pickBackendExcluding,
+  readPersistedLastSeen,
   readPersistedPin,
   recordPin,
   saveState,
+  touchPin,
 } from "./pin.ts";
 
 const FEATURE_ID = "openrouter-session-pin";
@@ -54,7 +66,8 @@ function loadConfig(path: string): PinConfig {
   try {
     return parseConfig(readFileSync(path, "utf8"));
   } catch {
-    return { models: {} };
+    // Defaults from an empty config: no models, 10-minute idle re-roll.
+    return parseConfig("{}");
   }
 }
 
@@ -73,25 +86,66 @@ export default function (pi: any): void {
   const statePath = join(CONFIG_DIR, STATE_NAME);
   if (Object.keys(config.models).length === 0) return;
 
-  // This process = this session. model id -> pinned candidate.
-  const pins = new Map<string, BackendCandidate>();
+  // This process = this session. model id -> pinned candidate + last-seen.
+  const pins = new Map<string, { candidate: BackendCandidate; lastSeen: number }>();
   const baseNames = new WeakMap<object, string>();
 
-  /** Resolve this session's backend for a model, picking + persisting if new. */
+  /** Assign + persist a fresh pin and reset the in-memory last-seen. */
+  const assignPin = (
+    sessionId: string,
+    modelId: string,
+    chosen: BackendCandidate,
+    state: ReturnType<typeof loadState>,
+  ): BackendCandidate => {
+    const now = Date.now();
+    pins.set(modelId, { candidate: chosen, lastSeen: now });
+    saveState(statePath, recordPin(state, sessionId, modelId, chosen.tag, now), now);
+    return chosen;
+  };
+
+  /** Resolve this session's backend for a model: reuse the persisted pin,
+   *  re-roll it when the session was idle past the configured threshold
+   *  (the backend's prefix cache is gone by then anyway), or pick fresh. */
   const ensurePin = (sessionId: string, modelId: string): BackendCandidate | undefined => {
     const candidates = config.models[modelId];
     if (!candidates) return undefined;
-    const memory = pins.get(modelId);
-    if (memory && isCandidateTag(config, modelId, memory.tag)) return memory;
+    const now = Date.now();
     const state = loadState(statePath);
+    const seen = pins.get(modelId)?.lastSeen ?? readPersistedLastSeen(state, sessionId, modelId);
+    const stale = isPinStale(seen, config.idleRerollMinutes, now);
+    const memory = pins.get(modelId);
+    if (memory?.candidate && isCandidateTag(config, modelId, memory.candidate.tag)) {
+      if (!stale) return memory.candidate;
+      return assignPin(
+        sessionId,
+        modelId,
+        pickBackendExcluding(candidates, memory.candidate.tag),
+        state,
+      );
+    }
     const persisted = readPersistedPin(state, sessionId, modelId);
     const reused = isCandidateTag(config, modelId, persisted)
       ? candidates.find((candidate) => candidate.tag === persisted)
       : undefined;
-    const chosen = reused ?? pickBackend(candidates);
-    pins.set(modelId, chosen);
-    saveState(statePath, recordPin(state, sessionId, modelId, chosen.tag, Date.now()), Date.now());
-    return chosen;
+    if (reused && !stale) {
+      pins.set(modelId, { candidate: reused, lastSeen: seen ?? now });
+      return reused;
+    }
+    return assignPin(
+      sessionId,
+      modelId,
+      reused ? pickBackendExcluding(candidates, reused.tag) : pickBackend(candidates),
+      state,
+    );
+  };
+
+  /** Record that a pinned request just happened (idle-gap tracking). */
+  const markRequest = (sessionId: string, modelId: string): void => {
+    const memory = pins.get(modelId);
+    if (!memory) return;
+    const now = Date.now();
+    memory.lastSeen = now;
+    saveState(statePath, touchPin(loadState(statePath), sessionId, modelId, now), now);
   };
 
   /** Re-apply name/cost for the session's current model (idempotent). */
@@ -118,8 +172,12 @@ export default function (pi: any): void {
     const payload = event.payload as { model?: string } | undefined;
     const modelId = payload?.model;
     if (!modelId || !config.models[modelId]) return;
-    const chosen = ensurePin(sessionIdOf(ctx), modelId);
-    if (chosen) return patchPayload(payload as Record<string, unknown>, chosen.tag);
+    const sessionId = sessionIdOf(ctx);
+    const chosen = ensurePin(sessionId, modelId);
+    if (!chosen) return;
+    markRequest(sessionId, modelId);
+    if (ctx?.model?.id === modelId) applyBackendToModel(ctx.model, chosen, baseNames);
+    return patchPayload(payload as Record<string, unknown>, chosen.tag);
   });
 
   pi.registerCommand("orpin", {
@@ -137,15 +195,9 @@ export default function (pi: any): void {
           ctx.ui.notify("Current model is not configured for session pinning", "info");
           return;
         }
-        pins.delete(modelId);
-        const state = loadState(statePath);
-        const chosen = pickBackend(config.models[modelId]);
-        pins.set(modelId, chosen);
-        saveState(
-          statePath,
-          recordPin(state, sessionId, modelId, chosen.tag, Date.now()),
-          Date.now(),
-        );
+        const previous = pins.get(modelId)?.candidate;
+        const chosen = pickBackendExcluding(config.models[modelId], previous?.tag);
+        assignPin(sessionId, modelId, chosen, loadState(statePath));
         applyBackendToModel(ctx.model, chosen, baseNames);
         ctx.ui.notify(
           `Re-pinned ${modelId} → ${chosen.tag} (next request re-warms the cache)`,
@@ -154,7 +206,7 @@ export default function (pi: any): void {
         return;
       }
       const lines = Object.keys(config.models).map((id) => {
-        const chosen = pins.get(id);
+        const chosen = pins.get(id)?.candidate;
         return `  ${id} → ${chosen ? chosen.tag : "(no request yet)"}`;
       });
       ctx.ui.notify(`Session pins (${sessionId || "ephemeral"}):\n${lines.join("\n")}`, "info");

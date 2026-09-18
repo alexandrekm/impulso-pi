@@ -440,11 +440,15 @@ versioned).
   `compat.openRouterRouting` produced, but chosen per session). Keeps
   each session's prompt cache warm while spreading concurrent sessions
   across backends (BaseTen fp8/fp4, Modal, Fireworks…). Pins persist by
-  session id in `openrouter-session-pin-state.json` (30-day pruning) so
-  `/reload` and `pi -c` reuse the backend; `/orpin` lists pins, `/orpin
-  reroll` re-picks. Also patches the live model's name/cost so the footer
-  shows the actual backend. Toggled in `/settings` → Providers →
-  OpenRouter.
+  session id in `openrouter-session-pin-state.json` (30-day pruning; requests
+  touch a per-model `lastRequestAt`) so `/reload` and `pi -c` reuse the
+  backend. Idle re-roll: a request after `idleRerollMinutes` (default 10,
+  0 = off, in the config JSON) re-rolls off the current backend — by then
+  the backend's prefix cache has expired anyway, so long-lived sessions keep
+  spreading instead of freezing on their first pick and move off a slow or
+  rate-limited backend after a break. `/orpin` lists pins, `/orpin reroll`
+  re-picks. Also patches the live model's name/cost so the footer shows the
+  actual backend. Toggled in `/settings` → Providers → OpenRouter.
 
 - `extensions/commit-guard/` — **commitlint enforcement on every `git commit`**
   (work-only). Hooks the bash `tool_call` (same pattern as command-guard),

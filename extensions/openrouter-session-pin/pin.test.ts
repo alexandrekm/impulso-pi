@@ -9,15 +9,19 @@ import {
   applyBackendToModel,
   type BackendCandidate,
   isCandidateTag,
+  isPinStale,
   loadState,
   parseConfig,
   patchPayload,
   pickBackend,
+  pickBackendExcluding,
   pruneState,
+  readPersistedLastSeen,
   readPersistedPin,
   recordPin,
   routingFor,
   saveState,
+  touchPin,
 } from "./pin.ts";
 
 const CANDIDATES: BackendCandidate[] = [
@@ -50,10 +54,19 @@ describe("parseConfig", () => {
     assert.equal(config.models.m1!.length, 1);
   });
 
-  test("junk or model-less input pins nothing", () => {
-    assert.deepEqual(parseConfig("not json"), { models: {} });
-    assert.deepEqual(parseConfig('{"models": "x"}'), { models: {} });
-    assert.deepEqual(parseConfig("{}"), { models: {} });
+  test("junk or model-less input pins nothing, idle knob defaults to 10", () => {
+    assert.deepEqual(parseConfig("not json"), { models: {}, idleRerollMinutes: 10 });
+    assert.deepEqual(parseConfig('{"models": "x"}'), { models: {}, idleRerollMinutes: 10 });
+    assert.deepEqual(parseConfig("{}"), { models: {}, idleRerollMinutes: 10 });
+  });
+
+  test("idleRerollMinutes: explicit values respected, junk falls back", () => {
+    const off = parseConfig('{"idleRerollMinutes": 0}');
+    assert.equal(off.idleRerollMinutes, 0);
+    const custom = parseConfig('{"idleRerollMinutes": 45}');
+    assert.equal(custom.idleRerollMinutes, 45);
+    assert.equal(parseConfig('{"idleRerollMinutes": "soon"}').idleRerollMinutes, 10);
+    assert.equal(parseConfig('{"idleRerollMinutes": -3}').idleRerollMinutes, 10);
   });
 });
 
@@ -79,6 +92,33 @@ describe("pickBackend", () => {
     for (let i = 0; i < 50; i++) {
       assert.ok(CANDIDATES.includes(pickBackend(CANDIDATES)));
     }
+  });
+});
+
+describe("pickBackendExcluding", () => {
+  test("never returns the excluded tag while alternatives exist", () => {
+    for (let i = 0; i < 50; i++) {
+      const picked = pickBackendExcluding(CANDIDATES, "baseten/fp8");
+      assert.equal(picked.tag, "modal");
+    }
+  });
+
+  test("falls back to any candidate when there is no alternative", () => {
+    const only = [CANDIDATES[0]!];
+    assert.equal(pickBackendExcluding(only, "baseten/fp8").tag, "baseten/fp8");
+    assert.ok(CANDIDATES.includes(pickBackendExcluding(CANDIDATES, undefined)));
+  });
+});
+
+describe("isPinStale", () => {
+  test("stale only past the threshold; never with unknown last-seen or disabled", () => {
+    const now = 1_700_000_000_000;
+    const tenMin = now - 10 * 60_000;
+    assert.equal(isPinStale(tenMin - 1, 10, now), true);
+    assert.equal(isPinStale(tenMin + 1, 10, now), false);
+    assert.equal(isPinStale(undefined, 10, now), false);
+    assert.equal(isPinStale(0, 0, now), false);
+    assert.equal(isPinStale(tenMin - 1_000, 0, now), false);
   });
 });
 
@@ -162,12 +202,27 @@ describe("state file", () => {
     rmSync(d, { recursive: true, force: true });
   });
 
-  test("recordPin touches updatedAt and merges pins per session", () => {
+  test("recordPin merges pins per session and seeds lastRequestAt", () => {
     const first = recordPin({ sessions: {} }, "s1", "m1", "a", NOW);
     const second = recordPin(first, "s1", "m2", "b", NOW + 5);
     assert.equal(second.sessions.s1!.pins.m1, "a");
     assert.equal(second.sessions.s1!.pins.m2, "b");
     assert.equal(second.sessions.s1!.updatedAt, NOW + 5);
+    assert.equal(second.sessions.s1!.lastRequestAt!.m1, NOW);
+    assert.equal(second.sessions.s1!.lastRequestAt!.m2, NOW + 5);
+    assert.equal(readPersistedLastSeen(second, "s1", "m2"), NOW + 5);
+  });
+
+  test("touchPin bumps activity + lastRequestAt; readPersistedLastSeen falls back to updatedAt", () => {
+    const pinned = recordPin({ sessions: {} }, "s1", "m1", "a", NOW);
+    const touched = touchPin(pinned, "s1", "m1", NOW + 60_000);
+    assert.equal(touched.sessions.s1!.lastRequestAt!.m1, NOW + 60_000);
+    assert.equal(touched.sessions.s1!.updatedAt, NOW + 60_000);
+    assert.equal(touched.sessions.s1!.pins.m1, "a");
+    // No entry for the session -> unchanged; no lastRequestAt -> updatedAt.
+    assert.equal(touchPin(pinned, "ghost", "m1", NOW).sessions.ghost, undefined);
+    assert.equal(readPersistedLastSeen(pinned, "s1", "other-model"), NOW);
+    assert.equal(readPersistedLastSeen(pinned, "ghost", "m1"), undefined);
   });
 
   test("pruneState drops stale entries and caps session count", () => {
