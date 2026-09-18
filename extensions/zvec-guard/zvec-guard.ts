@@ -57,9 +57,16 @@ import { fileURLToPath } from "node:url";
 
 import { isFeatureEnabled } from "../impulso-settings/feature-flag.ts";
 
-/** Config root: the active agent dir (profile dir in profiles mode). */
+/**
+ * Config root: the active agent dir (profile dir in profiles mode). The
+ * fallback ascends THREE levels because the installed file lives at
+ * `<profile>/extensions/zvec-guard/index.ts` (the in-repo file at
+ * `extensions/zvec-guard/zvec-guard.ts` is the same depth from the repo
+ * root) — two hops would land on the extensions/ dir and the
+ * pi-zvec-grep/config.json read would miss.
+ */
 const CONFIG_DIR =
-  process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+  process.env.PI_CODING_AGENT_DIR || dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
 /** Realpath with a fallback: non-existent paths (fresh workspaces) still resolve. */
 export function bestRealPath(path: string): string {
