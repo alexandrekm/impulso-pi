@@ -414,9 +414,14 @@ versioned).
   builds directly when the root's own manifest is missing (an ancestor's
   "ready" can no longer shadow leaf/worktree builds). Keep base indexes on
   the main checkouts reindexed after pulls (user's own command). Sessions
-  at an umbrella root: semantic via `root=<submodule>` in zvec_search
-  (which pins cwd and bypasses the ancestor walk-up) or inside the
-  submodule; `fts` (`zg query --rg`) covers submodule content index-free. A short global
+  at an umbrella root works OUT OF THE BOX: the fork's autoIndex indexes
+  the depth-1 submodule repos in the background (seeded from the main
+  checkout's submodule bases when present), and `zvec_search` from the
+  root automatically FANS OUT across every indexed submodule — one call
+  searches every repo under the umbrella (merged, per-repo headers,
+  ≤40 repos, 5 concurrent, ≤5 hits each). `root=<submodule>` still works
+  to scope a search to one repo, and `fts` (`zg query --rg`) covers
+  submodule content index-free. A short global
   search-routing nudge ships as `config/APPEND_SYSTEM.md` (pi appends
   `<agentDir>/APPEND_SYSTEM.md` to every system prompt) because work repos'
   AGENTS.md files say nothing about zvec. Orca worktrees of plain repos:

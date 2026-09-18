@@ -793,8 +793,11 @@
     // `query` required, enforces a root policy ($HOME + umbrella/container
     // roots blocked, allowRoots escape hatch) in both the tool and
     // autoIndex, adds a cross-process build lock, resolves autoIndex to the
-    // NEAREST ENCLOSING git repo, and seeds worktree indexes from the main
-    // checkout's base (never writes back). Upstream PR desirable once
+    // NEAREST ENCLOSING git repo, seeds worktree indexes from the main
+    // checkout's base (never writes back), and — for the umbrella-repo
+    // workflow — indexes an umbrella root's submodule repos and fans
+    // zvec_search out across them (one call from the slim superproject
+    // root searches every repo under it). Upstream PR desirable once
     // validated.
     // https://github.com/alexandrekm/pi-zvec-grep (fork of
     // MikkelKappelPersson/pi-zvec-grep)

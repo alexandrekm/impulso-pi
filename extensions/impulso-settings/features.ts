@@ -132,7 +132,7 @@ export const FEATURES: Feature[] = [
     group: "Semantic search",
     label: "zvec-grep hybrid search",
     description:
-      "Local-first hybrid semantic+keyword search (zvec_search / zvec_index / zvec_status tools, /zg command) over a per-workspace index. Complements FFF: exact strings stay on grep/find, meaning-based questions go to zvec_search (its `query` param is required). Needs the global zg CLI (installed by install.sh). Installed from our fork (alexandrekm/pi-zvec-grep): required-query fix, root policy, cross-process build lock.",
+      "Local-first hybrid semantic+keyword search (zvec_search / zvec_index / zvec_status tools, /zg command) over a per-workspace index. Complements FFF: exact strings stay on grep/find, meaning-based questions go to zvec_search (its `query` param is required). Needs the global zg CLI (installed by install.sh). Installed from our fork (alexandrekm/pi-zvec-grep): required-query fix, root policy, cross-process build lock, worktree seeding, and umbrella fan-out (a search from a slim superproject root spans all its submodule repos).",
     kind: "package",
     spec: "git:github.com/alexandrekm/pi-zvec-grep",
   },

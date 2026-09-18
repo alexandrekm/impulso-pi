@@ -211,3 +211,35 @@ containers, exactly as asked); every repo and worktree under them gets its
 own real index (new — previously frozen by the mega-index); fresh worktrees
 start searchable from the base; the main checkout's index is never touched
 by worktree sessions.
+
+---
+
+# Round 3 — umbrella-root sessions get real search (2026-09-18, same day)
+
+The user's unit of work, stated plainly: "mtv-inference is just a slim repo;
+the code lives in the subfolders; I usually run at the root so changes and
+searches span multiple repos." Rounds 1-2 left those sessions with fts/rg
+only (semantic needed root=<submodule> discipline the model won't keep).
+
+Fork 5319ee1 closes the gap without breaking the ancestor-shadowing rule
+(an index at the umbrella root would lock out every repo below — verified
+in round 2, unchanged):
+
+- **autoIndex at an umbrella root now indexes the submodules**: every
+  depth-1 nested repo lacking an index is built/seeded in the background
+  (sequential, per-child locks, ≤40; seeded from the main checkout's
+  submodule bases via the new plain-submodule gitdir pattern
+  `<main>/.git/modules/<sub>`). The root itself stays un-indexed; silent
+  once everything is indexed.
+- **zvec_search fans out**: on the no-index error at the root, the query
+  runs inside every indexed depth-1 nested repo (≤40, concurrency 5, ≤5
+  hits each) and merges the outputs under per-repo headers with a summed
+  summary — one call from the slim superproject root searches every repo
+  under it.
+
+E2E with real git + real zg: slim umbrella + 3 submodule repos; session at
+the root → 3 child indexes built, root un-indexed; one zvec_search
+("where are postprocessing thresholds configured") returned ranked
+cross-repo hits with the right repo first. What to watch on the Search
+Adoption panel now includes umbrella-root sessions — they finally have
+something to adopt.
