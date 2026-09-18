@@ -49,17 +49,17 @@
       {
         "tag": "fireworks",
         "label": "Fireworks",
-        "cost": { "input": 0.22, "output": 0.66, "cacheRead": 0 }
+        "cost": { "input": 0.22, "output": 0.66, "cacheRead": 0.007 }
       },
       {
         "tag": "baseten/fp8",
         "label": "BaseTen fp8",
-        "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0 }
+        "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.03 }
       },
       {
         "tag": "modal",
         "label": "Modal",
-        "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0 }
+        "cost": { "input": 0.3, "output": 1.2, "cacheRead": 0.03 }
       }
     ]
   }
