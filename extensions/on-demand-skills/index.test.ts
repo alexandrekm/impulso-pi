@@ -6,16 +6,18 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 // The handler resolves <configDir>/skills at import time; the trigger table
+// comes from the repo's ./config.json (datadog / obscura / glean / scout).
 // comes from the repo's ./config.json (datadog / glean / scout).
 const CONFIG_DIR = mkdtempSync(join(tmpdir(), "impulso-cfg-"));
 process.env.PI_CODING_AGENT_DIR = CONFIG_DIR;
 
-// Install fake "datadog" and "glean" skills; leave "scout" uninstalled.
+// Install fake "datadog", "obscura", and "glean" skills; leave "scout" uninstalled.
 const installSkill = (name: string) => {
   mkdirSync(join(CONFIG_DIR, "skills", name), { recursive: true });
   writeFileSync(join(CONFIG_DIR, "skills", name, "SKILL.md"), `---\nname: ${name}\n---\nbody\n`);
 };
 installSkill("datadog");
+installSkill("obscura");
 installSkill("glean");
 
 const { buildMatcher, default: factory } = await import("./index.ts");
@@ -77,5 +79,29 @@ describe("input handler", () => {
     const block = result.text.split("<skill_hint>\n")[1]!;
     assert.ok(block.includes("Datadog skill"));
     assert.ok(block.includes("Glean skill"));
+  });
+
+  test("datadog trigger is narrow: generic words no longer activate it", async () => {
+    const h = makePi();
+    // Pre-narrowing these all matched (dashboard/metric/monitor/slo/…).
+    for (const text of [
+      "check the metrics dashboard",
+      "the monitor is flapping",
+      "our SLOs are burning",
+    ]) {
+      assert.equal(await h({ text }), undefined, `should not trigger on: ${text}`);
+    }
+  });
+
+  test("obscura trigger fires on browser/render/screenshot words", async () => {
+    const h = makePi();
+    for (const text of [
+      "use the browser to render that page",
+      "take a screenshot of the login form",
+      "run obscura against the site",
+    ]) {
+      const result = (await h({ text })) as { text: string };
+      assert.ok(result.text.includes("Obscura skill"), `should trigger on: ${text}`);
+    }
   });
 });
