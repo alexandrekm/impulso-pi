@@ -114,7 +114,12 @@ describe("hook", () => {
   });
 
   test("allows a normal workspace root", async () => {
-    assert.equal(await call(tmpdir(), "index"), undefined);
+    // NOT tmpdir() itself: on CI it is shared with concurrently running
+    // suites that create nested git-repo fixtures there, and the umbrella
+    // heuristic would correctly block it. A fresh empty dir is the real
+    // "normal workspace" case.
+    const plain = mkdtempSync(join(tmpdir(), "impulso-plain-"));
+    assert.equal(await call(plain, "index"), undefined);
   });
 
   test("allows a workspace root that does not exist yet (realpath fallback)", async () => {
