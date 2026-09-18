@@ -31,7 +31,11 @@ const POLL_ATTEMPTS = 4;
 const POLL_DELAY_MS = 1500;
 
 const CONFIG_DIR =
-  process.env.PI_CODING_AGENT_DIR || dirname(dirname(fileURLToPath(import.meta.url)));
+  process.env.PI_CODING_AGENT_DIR ||
+  // The file lands at <configDir>/extensions/openrouter-cost/index.ts (nested
+  // dest, unlike flattened landings like cache-ttl.ts), so the fallback
+  // needs three hops to reach the config root — two stop at extensions/.
+  dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
 /** Wire the capture+rewrite flow onto a pi instance with injectable IO. */
 export function wireOpenRouterCost(
