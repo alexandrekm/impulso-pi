@@ -334,6 +334,52 @@ describe("openrouter-session-pin factory", () => {
     h.restore();
   });
 
+  test("session_start resets in-memory pins across same-process switches", async () => {
+    // pi rebinds the cached extension factory on /new, /fork, /resume without
+    // re-evaluating the module — one module instance, multiple session ids.
+    // Session B already has a persisted pin (b/2); switching to it in the
+    // process of session A must not leak A's pin into B.
+    const h = await makePi(false);
+    const hook = h.handlers.get("before_provider_request")!;
+    const model = { id: MODEL, name: "GLM-5.3", cost: {} };
+    const mkCtx = (id: string) => ({
+      model,
+      sessionManager: { getSessionId: () => id },
+      ui: { notify: () => {} },
+    });
+    writeFileSync(
+      join(h.dir, "openrouter-session-pin-state.json"),
+      JSON.stringify({
+        sessions: {
+          "sess-b": {
+            pins: { [MODEL]: "b/2" },
+            updatedAt: Date.now(),
+            lastRequestAt: { [MODEL]: Date.now() },
+          },
+        },
+      }),
+    );
+
+    // Session A runs, gets its own pin.
+    await h.handlers.get("session_start")!({}, mkCtx("sess-a"));
+    const aPatched = (await hook({ payload: { model: MODEL } }, mkCtx("sess-a"))) as any;
+    const aTag = aPatched.provider.only[0];
+
+    // Same process switches to session B (/new, /fork, /resume all fire
+    // session_start): B must use its own persisted pin, never A's.
+    await h.handlers.get("session_start")!({}, mkCtx("sess-b"));
+    const bPatched = (await hook({ payload: { model: MODEL } }, mkCtx("sess-b"))) as any;
+    assert.equal(bPatched.provider.only[0], "b/2");
+
+    // Both sessions are recorded in the state under their own ids.
+    const state = JSON.parse(
+      readFileSync(join(h.dir, "openrouter-session-pin-state.json"), "utf8"),
+    );
+    assert.equal(state.sessions["sess-a"].pins[MODEL], aTag);
+    assert.equal(state.sessions["sess-b"].pins[MODEL], "b/2");
+    h.restore();
+  });
+
   test("a resumed idle session re-rolls; lastRequestAt beats assignment time", async () => {
     const stale = Date.now() - 60 * 60_000; // 1h ago: past any cache TTL
     const fresh = Date.now() - 1000;

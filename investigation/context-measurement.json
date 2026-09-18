@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "measuredAt": "2026-09-18T17:08:03.413Z",
+  "measuredAt": "2026-09-18T17:36:17.998Z",
   "piVersion": "0.85.1",
   "nodeVersion": "v26.7.0",
   "platform": "darwin",
@@ -9,7 +9,7 @@
     {
       "target": "stock",
       "record": {
-        "at": "2026-09-18T17:07:58.249Z",
+        "at": "2026-09-18T17:36:11.128Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 2616,
@@ -35,7 +35,7 @@
     {
       "target": "work",
       "record": {
-        "at": "2026-09-18T17:08:00.119Z",
+        "at": "2026-09-18T17:36:13.725Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 10029,
@@ -87,7 +87,7 @@
     {
       "target": "personal",
       "record": {
-        "at": "2026-09-18T17:08:01.825Z",
+        "at": "2026-09-18T17:36:15.893Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 8372,
@@ -137,7 +137,7 @@
     {
       "target": "base",
       "record": {
-        "at": "2026-09-18T17:08:03.381Z",
+        "at": "2026-09-18T17:36:17.964Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 9662,

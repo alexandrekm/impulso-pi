@@ -155,7 +155,14 @@ export default function (pi: any): void {
     if (chosen) applyBackendToModel(model, chosen, baseNames);
   };
 
+  // Same-process session switches (/new, /fork, /resume) rebind the cached
+  // extension factory without re-evaluating the module, so module state —
+  // the pins map included — would survive the switch and leak the previous
+  // session's pin into the new one. Reset it here: the next ensurePin
+  // re-derives from the (new) session id — its own persisted pin for
+  // resume, a fresh pick for new/fork.
   pi.on("session_start", async (_event: any, ctx: any) => {
+    pins.clear();
     applyToModel(ctx.model, sessionIdOf(ctx));
   });
 
