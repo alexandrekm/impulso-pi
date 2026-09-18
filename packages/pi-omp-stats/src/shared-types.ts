@@ -395,3 +395,77 @@ export interface ProviderDashboardStats {
   usageSeries: UsageWindowSeries[];
   windowInsights: ProviderWindowInsight[];
 }
+
+/* Session pins (impulso-pi openrouter-session-pin): per-session OpenRouter
+ * backend pinning. Live-joined at request time — the pin state files
+ * (<profile>/openrouter-session-pin-state.json, written by the extension)
+ * map session id -> model -> backend tag; the DB contributes per-session
+ * usage. Sessions older than the state file's 30-day pruning window (or
+ * predating the extension) show up under "unpinned". */
+
+export interface SessionPinCandidate {
+  tag: string;
+  label: string;
+}
+
+export interface SessionPinConfig {
+  model: string;
+  candidates: SessionPinCandidate[];
+}
+
+export interface SessionPinBackendRow {
+  model: string;
+  tag: string;
+  label: string;
+  sessions: number;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cost: number;
+  firstTimestamp: number;
+  lastTimestamp: number;
+}
+
+export interface SessionPinUnpinnedRow {
+  model: string;
+  sessions: number;
+  requests: number;
+  tokens: number;
+  cost: number;
+  lastTimestamp: number;
+}
+
+export interface SessionPinSessionRow {
+  sessionId: string;
+  model: string;
+  tag: string;
+  label: string;
+  folder: string;
+  requests: number;
+  tokens: number;
+  cost: number;
+  firstTimestamp: number;
+  lastTimestamp: number;
+}
+
+export interface SessionPinDay {
+  timestamp: number;
+  byTag: Record<string, number>;
+}
+
+export interface SessionPinStats {
+  configured: SessionPinConfig[];
+  summary: {
+    pinnedSessions: number;
+    unpinnedSessions: number;
+    backends: number;
+    requests: number;
+    cost: number;
+    lastTimestamp: number;
+  };
+  byBackend: SessionPinBackendRow[];
+  unpinned: SessionPinUnpinnedRow[];
+  sessions: SessionPinSessionRow[];
+  timeseries: SessionPinDay[];
+}

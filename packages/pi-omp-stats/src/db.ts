@@ -3070,3 +3070,121 @@ export function getSearchAdoptionSessions(limit = 500): SearchAdoptionSession[] 
     };
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* Session-pin queries (impulso-pi openrouter-session-pin)                   */
+/* -------------------------------------------------------------------------- */
+
+export interface SessionModelUsage {
+  sessionFile: string;
+  folder: string;
+  model: string;
+  provider: string;
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  cost: number;
+  firstTimestamp: number;
+  lastTimestamp: number;
+}
+
+/** Per (session_file, model) usage aggregates — the join input for the
+ *  session-pin panel: the aggregator maps session ids extracted from the
+ *  file basenames to backend tags recorded by the extension. */
+export function getSessionModelUsage(cutoff?: number | null): SessionModelUsage[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null && cutoff !== undefined && cutoff > 0;
+  const sql = `
+		SELECT session_file,
+			COALESCE(MAX(folder), '') as folder,
+			model,
+			provider,
+			COUNT(*) as requests,
+			SUM(input_tokens) as input_tokens,
+			SUM(output_tokens) as output_tokens,
+			SUM(cache_read_tokens) as cache_read_tokens,
+			SUM(cache_write_tokens) as cache_write_tokens,
+			SUM(cost_total) as cost,
+			MIN(timestamp) as first_timestamp,
+			MAX(timestamp) as last_timestamp
+		FROM messages
+		${hasCutoff ? "WHERE timestamp >= ?" : ""}
+		GROUP BY session_file, model
+		ORDER BY last_timestamp DESC
+	`;
+  const rows = (hasCutoff
+    ? db.prepare(sql).all(cutoff)
+    : db.prepare(sql).all()) as unknown as Array<{
+    session_file: string;
+    folder: string | null;
+    model: string;
+    provider: string;
+    requests: number;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    cache_read_tokens: number | null;
+    cache_write_tokens: number | null;
+    cost: number | null;
+    first_timestamp: number | null;
+    last_timestamp: number | null;
+  }>;
+  return rows.map((r) => ({
+    sessionFile: r.session_file,
+    folder: r.folder ?? "",
+    model: r.model,
+    provider: r.provider,
+    requests: r.requests,
+    inputTokens: r.input_tokens ?? 0,
+    outputTokens: r.output_tokens ?? 0,
+    cacheReadTokens: r.cache_read_tokens ?? 0,
+    cacheWriteTokens: r.cache_write_tokens ?? 0,
+    cost: r.cost ?? 0,
+    firstTimestamp: r.first_timestamp ?? 0,
+    lastTimestamp: r.last_timestamp ?? 0,
+  }));
+}
+
+export interface SessionModelUsageDay {
+  sessionFile: string;
+  model: string;
+  bucket: number;
+  requests: number;
+  tokens: number;
+}
+
+/** Daily request counts per (session_file, model) for the per-backend
+ *  stacked timeseries. Tag attribution happens in the aggregator. */
+export function getSessionModelUsageDaily(
+  days = 14,
+  cutoff?: number | null,
+  bucketMs = 24 * 60 * 60 * 1000,
+): SessionModelUsageDay[] {
+  if (!db) return [];
+  const hasCutoff = cutoff !== null;
+  const seriesCutoff = hasCutoff ? (cutoff ?? Date.now() - days * 24 * 60 * 60 * 1000) : 0;
+  const sql = `
+		SELECT (timestamp / CAST(? AS INTEGER)) * CAST(? AS INTEGER) as bucket,
+			session_file, model,
+			COUNT(*) as requests,
+			SUM(total_tokens) as tokens
+		FROM messages
+		WHERE timestamp >= ?
+		GROUP BY bucket, session_file, model
+	`;
+  const rows = db.prepare(sql).all(bucketMs, bucketMs, seriesCutoff) as unknown as Array<{
+    bucket: number;
+    session_file: string;
+    model: string;
+    requests: number;
+    tokens: number | null;
+  }>;
+  return rows.map((r) => ({
+    sessionFile: r.session_file,
+    model: r.model,
+    bucket: r.bucket,
+    requests: r.requests,
+    tokens: r.tokens ?? 0,
+  }));
+}

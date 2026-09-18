@@ -1076,6 +1076,20 @@
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg
             >Guards
           </button>
+          <button data-tab="pins">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="6" />
+              <circle cx="12" cy="12" r="2" /></svg
+            >Session Pins
+          </button>
           <button data-tab="behavior">
             <svg
               viewBox="0 0 24 24"
@@ -1241,6 +1255,7 @@
         compaction = null,
         memories = null,
         guards = null,
+        pins = null,
         subagents = null;
       let costRange = "7d"; // independent window for the "Cost over time" chart
       let profile = "all";
@@ -1264,6 +1279,7 @@
         errors: "Errors",
         payloads: "Payloads",
         guards: "Guards",
+        pins: "Session Pins",
         compaction: "Compaction",
         memories: "Observational Memory",
         subagents: "Subagents",
@@ -2070,6 +2086,9 @@
             await loadMemories();
           } else if (tab === "guards") {
             await loadGuards();
+          } else if (tab === "pins") {
+            pins = await api("/api/stats/pins?range=" + range());
+            renderPins();
           }
         } catch (e) {
           main.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
@@ -3071,6 +3090,157 @@
           ]),
           ["", "", "", "", "", ""],
         );
+      }
+
+      /* ---------------- Session Pins panel ---------------- */
+
+      const PIN_COLORS = [
+        "blue",
+        "mauve",
+        "peach",
+        "teal",
+        "yellow",
+        "green",
+        "pink",
+        "sky",
+        "lavender",
+        "red",
+      ];
+
+      function pinColor(tags, tag) {
+        if (tag === "(unpinned)") return cssVar("--dim");
+        const index = tags.indexOf(tag);
+        return index < 0 ? cssVar("--muted") : cssVar("--" + PIN_COLORS[index % PIN_COLORS.length]);
+      }
+
+      /** Backend tags ordered by total charted requests, unpinned last. */
+      function pinSeriesTags(p) {
+        const totals = new Map();
+        for (const day of p.timeseries) {
+          for (const [tag, requests] of Object.entries(day.byTag)) {
+            totals.set(tag, (totals.get(tag) ?? 0) + requests);
+          }
+        }
+        const sorted = [...totals.keys()].sort(
+          (a, b) => (totals.get(b) ?? 0) - (totals.get(a) ?? 0),
+        );
+        return [
+          ...sorted.filter((tag) => tag !== "(unpinned)"),
+          ...sorted.filter((tag) => tag === "(unpinned)"),
+        ];
+      }
+
+      function renderPins() {
+        const s = pins.summary;
+        const cards = `
+    ${card("Pinned sessions", fmtNum(s.pinnedSessions), "with a backend pin in range", "var(--teal)")}
+    ${card("Unpinned sessions", fmtNum(s.unpinnedSessions), "configured model, no pin entry", "var(--dim)")}
+    ${card("Backends", fmtNum(s.backends), "distinct OpenRouter backends", "var(--mauve)")}
+    ${card("Requests", fmtNum(s.requests), "pinned requests in range", "var(--peach)")}
+    ${card("Cost", fmtCost(s.cost), "pinned usage in range", "var(--yellow)")}
+  `;
+        main.innerHTML = `<div class="cards">${cards}</div>
+    <div class="chart-wrap"><h3>Requests per day by backend</h3><canvas id="pins-freq-chart"></canvas></div>
+    <div class="section-title">By backend</div>
+    <div id="pins-backend-table"></div>
+    <div class="section-title">Unpinned (configured models, no pin entry)</div>
+    <div id="pins-unpinned-table"></div>
+    <div class="section-title">Recent sessions</div>
+    <div id="pins-sessions-table"></div>
+    <div class="section-title">Configured rotation lists</div>
+    <div id="pins-config-table"></div>
+    <div class="kpi-note" style="padding:2px 0 0">openrouter-session-pin pins each pi session to ONE OpenRouter backend (chosen randomly at session start), so per-session prompt caches stay warm while concurrent sessions spread across backends instead of rate-limiting one. Pins live in &lt;profile&gt;/openrouter-session-pin-state.json (30-day pruning) and are joined with session usage by session id; sessions that predate the extension or whose pin entry was pruned show as (unpinned).</div>
+  `;
+        const tags = pinSeriesTags(pins);
+        main.querySelector("#pins-backend-table").innerHTML = pins.byBackend.length
+          ? table(
+              ["Model", "Backend", "Sessions", "Requests", "In", "Out", "Cache R", "Cost", "Last"],
+              pins.byBackend.map((b) => [
+                `<span class="model" style="color:var(--accent)">${b.model}</span>`,
+                `<span style="color:${pinColor(tags, b.tag)}">${esc(b.label)}</span>`,
+                fmtNum(b.sessions),
+                fmtNum(b.requests),
+                fmtNum(b.inputTokens),
+                fmtNum(b.outputTokens),
+                fmtNum(b.cacheReadTokens),
+                fmtCost(b.cost),
+                fmtDateShort(b.lastTimestamp),
+              ]),
+              ["", "", "num", "num", "num", "num", "num", "num", "num"],
+            )
+          : `<div class="pl-empty">No pinned usage in range.</div>`;
+        main.querySelector("#pins-unpinned-table").innerHTML = pins.unpinned.length
+          ? table(
+              ["Model", "Sessions", "Requests", "Tokens", "Cost", "Last"],
+              pins.unpinned.map((u) => [
+                `<span class="model" style="color:var(--accent)">${u.model}</span>`,
+                fmtNum(u.sessions),
+                fmtNum(u.requests),
+                fmtNum(u.tokens),
+                fmtCost(u.cost),
+                fmtDateShort(u.lastTimestamp),
+              ]),
+              ["", "num", "num", "num", "num", "num"],
+            )
+          : `<div class="pl-empty">None — every configured-model session in range is pinned.</div>`;
+        main.querySelector("#pins-sessions-table").innerHTML = pins.sessions.length
+          ? table(
+              ["Backend", "Model", "Session", "Folder", "Requests", "Tokens", "Cost", "Last"],
+              pins.sessions.map((r) => [
+                `<span style="color:${pinColor(tags, r.tag)}">${esc(r.tag === "(unpinned)" ? "(unpinned)" : r.label)}</span>`,
+                `<span class="model" style="color:var(--accent)">${r.model}</span>`,
+                `<span class="folder" title="${esc(r.sessionId)}">${esc(r.sessionId ? r.sessionId.slice(0, 8) : "—")}</span>`,
+                `<span class="folder truncate" title="${esc(r.folder)}">${esc(shorten(r.folder, 40))}</span>`,
+                fmtNum(r.requests),
+                fmtNum(r.tokens),
+                fmtCost(r.cost),
+                fmtDateShort(r.lastTimestamp),
+              ]),
+              ["", "", "", "", "num", "num", "num", "num"],
+            )
+          : `<div class="pl-empty">No sessions using configured models in range.</div>`;
+        main.querySelector("#pins-config-table").innerHTML = table(
+          ["Model", "Rotation candidates"],
+          pins.configured.map((c) => [
+            `<span class="model" style="color:var(--accent)">${c.model}</span>`,
+            c.candidates
+              .map(
+                (cand) =>
+                  `<span style="color:${pinColor(tags, cand.tag)}">${esc(cand.label)}</span>`,
+              )
+              .join(", "),
+          ]),
+          ["", ""],
+        );
+        drawPinFreq(tags);
+      }
+
+      function drawPinFreq(tags) {
+        if (
+          !chartReady ||
+          typeof Chart === "undefined" ||
+          !pins.timeseries ||
+          pins.timeseries.length === 0 ||
+          tags.length === 0
+        )
+          return;
+        const labels = pins.timeseries.map((d) => fmtDay(d.timestamp));
+        const ctx = ensureChart("pins-freq-chart");
+        if (!ctx) return;
+        charts["pins-freq-chart"] = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: tags.map((tag) => ({
+              label: tag,
+              data: pins.timeseries.map((d) => d.byTag[tag] ?? 0),
+              backgroundColor: pinColor(tags, tag) + "a6",
+              stack: "pins",
+              borderRadius: 3,
+            })),
+          },
+          options: stacked(yTitle(baseChartOpts(), "Requests")),
+        });
       }
 
       function renderRecent(rows, isErrors) {
