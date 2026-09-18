@@ -318,6 +318,10 @@ function srcPath(key) {
 
 function destPath(dir, key, entry) {
   if (isPackageKind(classify(key))) return null;
+  // piRootDest: a machine-global file at the pi root (~/.pi) — independent
+  // of which target is being synced (validateProfiles restricts it to
+  // base-tagged config resources, so only --base selects it anyway).
+  if (entry?.piRootDest) return join(PI_ROOT, entry.piRootDest);
   return join(dir, relDestPath(key, entry));
 }
 

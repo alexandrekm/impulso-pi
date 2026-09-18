@@ -191,6 +191,19 @@
     // `npm run measure:context -- --record` after editing).
     "config/APPEND_SYSTEM.md": { "tags": ["core"] },
 
+    // setup_worktree.sh — machine-global worktree bootstrap at ~/.pi/setup_worktree.sh
+    // (piRootDest lands at the pi root, ONE copy per machine; base-tagged so
+    // only --base syncs it). Initializes the CURRENT work tree: parallel
+    // submodule init/update/reset (+ nested submodules), direnv/pre-commit
+    // hooks, WORKTREE_READY marker. Submodule-smart:
+    // no .gitmodules → submodule steps are skipped, the rest still runs.
+    // Branch via SETUP_WORKTREE_BRANCH (default master). zvec seeding is
+    // autoIndex's job — this script must NOT copy .zvec-grep (see the
+    // pi-zvec-grep resource notes). Run: ~/.pi/setup_worktree (from inside
+    // the worktree; operates on the work tree's toplevel). The copy in
+    // ~/code/mtv/mtv-inference is kept identical for repo-tracked use.
+    "config/setup_worktree.sh": { "tags": ["base"], "piRootDest": "setup_worktree.sh" },
+
     // pi-subagents owns all child-process lifecycle. The exact release was
     // preflighted against Pi 0.84.4: scout uses a strict read/search tool
     // allowlist, starts fresh, and Orca is only a best-effort observer.

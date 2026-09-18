@@ -125,7 +125,7 @@ Resource key forms:
 | --- | --- |
 | `extensions/<feature>/<file>.ts` | `<profile>/extensions/<file>` |
 | `extensions/<feature>/<file>.json` | `<profile>/extensions/<file>` |
-| `config/<file>` | `<profile>/<file>` (pi-root config, e.g. `config/models.json` → `<profile>/models.json`; `dest` optional override) |
+| `config/<file>` | `<profile>/<file>` (pi-root config, e.g. `config/models.json` → `<profile>/models.json`; `dest` optional override; `piRootDest` + `tags: ["base"]` instead lands at the pi root `~/.pi/<name>` — machine-global, one copy, synced only by `--base`) |
 | `skills/<name>/` (trailing slash) | `<profile>/skills/<name>/` |
 | `agents/<name>.md` | `<profile>/agents/<name>.md` |
 | `prompts/<name>.md` | `<profile>/prompts/<name>.md` |
@@ -634,3 +634,21 @@ global npm prefix), the root-free fix is to point npm at a user-owned prefix
 (`mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global`, then add
 `~/.npm-global/bin` to PATH) — or re-run with `sudo ./install.sh <args>`.
 `./install.sh` detects the permission failure and prints these hints itself.
+
+## Machine-global pi-root files (`piRootDest`)
+
+A `config/` resource tagged exactly `["base"]` may set `piRootDest` to a
+relative path under the pi root (`~/.pi`) instead of a per-profile `dest`:
+the file lands at `~/.pi/<piRootDest>` — one machine-global copy, synced
+only by `./install.sh --base` (profiles never select it). Currently used by
+`config/setup_worktree.sh` → `~/.pi/setup_worktree.sh`: the worktree
+bootstrap script (parallel submodule init/update/reset on
+`SETUP_WORKTREE_BRANCH` (default master), nested submodules, direnv /
+pre-commit hooks, `WORKTREE_READY` marker; no-submodule repos are fine —
+the submodule steps are skipped; run it from inside the worktree, it
+operates on the work tree's toplevel). It deliberately does NOT touch
+zvec-grep — autoIndex seeds worktree indexes at the first session start;
+hand-copying `.zvec-grep` is actively harmful (frozen snapshot without the
+rootPaths rewrite, or an umbrella stub shadowing every submodule index).
+The copy in `~/code/mtv/mtv-inference` is kept identical for repo-tracked
+use.
