@@ -167,3 +167,47 @@ revisit whether umbrella roots should be allowlisted. If adoption stays ~0
 in plain repos for another few weeks with the schema/prompt fixes live, the
 honest verdict flips to retire (the ~4.1k schema chars + this machinery
 would then be dead weight) — this doc is the evidence trail for that call.
+
+---
+
+# Round 2 — umbrella/worktree workflow (2026-09-18, same day)
+
+User push-back on "umbrella sessions run index-free": umbrella repos are the
+main way they work; they wanted `~/code/mtv/*` roots indexable (but NOT
+`~/code/mtv` itself, and not `~/code`), and clarified the worktree flow —
+base indexes live on the main checkouts (reindexed by their own command
+after pulls), worktrees should get seeded copies that update as they go and
+never write back to the main.
+
+New zg 0.2.2 facts, all verified empirically (see fork HANDOFF round 2):
+
+- `zg index <explicit-root>` HONORS the explicit root even when an ancestor
+  is indexed — worktree builds can never write back into the main checkout.
+- But cwd-based `status`/`query`/`index` resolve the NEAREST ANCESTOR index:
+  an index at a container/umbrella root makes every repo below it
+  permanently un-indexable (they resolve up to the stub; even a no-arg
+  `zg index` from below lands on the ancestor). This is why allowlisting
+  `~/code/mtv/*` umbrella roots would backfire — the 4-file stub at
+  mtv-inference would lock out triton-inference, lib-py-inference-client,
+  etc. It's also the mechanism that froze every repo under the 4.1 GB
+  ~/code index after Sep 9.
+- Worktree seeding works: copy the main checkout's `.zvec-grep` + rewrite
+  manifest rootPaths → turn-1 search; a following `zg index <worktree>`
+  updates it in place. Verified end-to-end with real git + real zg (seed →
+  update → main untouched → semantic finds worktree-only AND base content).
+
+Design that shipped (fork 2484ed7): umbrella/container roots stay BLOCKED
+(now with the correct reason — ancestor shadowing, not just "useless
+stub"); autoIndex resolves the NEAREST ENCLOSING git repo (one index per
+repo/worktree, never per-subdir stubs, never the main checkout); worktrees
+without an index are seeded from their main's base (2 GB cap) then updated
+in background; a missing own manifest builds directly so an ancestor's
+"ready" can no longer suppress leaf/worktree builds. Sessions at an
+umbrella root get semantic via `root=<submodule>` in zvec_search (pins cwd,
+bypasses the walk-up — taught in APPEND_SYSTEM.md) or fts/rg index-free.
+
+Net for the user's workflow: `~/code` and `~/code/mtv` blocked (the huge
+containers, exactly as asked); every repo and worktree under them gets its
+own real index (new — previously frozen by the mega-index); fresh worktrees
+start searchable from the base; the main checkout's index is never touched
+by worktree sessions.

@@ -790,9 +790,12 @@
     // (every query field optional), umbrella-repo sessions all had near-
     // empty 4-file indexes (zg cannot index nested git repos), and a 4.1 GB
     // corrupt ~/code index from racing autoIndex builds. The fork makes
-    // `query` required, enforces a root policy ($HOME + umbrella roots
-    // blocked, allowRoots escape hatch) in both the tool and autoIndex, and
-    // adds a cross-process build lock. Upstream PR desirable once validated.
+    // `query` required, enforces a root policy ($HOME + umbrella/container
+    // roots blocked, allowRoots escape hatch) in both the tool and
+    // autoIndex, adds a cross-process build lock, resolves autoIndex to the
+    // NEAREST ENCLOSING git repo, and seeds worktree indexes from the main
+    // checkout's base (never writes back). Upstream PR desirable once
+    // validated.
     // https://github.com/alexandrekm/pi-zvec-grep (fork of
     // MikkelKappelPersson/pi-zvec-grep)
     "git:github.com/alexandrekm/pi-zvec-grep": { "tags": ["core"] },
@@ -804,9 +807,10 @@
     // zvec-guard: blocks zvec_index calls against roots that must not be
     // indexed — $HOME (a home-rooted index makes every zg call stat the
     // entire home tree; this disabled zvec on every profile once, 2026-09)
-    // and umbrella roots (≥3 nested git repos at depth ≤ 2, which zg cannot
-    // index: the stub index only shadows real leaf-repo indexes for
-    // sessions below it). allowRoots in <configDir>/pi-zvec-grep/config.json
+    // and umbrella/container roots (≥3 nested git repos at depth ≤ 2, which
+    // zg cannot index — and zg resolves the NEAREST ANCESTOR index, so an
+    // index there makes every repo below it permanently un-indexable).
+    // allowRoots in <configDir>/pi-zvec-grep/config.json
     // is the escape hatch and never unlocks $HOME. index/rebuild are
     // blocked; drop stays allowed (dropping a bad index is the
     // remediation). Mirrors the fork's own root policy — defense in depth

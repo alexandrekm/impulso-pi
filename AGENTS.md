@@ -399,8 +399,24 @@ versioned).
   fork's autoIndex also takes a cross-process lock
   (`<root>/.zvec-grep/locks/autoindex.lock`, stale after 10 min) — racing
   builds from concurrent sessions corrupted a 4.1 GB `~/code` index once.
-  Umbrella-worktree sessions run index-free: `fts` searches (`zg query
-  --rg`) still cover submodule content without an index. A short global
+  **Why umbrella roots stay blocked even though they're the main way we
+  work** (verified against zg 0.2.2): `zg index <explicit-root>` honors the
+  root, but cwd-based `status`/`query`/`index` resolve the NEAREST ANCESTOR
+  index — so an index at an umbrella/container root makes every repo below
+  it permanently un-indexable, and an ancestor's "ready" suppresses leaf
+  builds. Instead the fork's autoIndex (a) resolves the NEAREST ENCLOSING
+  git repo of the session cwd (`.git` dir or worktree gitfile — a session
+  in a worktree or a repo subdir indexes that repo, one index per repo,
+  never a per-subdir stub, never the main checkout), (b) SEEDS a worktree
+  without an index from its main checkout's base index (manifest rootPaths
+  rewritten, 2 GB cap) before updating it in the background — turn-1 search
+  on fresh worktrees, then update-as-we-go, never write-back — and (c)
+  builds directly when the root's own manifest is missing (an ancestor's
+  "ready" can no longer shadow leaf/worktree builds). Keep base indexes on
+  the main checkouts reindexed after pulls (user's own command). Sessions
+  at an umbrella root: semantic via `root=<submodule>` in zvec_search
+  (which pins cwd and bypasses the ancestor walk-up) or inside the
+  submodule; `fts` (`zg query --rg`) covers submodule content index-free. A short global
   search-routing nudge ships as `config/APPEND_SYSTEM.md` (pi appends
   `<agentDir>/APPEND_SYSTEM.md` to every system prompt) because work repos'
   AGENTS.md files say nothing about zvec. Orca worktrees of plain repos:

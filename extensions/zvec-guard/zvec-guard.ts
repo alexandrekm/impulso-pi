@@ -18,9 +18,11 @@
  *   — or a directory of repos like ~/code). zg 0.2.x hard-skips nested repos
  *   when indexing (even `--no-ignore` and explicit globs cannot include
  *   them), so an umbrella index only ever contains the handful of root-level
- *   files — and that near-empty stub *shadows* real leaf-repo indexes:
- *   sessions inside a submodule resolve up to the umbrella index instead of
- *   building their own. Observed: a 4.1 GB ~/code index (corrupt after
+ *   files — and zg resolves the NEAREST ANCESTOR index for status/query/
+ *   index, so an index at a container root makes every repo below it
+ *   PERMANENTLY un-indexable (they resolve up to the stub, and even an
+ *   explicit `zg index` from below without an own index lands on the
+ *   ancestor). Observed: a 4.1 GB ~/code index (corrupt after
  *   concurrent auto-index builds) and a 4-file mtv-inference index shadowing
  *   every submodule session under it.
  *
@@ -231,12 +233,14 @@ export function assessRoot(root: string, policy: RootPolicy = DEFAULT_POLICY): R
     return {
       allowed: false,
       reason:
-        `[zvec-guard] blocked indexing an umbrella root (${nested}+ nested git repos at ` +
-        "depth ≤ 2). zg cannot index nested repos — only root-level files would be " +
-        "indexed, and that stub index shadows real leaf-repo indexes for sessions " +
-        "below it. Search still works without an index via fts (zvec_search) or " +
-        "bash rg. To index this root anyway, add it to rootPolicy.allowRoots in " +
-        "pi-zvec-grep/config.json (knowing nested repos stay invisible to it).",
+        `[zvec-guard] blocked indexing an umbrella/container root (${nested}+ nested git ` +
+        "repos at depth ≤ 2). zg cannot index nested-repo content (only root-level files " +
+        "would be indexed), and worse: zg resolves the NEAREST ANCESTOR index for " +
+        "status/query/index — an index here would make every repo below it permanently " +
+        "un-indexable. Index the specific repo instead (a session inside it does this " +
+        "automatically via autoIndex); search from an umbrella root works via fts " +
+        "(zvec_search) or bash rg, or by passing root=<submodule> to zvec_search. To index " +
+        "anyway, add this root to rootPolicy.allowRoots in pi-zvec-grep/config.json.",
     };
   }
   return { allowed: true };
