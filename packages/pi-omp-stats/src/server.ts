@@ -40,6 +40,7 @@ import {
   getToolDashboardStats,
   getContextBudgetStats,
   getSearchAdoptionStats,
+  getSessionPinStats,
   getSubagentDashboardStats,
   getAvailableProfiles,
   getTotalMessageCount,
@@ -225,6 +226,9 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
       }),
     );
   }
+
+  if (pathname === "/api/stats/pins")
+    return sendJson(res, 200, await getSessionPinStats(range, profile));
 
   if (pathname === "/api/stats/recent") {
     const limit = url.searchParams.get("limit");

@@ -59,6 +59,8 @@ import {
   getSearchCallRows,
   getSearchAdoptionSessions,
   getSearchAdoptionTimeseries,
+  getSessionModelUsage,
+  getSessionModelUsageDaily,
   type SearchAdoptionSession,
   getUserTurnTimestamps,
   getTimeSeries,
@@ -103,6 +105,11 @@ import type {
   SearchAdoptionPeriod,
   SearchAdoptionStats,
   SearchMixStats,
+  SessionPinBackendRow,
+  SessionPinConfig,
+  SessionPinStats,
+  SessionPinUnpinnedRow,
+  SessionPinSessionRow,
   ToolDashboardStats,
 } from "./shared-types.js";
 import type {
@@ -973,4 +980,253 @@ export async function getSubagentDashboardStats(range?: string | null) {
   await initDb();
   const { cutoff } = getTimeRangeConfig(range);
   return getSubagentRunDashboard(cutoff);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Session-pin dashboard accessor (impulso-pi openrouter-session-pin)        */
+/*                                                                            */
+/* Per-session OpenRouter backend pinning: the extension writes               */
+/* <profile>/openrouter-session-pin-state.json (session id -> model ->        */
+/* backend tag, 30-day pruning) and openrouter-session-pin.json (the          */
+/* candidate lists). The panel live-joins those files with per-session        */
+/* usage from the messages table — session ids are embedded in pi's           */
+/* session-file basenames (`<ISO-ts>_<uuid>.jsonl`). No DB schema change:    */
+/* the pin is session state, not history; sessions whose pin entry has been   */
+/* pruned (or that predate the extension) surface under "(unpinned)".        */
+/* -------------------------------------------------------------------------- */
+
+const PIN_STATE_NAME = "openrouter-session-pin-state.json";
+const PIN_CONFIG_NAME = "openrouter-session-pin.json";
+const UNPINNED_TAG = "(unpinned)";
+
+interface PinStateEntry {
+  pins: Record<string, string>;
+  updatedAt: number;
+}
+type PinState = Record<string, PinStateEntry>;
+
+/** model id -> tag -> display label. */
+type PinConfig = Map<string, Map<string, string>>;
+
+function readJsonFile<T>(filePath: string): T | null {
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+/** Profile roots to read pin files from: the selected profile, or every
+ *  discovered profile dir for the aggregate view. */
+async function pinProfileRoots(profile?: string | null): Promise<string[]> {
+  const sources = await resolveSessionsSources();
+  if (profile && profile !== "all") {
+    const match = sources.find((source) => source.id === profile);
+    return match ? [path.dirname(match.dir)] : [];
+  }
+  return sources.map((source) => path.dirname(source.dir));
+}
+
+function mergePinState(roots: string[]): PinState {
+  const merged: PinState = {};
+  for (const root of roots) {
+    const data = readJsonFile<{ sessions?: Record<string, PinStateEntry> }>(
+      path.join(root, PIN_STATE_NAME),
+    );
+    for (const [id, entry] of Object.entries(data?.sessions ?? {})) {
+      if (entry?.pins && typeof entry.pins === "object") {
+        merged[id] = { pins: entry.pins, updatedAt: entry.updatedAt ?? 0 };
+      }
+    }
+  }
+  return merged;
+}
+
+function mergePinConfig(roots: string[]): PinConfig {
+  const merged: PinConfig = new Map();
+  for (const root of roots) {
+    const data = readJsonFile<{
+      models?: Record<string, Array<{ tag?: string; label?: string }>>;
+    }>(path.join(root, PIN_CONFIG_NAME));
+    for (const [model, candidates] of Object.entries(data?.models ?? {})) {
+      const tags = merged.get(model) ?? new Map<string, string>();
+      for (const candidate of candidates ?? []) {
+        if (candidate?.tag) tags.set(candidate.tag, candidate.label ?? candidate.tag);
+      }
+      merged.set(model, tags);
+    }
+  }
+  return merged;
+}
+
+/** Session id from a pi session-file basename (`<ISO-ts>_<uuid>.jsonl`). */
+function sessionIdFromSessionFile(sessionFile: string): string {
+  const base = path.basename(sessionFile).replace(/\.jsonl$/, "");
+  const index = base.lastIndexOf("_");
+  return index >= 0 ? base.slice(index + 1) : "";
+}
+
+function toConfigRows(config: PinConfig): SessionPinConfig[] {
+  return [...config.entries()].map(([model, tags]) => ({
+    model,
+    candidates: [...tags.entries()].map(([tag, label]) => ({ tag, label })),
+  }));
+}
+
+interface PinUsageJoin {
+  tag: string | null;
+  tracked: boolean;
+}
+
+/** Backend tag for a usage row: the session's pin when present, else null;
+ *  rows for models with candidates but no pin are tracked as unpinned. */
+function pinTagFor(
+  state: PinState,
+  config: PinConfig,
+  sessionFile: string,
+  model: string,
+): PinUsageJoin {
+  const pin = state[sessionIdFromSessionFile(sessionFile)]?.pins?.[model];
+  if (pin) return { tag: pin, tracked: true };
+  const tracked = (config.get(model)?.size ?? 0) > 0;
+  return { tag: null, tracked };
+}
+
+function emptySessionPinStats(): SessionPinStats {
+  return {
+    configured: [],
+    summary: {
+      pinnedSessions: 0,
+      unpinnedSessions: 0,
+      backends: 0,
+      requests: 0,
+      cost: 0,
+      lastTimestamp: 0,
+    },
+    byBackend: [],
+    unpinned: [],
+    sessions: [],
+    timeseries: [],
+  };
+}
+
+export async function getSessionPinStats(
+  range?: string | null,
+  profile?: string | null,
+): Promise<SessionPinStats> {
+  await initDb();
+  const { modelSeriesDays, modelSeriesBucketMs, cutoff } = getTimeRangeConfig(range);
+  const roots = await pinProfileRoots(profile);
+  const config = mergePinConfig(roots);
+  if (config.size === 0) return emptySessionPinStats();
+  const state = mergePinState(roots);
+
+  const byBackend = new Map<string, SessionPinBackendRow>();
+  const unpinnedByModel = new Map<string, SessionPinUnpinnedRow>();
+  const sessionRows: SessionPinSessionRow[] = [];
+  const pinnedSessions = new Set<string>();
+  const unpinnedSessions = new Set<string>();
+  let requests = 0;
+  let cost = 0;
+  let lastTimestamp = 0;
+
+  for (const row of getSessionModelUsage(cutoff)) {
+    const { tag, tracked } = pinTagFor(state, config, row.sessionFile, row.model);
+    if (!tracked) continue;
+    if (tag) {
+      pinnedSessions.add(row.sessionFile);
+      requests += row.requests;
+      cost += row.cost;
+      lastTimestamp = Math.max(lastTimestamp, row.lastTimestamp);
+      const key = `${row.model}\u0000${tag}`;
+      const backend =
+        byBackend.get(key) ??
+        ({
+          model: row.model,
+          tag,
+          label: config.get(row.model)?.get(tag) ?? tag,
+          sessions: 0,
+          requests: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cost: 0,
+          firstTimestamp: row.firstTimestamp,
+          lastTimestamp: row.lastTimestamp,
+        } satisfies SessionPinBackendRow);
+      backend.sessions += 1;
+      backend.requests += row.requests;
+      backend.inputTokens += row.inputTokens;
+      backend.outputTokens += row.outputTokens;
+      backend.cacheReadTokens += row.cacheReadTokens;
+      backend.cost += row.cost;
+      backend.firstTimestamp = Math.min(backend.firstTimestamp, row.firstTimestamp);
+      backend.lastTimestamp = Math.max(backend.lastTimestamp, row.lastTimestamp);
+      byBackend.set(key, backend);
+    } else {
+      unpinnedSessions.add(row.sessionFile);
+      const agg =
+        unpinnedByModel.get(row.model) ??
+        ({
+          model: row.model,
+          sessions: 0,
+          requests: 0,
+          tokens: 0,
+          cost: 0,
+          lastTimestamp: row.lastTimestamp,
+        } satisfies SessionPinUnpinnedRow);
+      agg.sessions += 1;
+      agg.requests += row.requests;
+      agg.tokens += row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheWriteTokens;
+      agg.cost += row.cost;
+      agg.lastTimestamp = Math.max(agg.lastTimestamp, row.lastTimestamp);
+      unpinnedByModel.set(row.model, agg);
+    }
+    if (sessionRows.length < 500) {
+      sessionRows.push({
+        sessionId: sessionIdFromSessionFile(row.sessionFile),
+        model: row.model,
+        tag: tag ?? UNPINNED_TAG,
+        label: tag ? (config.get(row.model)?.get(tag) ?? tag) : "no pin (extension off / predates)",
+        folder: row.folder,
+        requests: row.requests,
+        tokens: row.inputTokens + row.outputTokens + row.cacheReadTokens + row.cacheWriteTokens,
+        cost: row.cost,
+        firstTimestamp: row.firstTimestamp,
+        lastTimestamp: row.lastTimestamp,
+      });
+    }
+  }
+
+  const dayBuckets = new Map<number, Map<string, number>>();
+  for (const row of getSessionModelUsageDaily(modelSeriesDays, cutoff, modelSeriesBucketMs)) {
+    const { tag, tracked } = pinTagFor(state, config, row.sessionFile, row.model);
+    if (!tracked) continue;
+    const seriesTag = tag ?? UNPINNED_TAG;
+    const byTag = dayBuckets.get(row.bucket) ?? new Map<string, number>();
+    byTag.set(seriesTag, (byTag.get(seriesTag) ?? 0) + row.requests);
+    dayBuckets.set(row.bucket, byTag);
+  }
+
+  sessionRows.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
+  const sortedBackends = [...byBackend.values()].sort(
+    (a, b) => b.requests - a.requests || a.tag.localeCompare(b.tag),
+  );
+  return {
+    configured: toConfigRows(config),
+    summary: {
+      pinnedSessions: pinnedSessions.size,
+      unpinnedSessions: unpinnedSessions.size,
+      backends: new Set(sortedBackends.map((row) => row.tag)).size,
+      requests,
+      cost,
+      lastTimestamp,
+    },
+    byBackend: sortedBackends,
+    unpinned: [...unpinnedByModel.values()].sort((a, b) => b.requests - a.requests),
+    sessions: sessionRows.slice(0, 100),
+    timeseries: [...dayBuckets.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([timestamp, byTag]) => ({ timestamp, byTag: Object.fromEntries(byTag) })),
+  };
 }

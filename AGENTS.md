@@ -230,7 +230,16 @@ reason), all parsed from session JSONL with no upstream pi change. New
 `/api/stats/compaction*` + `/api/stats/memory*` + `/api/stats/guards*`
 routes feed a Compaction panel, an Observational Memory panel (with a
 searchable memory browser), and a Guards panel (with a searchable list of
-blocked commands) in the dashboard. The `/api/stats/search-adoption`
+blocked commands) in the dashboard. The `/api/stats/pins` route feeds
+the **Session Pins** panel (openrouter-session-pin observability): it
+live-joins each profile's `openrouter-session-pin-state.json` (session id
+→ model → backend tag, written by the extension) with per-session usage
+from the messages table — session ids are embedded in pi's session-file
+basenames — to show requests/tokens/cost per backend, a per-day stacked
+chart, recent sessions with their pin, and the configured rotation lists;
+sessions predating the extension (or pruned from the 30-day state file)
+surface as `(unpinned)`, giving a before/after baseline. No DB schema
+change: the pin is session state, not history. The `/api/stats/search-adoption`
 route feeds the **Search Adoption** panel (zvec enablement tracking):
 per-session search-tool usage from `tool_calls`, sessions split at the
 zvec-enablement cutoff (`?since=` epoch-ms or ISO date; default 2026-09-09,
