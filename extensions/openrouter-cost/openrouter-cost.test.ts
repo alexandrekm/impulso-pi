@@ -175,7 +175,13 @@ function setup(api: GenerationApi): Wiring {
   const pi = {
     on: (name: string, handler: (event: any, ctx?: any) => unknown) => handlers.set(name, handler),
   };
-  wireOpenRouterCost(pi as any, { api });
+  // Hermetic config dir with its own auth.json: never inherit the ambient
+  // PI_CODING_AGENT_DIR (locally that points at a real profile with a real
+  // OpenRouter key, which made the rewrite tests pass by accident and fail
+  // in CI where no such env exists).
+  const configDir = mkdtempSync(join(tmpdir(), "orcost-wire-"));
+  writeFileSync(join(configDir, "auth.json"), JSON.stringify({ openrouter: { key: "test-key" } }));
+  wireOpenRouterCost(pi as any, { api, configDir });
   const respond = (event: any, ctx?: any): unknown =>
     handlers.get("after_provider_response")?.(event, ctx);
   const settle = (event: any): Promise<unknown> =>

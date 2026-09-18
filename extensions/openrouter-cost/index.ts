@@ -36,8 +36,9 @@ const CONFIG_DIR =
 /** Wire the capture+rewrite flow onto a pi instance with injectable IO. */
 export function wireOpenRouterCost(
   pi: any,
-  deps: { api?: GenerationApi; poll?: PollOptions } = {},
+  deps: { api?: GenerationApi; poll?: PollOptions; configDir?: string } = {},
 ): void {
+  const configDir = deps.configDir ?? CONFIG_DIR;
   const pending = new Map<string, string>();
   const poll: PollOptions = deps.poll ?? {
     attempts: POLL_ATTEMPTS,
@@ -49,7 +50,7 @@ export function wireOpenRouterCost(
   const apiFor = (): { api: GenerationApi; id: string } | undefined => {
     const id = pending.get(PROVIDER);
     if (!id) return undefined;
-    const key = readOpenRouterKey(CONFIG_DIR);
+    const key = readOpenRouterKey(configDir);
     if (!key) return undefined;
     return { api: deps.api ?? makeGenerationApi(key, fetch), id };
   };
