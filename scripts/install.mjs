@@ -53,7 +53,12 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_DIR = resolve(SCRIPT_DIR, "..");
 const PROFILES_JSON = join(REPO_DIR, "profiles.jsonc");
 
-const PI_ROOT = process.env.PPI_PI_ROOT || join(homedir(), ".pi");
+// PI_ROOT precedence: explicit PPI_PI_ROOT > dirname(PI_AGENT_DIR) when the
+// base dir is overridden (sandboxing must keep piRoot-dest resources inside
+// the sandbox) > ~/.pi. AGENT_DIR then defaults inside it as usual.
+const PI_ROOT =
+  process.env.PPI_PI_ROOT ||
+  (process.env.PI_AGENT_DIR ? dirname(process.env.PI_AGENT_DIR) : join(homedir(), ".pi"));
 const PROFILES_DIR = join(PI_ROOT, "profiles");
 const AGENT_DIR = process.env.PI_AGENT_DIR || join(PI_ROOT, "agent");
 
