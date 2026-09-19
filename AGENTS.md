@@ -125,7 +125,7 @@ Resource key forms:
 | --- | --- |
 | `extensions/<feature>/<file>.ts` | `<profile>/extensions/<file>` |
 | `extensions/<feature>/<file>.json` | `<profile>/extensions/<file>` |
-| `config/<file>` | `<profile>/<file>` (pi-root config, e.g. `config/models.json` → `<profile>/models.json`; `dest` optional override) |
+| `config/<file>` | `<profile>/<file>` (pi-root config, e.g. `config/models.json` → `<profile>/models.json`; `dest` optional override; `piRootDest` + `tags: ["base"]` instead lands at the pi root `~/.pi/<name>` — machine-global, one copy, synced only by `--base`) |
 | `skills/<name>/` (trailing slash) | `<profile>/skills/<name>/` |
 | `agents/<name>.md` | `<profile>/agents/<name>.md` |
 | `prompts/<name>.md` | `<profile>/prompts/<name>.md` |
@@ -377,28 +377,65 @@ versioned).
   a thinking-level enum, and a remember toggle — all write to `pi-btw.json`,
  read fresh each `/btw` so no `/reload` is needed for model changes
 
-- `npm:@luminascale/pi-zvec-grep` + `extensions/pi-zvec-grep/config.json` +
-  `tools: @zvec/zvec-grep` — zvec-grep (`zg`) hybrid semantic + keyword
-  search as native pi tools (`zvec_search` / `zvec_index` / `zvec_status`,
-  `/zg` command). Additive: FFF keeps `find`/`grep` for exact strings;
-  `zvec_search` is for meaning-based / location-unknown questions.
-  Indexes live per-workspace at `<root>/.zvec-grep` (gitignored); the
-  global `zg` CLI is installed by install.sh's `tools` section. User config
-  at `<configDir>/pi-zvec-grep/config.json` — autoIndex on, toggled in
-  `/settings` → Search.
-  **Never index `$HOME`** (`zg index ~`): a home-rooted index makes every
-  `zg` call stat the entire home tree to compute freshness —
-  status/query hang for minutes from *any* cwd under `$HOME`, which
-  silently disabled zvec on every profile (2026-09; fixed by dropping the
-  index). `extensions/zvec-guard/` blocks `zvec_index` calls targeting
-  `$HOME` (index/rebuild modes; drop stays allowed as the remediation),
-  toggled in `/settings` → Search → Semantic search. Orca worktrees:
-  autoIndex builds the index at the first session start; copying the
-  parent repo's `.zvec-grep` into a new worktree (then rewriting
-  `manifest.json` rootPaths to the worktree path) gives turn-1 search —
-  zg tracks files by absolute path, so the copied index can't be
-  incrementally updated, but it is immediately searchable and autoIndex
-  rebuilds it in the background.
+- `git:github.com/alexandrekm/pi-zvec-grep` (our fork of
+  MikkelKappelPersson/pi-zvec-grep v0.3.1, see `investigation/ZVEC-ADOPTION-
+  REVIEW.md`) + `extensions/pi-zvec-grep/config.json` + `tools: @zvec/zvec-grep`
+  — zvec-grep (`zg`) hybrid semantic + keyword search as native pi tools
+  (`zvec_search` / `zvec_index` / `zvec_status`, `/zg` command). Additive:
+  FFF keeps `find`/`grep` for exact strings; `zvec_search` (whose `query`
+  param is **required** — the fork's adoption fix; the one organic call in
+  the wild died on an all-optional schema) is for meaning-based /
+  location-unknown questions. Indexes live per-workspace at
+  `<root>/.zvec-grep` (gitignored); the global `zg` CLI is installed by
+  install.sh's `tools` section. User config at
+  `<configDir>/pi-zvec-grep/config.json` — autoIndex on + `rootPolicy`,
+  toggled in `/settings` → Search. The fork + `extensions/zvec-guard/`
+  (mirrors the policy at pi's tool_call layer) enforce a **root policy**:
+  `$HOME` and umbrella roots (≥ `maxNestedRepos`, default 3, nested git
+  repos at depth ≤ 2) are never indexed — zg 0.2.x cannot index nested
+  repos at all, so an umbrella index is a near-empty stub that shadows
+  real leaf-repo indexes for sessions below it; `rootPolicy.allowRoots` is
+  the escape hatch, never unlocks `$HOME`, and drop always passes. The
+  fork's autoIndex also takes a cross-process lock
+  (`<root>/.zvec-grep/locks/autoindex.lock`, stale after 10 min) — racing
+  builds from concurrent sessions corrupted a 4.1 GB `~/code` index once.
+  **Why umbrella roots stay blocked even though they're the main way we
+  work** (verified against zg 0.2.2): `zg index <explicit-root>` honors the
+  root, but cwd-based `status`/`query`/`index` resolve the NEAREST ANCESTOR
+  index — so an index at an umbrella/container root makes every repo below
+  it permanently un-indexable, and an ancestor's "ready" suppresses leaf
+  builds. Instead the fork's autoIndex (a) resolves the NEAREST ENCLOSING
+  git repo of the session cwd (`.git` dir or worktree gitfile — a session
+  in a worktree or a repo subdir indexes that repo, one index per repo,
+  never a per-subdir stub, never the main checkout), (b) SEEDS a worktree
+  without an index from its main checkout's base index (manifest rootPaths
+  rewritten, 2 GB cap) before updating it in the background — turn-1 search
+  on fresh worktrees, then update-as-we-go, never write-back — and (c)
+  builds directly when the root's own manifest is missing (an ancestor's
+  "ready" can no longer shadow leaf/worktree builds). Keep base indexes on
+  the main checkouts reindexed after pulls (user's own command). Sessions
+  at an umbrella root works OUT OF THE BOX: the fork's autoIndex indexes
+  the depth-1 submodule repos in the background (seeded from the main
+  checkout's submodule bases when present), and `zvec_search` from the
+  root automatically FANS OUT across every indexed submodule — one call
+  searches every repo under the umbrella (merged, per-repo headers,
+  ≤40 repos, 5 concurrent, ≤5 hits each). `root=<submodule>` still works
+  to scope a search to one repo, and `fts` (`zg query --rg`) covers
+  submodule content index-free. A short global
+  search-routing nudge ships as `config/APPEND_SYSTEM.md` (pi appends
+  `<agentDir>/APPEND_SYSTEM.md` to every system prompt) because work repos'
+  AGENTS.md files say nothing about zvec. Worktrees: autoIndex SEEDS a fresh
+  worktree at the first session start — it copies the main checkout's base
+  `.zvec-grep` in, REWRITES `manifest.json` rootPaths to the worktree, and
+  updates it in the background (turn-1 search from the seed, correct
+  content from the update; never writes back to the main). For umbrella
+  repos the bases must live in the SUBMODULE checkouts of the main
+  (`<main>/<submodule>/.zvec-grep`), never at the superproject root —
+  that's what seeds each submodule inside a worktree, and the user's
+  after-pull reindex command targets those. Do NOT hand-copy
+  `.zvec-grep` into worktrees (e.g. from a setup script): without the
+  rootPaths rewrite the copy is a frozen snapshot of the main, and an
+  umbrella-root copy would shadow every submodule repo in the worktree.
 
 - `extensions/impulso-settings/` — `/impulso` AND `/settings` settings page:
   an OMP-style tabbed TUI (built on `@earendil-works/pi-tui`) that lists every
@@ -597,3 +634,21 @@ global npm prefix), the root-free fix is to point npm at a user-owned prefix
 (`mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global`, then add
 `~/.npm-global/bin` to PATH) — or re-run with `sudo ./install.sh <args>`.
 `./install.sh` detects the permission failure and prints these hints itself.
+
+## Machine-global pi-root files (`piRootDest`)
+
+A `config/` resource tagged exactly `["base"]` may set `piRootDest` to a
+relative path under the pi root (`~/.pi`) instead of a per-profile `dest`:
+the file lands at `~/.pi/<piRootDest>` — one machine-global copy, synced
+only by `./install.sh --base` (profiles never select it). Currently used by
+`config/setup_worktree.sh` → `~/.pi/setup_worktree.sh`: the worktree
+bootstrap script (parallel submodule init/update/reset on
+`SETUP_WORKTREE_BRANCH` (default master), nested submodules, direnv /
+pre-commit hooks, `WORKTREE_READY` marker; no-submodule repos are fine —
+the submodule steps are skipped; run it from inside the worktree, it
+operates on the work tree's toplevel). It deliberately does NOT touch
+zvec-grep — autoIndex seeds worktree indexes at the first session start;
+hand-copying `.zvec-grep` is actively harmful (frozen snapshot without the
+rootPaths rewrite, or an umbrella stub shadowing every submodule index).
+The copy in `~/code/mtv/mtv-inference` is kept identical for repo-tracked
+use.
