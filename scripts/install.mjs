@@ -207,6 +207,35 @@ function hintNpmPermissionError(errText, { command } = {}) {
   return true;
 }
 
+// Install the `pi` CLI itself when missing, via pi's official install
+// command (the Quick Start in pi's README: `npm install -g --ignore-scripts
+// @earendil-works/pi-coding-agent`). Detect-first and never overwrite: an
+// existing `pi` on PATH — however it was installed (npm global, the
+// pi.dev installer, a managed install, a distro package) — is reported and
+// left completely untouched; install.sh only acts when `pi` is absent, and
+// never reinstalls or overwrites. The opt-in self-update offered during the
+// dependency review is the only update path, and it stays explicit.
+function ensurePiInstalled() {
+  if (hasCmd("pi")) {
+    const v = installedPiVersion();
+    console.log(`==> pi ${v ?? "(unknown version)"} already on PATH — leaving untouched`);
+    return;
+  }
+  console.log(
+    `==> pi CLI not found — installing via the official method: npm install -g --ignore-scripts ${PI_NPM_PACKAGE}`,
+  );
+  const r = spawnSync("npm", ["install", "-g", "--ignore-scripts", PI_NPM_PACKAGE], {
+    stdio: ["inherit", "inherit", "pipe"],
+  });
+  if (r.error || r.status !== 0) {
+    console.error("");
+    hintNpmPermissionError((r.stderr && r.stderr.toString()) || "", {
+      command: `'npm install -g --ignore-scripts ${PI_NPM_PACKAGE}'`,
+    });
+    throw new Error(`'npm install -g --ignore-scripts ${PI_NPM_PACKAGE}' failed`);
+  }
+}
+
 function ensurePpiInstalled() {
   // npm prints progress to stdout (inherit) but writes errors to stderr;
   // capture stderr so we can detect a permission failure and hint at it.
@@ -465,9 +494,9 @@ function buildDepList(names, profiles) {
   const needsPpi = names.some((n) => !n.base);
   const items = [];
 
-  // `pi` CLI presence is a hard prerequisite checked before we get here,
-  // so hasCmd("pi") is true. Offer a self-update only when a newer version
-  // is published — an up-to-date pi stays silent.
+  // ensurePiInstalled() ran before we got here, so a usable `pi` is on
+  // PATH. Offer a self-update only when a newer version is published — an
+  // up-to-date pi stays silent; the offer is opt-in, never automatic.
   {
     const installed = installedPiVersion();
     const latest = latestVersion(PI_NPM_PACKAGE);
@@ -1471,10 +1500,10 @@ async function main() {
   }
 
   // `pi` CLI is a hard prerequisite for install (needs pi install); for
-  // status/pull we only read/move files, so pi isn't required.
-  if (cmd === "install" && !hasCmd("pi")) {
-    console.error("'pi' CLI not found on PATH. Install pi first: https://pi.dev");
-    process.exit(1);
+  // status/pull we only read/move files, so pi isn't required. Missing →
+  // install via the official method; present → reported and never touched.
+  if (cmd === "install") {
+    ensurePiInstalled();
   }
 
   const names = resolveNames(spec, profiles);
