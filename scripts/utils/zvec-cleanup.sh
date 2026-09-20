@@ -25,7 +25,9 @@
 #   scripts/utils/zvec-cleanup.sh [--apply] [--depth N] [root ...]
 #
 #   --apply     actually drop the harmful indexes (default: dry-run report)
-#   --depth N   find depth per root (default: 4)
+#   --network   also drop indexes on network filesystems (always flagged;
+#               deletion is opt-in via this flag)
+#   --depth N   find depth per root (default: 6)
 #   root ...    roots to scan (default: $HOME)
 #
 # Dropped worktrees re-seed automatically on their next session (autoIndex).
@@ -34,7 +36,15 @@
 set -euo pipefail
 
 APPLY=0
-DEPTH=4
+# Also drop indexes on network filesystems (NFS/SMB/sshfs/…). They are
+# always FLAGGED; deletion additionally requires this flag — a network
+# mount may hold the only copy of something, so it is opt-in.
+DROP_NETWORK=0
+# Default depth 6 covers the Orca worktree layout, where the interesting
+# indexes live deep: ~/orca/workspaces/<repo>/<worktree>/.zvec-grep (5) and
+# its submodule fan-out indexes (6). Depth 4 would miss exactly the frozen
+# worktree copies this sweep exists for.
+DEPTH=6
 ROOTS=()
 NESTED_REPOS=3
 
@@ -46,6 +56,7 @@ usage() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply) APPLY=1 ;;
+    --network) DROP_NETWORK=1 ;;
     --depth) DEPTH="${2:?--depth needs a value}"; shift ;;
     -h | --help) usage 0 ;;
     -*) echo "unknown flag: $1" >&2; usage 1 ;;
@@ -88,6 +99,47 @@ classify_index() {
   ' "$manifest"
 }
 
+# ---- network-filesystem detection (mirrors the netfs rule in the fork) ----
+# The mount table is parsed once into point<TAB>type lines, longest-prefix
+# match against the (realpathed) index root. Fail-open: an unparseable
+# mount table simply flags nothing.
+
+MOUNT_TABLE="$(mktemp)"
+trap 'rm -f "$MOUNT_TABLE"' EXIT
+# regexes in variables: bash's [[ =~ ]] tokenizer chokes on parens in
+# inline patterns (the ) inside the character class ends the conditional)
+RE_LINUX_MOUNT='^(.+) on (.+) type ([^[:space:]]+) \('
+RE_MACOS_MOUNT='^(.+) on (.+) \(([a-zA-Z][[:alnum:]._-]*)[,)]'
+while IFS= read -r line; do
+  # util-linux mount(8): `<dev> on <point> type <fstype> (<opts>)`
+  if [[ "$line" =~ $RE_LINUX_MOUNT ]]; then
+    printf '%s\t%s\n' "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+  # macOS mount(8): `<dev> on <point> (<fstype>, <opts>…)` — type may be alone
+  elif [[ "$line" =~ $RE_MACOS_MOUNT ]]; then
+    printf '%s\t%s\n' "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+  fi
+done < <(mount 2>/dev/null) >"$MOUNT_TABLE"
+
+is_network_type() {
+  case "$1" in
+    nfs | nfs4 | nfs5 | cifs | smbfs | smbfs2 | sshfs | fuse.sshfs | afpfs | davfs | davfs2 | webdav | 9p | ncpfs | afs | ceph | cephfs | fuse.ceph | lustre | glusterfs | gpfs | vboxsf | vmhgfs | prl_fs | nts) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+mount_type_for() {
+  local target=$1 best_pt='' best_ty='' pt ty
+  while IFS=$'\t' read -r pt ty; do
+    if [[ "$target" == "$pt" || "$target" == "$pt"/* ]]; then
+      if ((${#pt} > ${#best_pt})); then best_pt=$pt; best_ty=$ty; fi
+    fi
+  done <"$MOUNT_TABLE"
+  # always exit 0: callers run under set -e, and an unmatched target is a
+  # normal outcome (fail open), not an error
+  [[ -n "$best_pt" ]] && echo "$best_ty"
+  return 0
+}
+
 shopt -s nullglob
 found=0
 dropped=0
@@ -112,6 +164,16 @@ for root in "${ROOTS[@]}"; do
       nested="$(count_nested_repos "$parent")"
       if [[ "$nested" -ge "$NESTED_REPOS" ]]; then
         verdict="drop:umbrella/container root ($nested nested git repos)"
+      fi
+    fi
+    # network-fs indexes: always flagged; dropped only with --network
+    nettype="$(mount_type_for "$parent")"
+    if [[ -n "$nettype" ]] && is_network_type "$nettype"; then
+      if [[ $DROP_NETWORK -eq 1 ]]; then
+        verdict="drop:network filesystem ($nettype)"
+      else
+        echo "FLAGGED (network fs: $nettype — drop with --network): $idx"
+        continue
       fi
     fi
 

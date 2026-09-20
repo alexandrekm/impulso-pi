@@ -15,9 +15,17 @@ const {
   assessRoot,
   bestRealPath,
   countNestedRepos,
+  isNetworkFsRoot,
   loadRootPolicy,
+  mountTypeFor,
   normalizeRoot,
+  parseMounts,
+  setMountTable,
 } = await import("./zvec-guard.ts");
+
+// Hermetic: prime a purely local mount table so the network-fs rule never
+// depends on the host's real mounts (reset in the after() hook).
+setMountTable([{ point: "/", type: "apfs" }]);
 
 const MANIFEST = join(CONFIG_DIR, "impulso-settings.json");
 
@@ -36,7 +44,11 @@ function makeUmbrella(count: number, gitStyle: "dir" | "file" = "dir"): string {
 const ZVEC_CONFIG_DIR = join(CONFIG_DIR, "pi-zvec-grep");
 
 /** Write a pi-zvec-grep config with the given rootPolicy (user layer). */
-function setRootPolicy(policy: { allowRoots: string[]; maxNestedRepos: number }): void {
+function setRootPolicy(policy: {
+  allowRoots: string[];
+  maxNestedRepos: number;
+  allowNetworkFs?: boolean;
+}): void {
   mkdirSync(ZVEC_CONFIG_DIR, { recursive: true });
   writeFileSync(
     join(ZVEC_CONFIG_DIR, "config.json"),
@@ -210,37 +222,64 @@ describe("root policy (umbrella roots)", () => {
   });
 
   test("the threshold is configurable via maxNestedRepos", () => {
-    assert.equal(assessRoot(makeUmbrella(2), { allowRoots: [], maxNestedRepos: 2 }).allowed, false);
+    assert.equal(
+      assessRoot(makeUmbrella(2), { allowRoots: [], maxNestedRepos: 2, allowNetworkFs: false })
+        .allowed,
+      false,
+    );
   });
 
   test("allowRoots bypasses the umbrella rule (realpath-matched)", () => {
     const umbrella = makeUmbrella(5);
-    assert.equal(assessRoot(umbrella, { allowRoots: [umbrella], maxNestedRepos: 3 }).allowed, true);
     assert.equal(
-      assessRoot(realpathSync(umbrella), { allowRoots: [umbrella], maxNestedRepos: 3 }).allowed,
+      assessRoot(umbrella, { allowRoots: [umbrella], maxNestedRepos: 3, allowNetworkFs: false })
+        .allowed,
+      true,
+    );
+    assert.equal(
+      assessRoot(realpathSync(umbrella), {
+        allowRoots: [umbrella],
+        maxNestedRepos: 3,
+        allowNetworkFs: false,
+      }).allowed,
       true,
     );
   });
 
   test("allowRoots never unlocks $HOME", () => {
-    assert.equal(assessRoot("~", { allowRoots: ["~"], maxNestedRepos: 3 }).allowed, false);
+    assert.equal(
+      assessRoot("~", { allowRoots: ["~"], maxNestedRepos: 3, allowNetworkFs: true }).allowed,
+      false,
+    );
   });
 });
 
 describe("root policy config (pi-zvec-grep/config.json)", () => {
   test("loadRootPolicy returns built-in defaults without a config file", () => {
     rmSync(ZVEC_CONFIG_DIR, { recursive: true, force: true });
-    assert.deepEqual(loadRootPolicy(), { allowRoots: [], maxNestedRepos: 3 });
+    assert.deepEqual(loadRootPolicy(), {
+      allowRoots: [],
+      maxNestedRepos: 3,
+      allowNetworkFs: false,
+    });
   });
 
   test("loadRootPolicy reads the user-layer rootPolicy", () => {
     setRootPolicy({ allowRoots: ["~/umbrella-ok"], maxNestedRepos: 5 });
-    assert.deepEqual(loadRootPolicy(), { allowRoots: ["~/umbrella-ok"], maxNestedRepos: 5 });
+    assert.deepEqual(loadRootPolicy(), {
+      allowRoots: ["~/umbrella-ok"],
+      maxNestedRepos: 5,
+      allowNetworkFs: false,
+    });
   });
 
   test("invalid values fall back per sub-key, never to garbage", () => {
     setRootPolicy({ allowRoots: ["ok", 42, ""] as unknown as string[], maxNestedRepos: -1 });
-    assert.deepEqual(loadRootPolicy(), { allowRoots: ["ok"], maxNestedRepos: 3 });
+    assert.deepEqual(loadRootPolicy(), {
+      allowRoots: ["ok"],
+      maxNestedRepos: 3,
+      allowNetworkFs: false,
+    });
   });
 
   test("the hook blocks an umbrella root and honors allowRoots from the config", async () => {
@@ -250,7 +289,7 @@ describe("root policy config (pi-zvec-grep/config.json)", () => {
     assert.ok(blocked && blocked.block === true);
     assert.match(blocked.reason, /umbrella/);
 
-    setRootPolicy({ allowRoots: [umbrella], maxNestedRepos: 3 });
+    setRootPolicy({ allowRoots: [umbrella], maxNestedRepos: 3, allowNetworkFs: false });
     assert.equal(await call(umbrella, "index"), undefined);
     rmSync(ZVEC_CONFIG_DIR, { recursive: true, force: true });
   });
@@ -260,4 +299,110 @@ describe("root policy config (pi-zvec-grep/config.json)", () => {
   });
 });
 
-after(() => rmSync(CONFIG_DIR, { recursive: true, force: true }));
+describe("network filesystem detection", () => {
+  test("parseMounts accepts Linux mount(8), macOS mount(8) and /proc/self/mounts shapes", () => {
+    const parsed = parseMounts(
+      [
+        "/dev/disk1s1 on / (apfs, local, journaled)",
+        "//u@s/share on /Volumes/share (smbfs)",
+        "server:/e on /mnt/nfs (nfs)",
+        "/dev/sda1 on /boot type ext4 (rw,relatime)",
+        "server:/e /proc/shape/nfs nfs4 rw 0 0",
+        "junk line",
+      ].join("\n"),
+    );
+    assert.deepEqual(
+      parsed.map((m) => [m.point, m.type]),
+      [
+        ["/", "apfs"],
+        ["/Volumes/share", "smbfs"],
+        ["/mnt/nfs", "nfs"],
+        ["/boot", "ext4"],
+        ["/proc/shape/nfs", "nfs4"],
+      ],
+    );
+  });
+
+  test("mountTypeFor resolves by longest prefix; the mount point itself matches", () => {
+    const table = parseMounts(
+      [
+        "/dev/disk1s1 on / (apfs, local)",
+        "//u@s/d on /Volumes/data (smbfs)",
+        "server:/x on /Volumes/data/deep/export (nfs)",
+      ].join("\n"),
+    );
+    assert.equal(mountTypeFor("/Volumes/data/file", table), "smbfs");
+    assert.equal(mountTypeFor("/Volumes/data/deep/export/file", table), "nfs");
+    assert.equal(
+      mountTypeFor("/Volumes/data/deep/export", table),
+      "nfs",
+      "the mount point itself matches",
+    );
+    assert.equal(mountTypeFor("/System", table), "apfs");
+    assert.equal(mountTypeFor("/no/match", [{ point: "/mnt/x", type: "nfs" }]), undefined);
+  });
+
+  test("isNetworkFsRoot flags network mounts and fails open on unknown roots", () => {
+    const table = [
+      { point: "/mnt/local", type: "apfs" },
+      { point: "/mnt/nfs", type: "nfs" },
+      { point: "/mnt/sshfs", type: "fuse.sshfs" },
+    ];
+    assert.equal(isNetworkFsRoot("/mnt/nfs/work", table), true);
+    assert.equal(isNetworkFsRoot("/mnt/sshfs/work", table), true);
+    assert.equal(isNetworkFsRoot("/mnt/local/work", table), false);
+    assert.equal(isNetworkFsRoot("/elsewhere/work", table), false, "no mount match fails open");
+  });
+
+  test("assessRoot blocks network roots; allowNetworkFs and allowRoots override", () => {
+    const nfsRoot = join(tmpdir(), "impulso-netfs-root");
+    mkdirSync(nfsRoot, { recursive: true });
+    const real = realpathSync(nfsRoot);
+    const mounts = [
+      { point: "/", type: "apfs" },
+      { point: real, type: "nfs" },
+    ];
+    const blocked = assessRoot(
+      nfsRoot,
+      { allowRoots: [], maxNestedRepos: 3, allowNetworkFs: false },
+      mounts,
+    );
+    assert.equal(blocked.allowed, false);
+    assert.match(blocked.reason ?? "", /network filesystem/i);
+    assert.match(blocked.reason ?? "", /allowNetworkFs/);
+    const allowed = assessRoot(
+      nfsRoot,
+      { allowRoots: [], maxNestedRepos: 3, allowNetworkFs: true },
+      mounts,
+    );
+    assert.equal(allowed.allowed, true);
+    const viaAllowRoots = assessRoot(
+      nfsRoot,
+      { allowRoots: [nfsRoot], maxNestedRepos: 3, allowNetworkFs: false },
+      mounts,
+    );
+    assert.equal(viaAllowRoots.allowed, true);
+  });
+
+  test("loadRootPolicy reads allowNetworkFs from the user-layer config", () => {
+    setRootPolicy({ allowRoots: [], maxNestedRepos: 3, allowNetworkFs: false });
+    assert.equal(loadRootPolicy().allowNetworkFs, false, "absent key -> default off");
+    writeFileSync(
+      join(ZVEC_CONFIG_DIR, "config.json"),
+      JSON.stringify({ rootPolicy: { allowNetworkFs: true } }),
+      "utf8",
+    );
+    assert.equal(loadRootPolicy().allowNetworkFs, true);
+    writeFileSync(
+      join(ZVEC_CONFIG_DIR, "config.json"),
+      JSON.stringify({ rootPolicy: { allowNetworkFs: "yes" } }),
+      "utf8",
+    );
+    assert.equal(loadRootPolicy().allowNetworkFs, false, "invalid value -> default off");
+  });
+});
+
+after(() => {
+  setMountTable([{ point: "/", type: "apfs" }]);
+  rmSync(CONFIG_DIR, { recursive: true, force: true });
+});

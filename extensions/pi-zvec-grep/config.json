@@ -1,4 +1,8 @@
 {
   "autoIndex": true,
-  "rootPolicy": { "allowRoots": [], "maxNestedRepos": 3 }
+  "rootPolicy": {
+    "allowRoots": [],
+    "maxNestedRepos": 3,
+    "allowNetworkFs": false
+  }
 }
