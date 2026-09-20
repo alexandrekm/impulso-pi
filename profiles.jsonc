@@ -531,6 +531,10 @@
     // memory (worker model + thinking, passive mode, worker notices, compaction
     // trigger mode) and persists across installs (fill-only, never reset).
     // https://pi.dev/packages/pi-observational-memory
+    // NOTE: ≤ 3.1.3 detaches pi's ModelRegistry.streamSimple from its
+    // receiver and crashes pi ≥ 0.85 (uncaughtException); a local bind-patch
+    // is applied to the installed copies — see "Known upstream bugs (local
+    // patches)" in AGENTS.md before updating pi or this package.
     "npm:pi-observational-memory": { "tags": ["core"] },
 
     // Orca Dev integration: Orca hardcodes ~/.pi/agent for its managed pi
