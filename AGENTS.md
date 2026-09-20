@@ -651,4 +651,7 @@ zvec-grep — autoIndex seeds worktree indexes at the first session start;
 hand-copying `.zvec-grep` is actively harmful (frozen snapshot without the
 rootPaths rewrite, or an umbrella stub shadowing every submodule index).
 The copy in `~/code/mtv/mtv-inference` is kept identical for repo-tracked
-use.
+use. Stale-index sweep (per machine, after pulling these changes):
+`scripts/utils/zvec-cleanup.sh` reports, and `--apply` drops, the three
+harmful leftovers — frozen worktree copies, umbrella/container-root
+indexes, home-rooted indexes; healthy indexes are untouched.
