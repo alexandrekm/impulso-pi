@@ -142,7 +142,7 @@ export const FEATURES: Feature[] = [
     group: "Semantic search",
     label: "zvec root-index guard",
     description:
-      "Block zvec_index calls against roots that must not be indexed: $HOME (a home index makes every zg call stat the whole home tree — hangs for minutes) and umbrella/container roots (≥3 nested git repos, which zg cannot index — an index there makes every repo below it un-indexable, since zg resolves the nearest ancestor index). allowRoots in pi-zvec-grep/config.json is the escape hatch; drop stays allowed. Mirrors the fork's own policy.",
+      "Block zvec_index calls against roots that must not be indexed: $HOME (a home index makes every zg call stat the whole home tree — hangs for minutes), network-filesystem roots (NFS/SMB/sshfs — rootPolicy.allowNetworkFs overrides), and umbrella/container roots (≥3 nested git repos, which zg cannot index — an index there makes every repo below it un-indexable, since zg resolves the nearest ancestor index). allowRoots in pi-zvec-grep/config.json is the escape hatch; drop stays allowed. Mirrors the fork's own policy.",
     kind: "local",
   },
   {

@@ -204,6 +204,19 @@
     // ~/code/mtv/mtv-inference is kept identical for repo-tracked use.
     "config/setup_worktree.sh": { "tags": ["base"], "piRootDest": "setup_worktree.sh" },
 
+    // pull_all.sh — machine-global submodule update at ~/.pi/pull_all.sh
+    // (piRootDest, base-only like setup_worktree.sh). Parallel per-submodule
+    // checkout+pull of the origin default branch, then a SEQUENTIAL zvec
+    // reindex of each SUBMODULE checkout (the bases worktree seeding and
+    // umbrella fan-out rely on — never the umbrella root: zg cannot index
+    // nested repos, and an ancestor index locks out every repo below),
+    // then stage/commit/push of the updated submodule pointers. Runs on
+    // the current work tree's toplevel; no-submodule repos skip the loop.
+    // The repo copies (~/code/mtv/*/pull_all.sh) are kept identical —
+    // scripts/utils/check-script-drift.sh flags drift between them and
+    // config/{setup_worktree,pull_all}.sh.
+    "config/pull_all.sh": { "tags": ["base"], "piRootDest": "pull_all.sh" },
+
     // pi-subagents owns all child-process lifecycle. The exact release was
     // preflighted against Pi 0.84.4: scout uses a strict read/search tool
     // allowlist, starts fresh, and Orca is only a best-effort observer.
@@ -825,7 +838,9 @@
     // entire home tree; this disabled zvec on every profile once, 2026-09)
     // and umbrella/container roots (≥3 nested git repos at depth ≤ 2, which
     // zg cannot index — and zg resolves the NEAREST ANCESTOR index, so an
-    // index there makes every repo below it permanently un-indexable).
+    // index there makes every repo below it permanently un-indexable), and
+    // network-filesystem roots (NFS/SMB/sshfs: a local vector store over
+    // the network hangs every later freshness check).
     // allowRoots in <configDir>/pi-zvec-grep/config.json
     // is the escape hatch and never unlocks $HOME. index/rebuild are
     // blocked; drop stays allowed (dropping a bad index is the

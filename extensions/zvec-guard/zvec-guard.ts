@@ -50,6 +50,7 @@
  * Toggled in /settings → Search → Semantic search (id `zvec-guard`).
  */
 
+import { execFileSync } from "node:child_process";
 import { type Dirent, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -90,9 +91,123 @@ export function normalizeRoot(root: unknown, cwd: unknown): string | undefined {
 export interface RootPolicy {
   allowRoots: string[];
   maxNestedRepos: number;
+  /** Allow indexing roots on network filesystems (off by default). */
+  allowNetworkFs: boolean;
 }
 
-const DEFAULT_POLICY: RootPolicy = { allowRoots: [], maxNestedRepos: 3 };
+const DEFAULT_POLICY: RootPolicy = { allowRoots: [], maxNestedRepos: 3, allowNetworkFs: false };
+
+// ---- network-filesystem detection (mirrors the fork's src/core/netfs.ts) --
+// Mount-table based, longest-prefix, fail-open (unreadable table → the
+// network rule is skipped, indexing behaves as before). Cached per process.
+
+const NETWORK_FS_TYPES = new Set([
+  "nfs",
+  "nfs4",
+  "nfs5",
+  "cifs",
+  "smbfs",
+  "smbfs2",
+  "sshfs",
+  "fuse.sshfs",
+  "afpfs",
+  "davfs",
+  "davfs2",
+  "webdav",
+  "9p",
+  "ncpfs",
+  "afs",
+  "ceph",
+  "cephfs",
+  "fuse.ceph",
+  "lustre",
+  "glusterfs",
+  "gpfs",
+  "vboxsf",
+  "vmhgfs",
+  "prl_fs",
+  "nts",
+]);
+
+interface MountEntry {
+  point: string;
+  type: string;
+}
+
+/** Parse mount(8) (Linux and macOS shapes) and /proc/self/mounts text. */
+export function parseMounts(text: string): MountEntry[] {
+  const out: MountEntry[] = [];
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    // util-linux: `<dev> on <point> type <fstype> (<opts>)`
+    let m = line.match(/^(\S+) on (.+) type (\S+) \(/);
+    if (m) {
+      out.push({ point: m[2], type: m[3].toLowerCase() });
+      continue;
+    }
+    // macOS: `<dev> on <point> (<fstype>, <opts>…)` — type may be the only paren token
+    m = line.match(/^(\S+) on (.+) \(([a-z][\w.-]*)[,)]/i);
+    if (m) {
+      out.push({ point: m[2], type: m[3].toLowerCase() });
+      continue;
+    }
+    // /proc/self/mounts: `<dev> <point> <fstype> <opts> <freq> <pass>`
+    m = line.match(/^(\S+) (\S+) (\S+) \S+ \d+ \d+$/);
+    if (m) out.push({ point: m[2], type: m[3].toLowerCase() });
+  }
+  return out;
+}
+
+function collectMountTable(): MountEntry[] {
+  if (process.platform === "linux") {
+    try {
+      return parseMounts(readFileSync("/proc/self/mounts", "utf8"));
+    } catch {
+      // fall through to the command below
+    }
+  }
+  try {
+    return parseMounts(execFileSync("mount", { encoding: "utf8", timeout: 10_000 }));
+  } catch {
+    return [];
+  }
+}
+
+let mountCache: MountEntry[] | undefined;
+
+/** The mount table (cached per process; primable in tests). */
+export function mountTable(): MountEntry[] {
+  mountCache ??= collectMountTable();
+  return mountCache;
+}
+
+/** Prime the mount-table cache (test seam). */
+export function setMountTable(entries: MountEntry[]): void {
+  mountCache = entries;
+}
+
+/** The filesystem type governing `target` (longest mount-point prefix). */
+export function mountTypeFor(target: string, mounts: MountEntry[]): string | undefined {
+  let real: string;
+  try {
+    real = realpathSync(target);
+  } catch {
+    real = resolve(target);
+  }
+  let best: MountEntry | undefined;
+  for (const entry of mounts) {
+    const covered =
+      entry.point === "/" || real === entry.point || real.startsWith(entry.point + "/");
+    if (covered && (!best || entry.point.length > best.point.length)) best = entry;
+  }
+  return best?.type;
+}
+
+export function isNetworkFsRoot(target: string, mounts: MountEntry[] = mountTable()): boolean {
+  const type = mountTypeFor(target, mounts);
+  return type !== undefined && NETWORK_FS_TYPES.has(type);
+}
 
 /** Read rootPolicy from the pi-zvec-grep user config (same file the package reads). */
 export function loadRootPolicy(): RootPolicy {
@@ -100,7 +215,7 @@ export function loadRootPolicy(): RootPolicy {
     const raw = JSON.parse(
       readFileSync(join(CONFIG_DIR, "pi-zvec-grep", "config.json"), "utf8"),
     ) as {
-      rootPolicy?: { allowRoots?: unknown; maxNestedRepos?: unknown };
+      rootPolicy?: { allowRoots?: unknown; maxNestedRepos?: unknown; allowNetworkFs?: unknown };
     };
     const policy = raw.rootPolicy;
     if (typeof policy !== "object" || policy === null) return DEFAULT_POLICY;
@@ -113,7 +228,11 @@ export function loadRootPolicy(): RootPolicy {
       policy.maxNestedRepos >= 1
         ? Math.round(policy.maxNestedRepos)
         : DEFAULT_POLICY.maxNestedRepos;
-    return { allowRoots, maxNestedRepos };
+    const allowNetworkFs =
+      typeof policy.allowNetworkFs === "boolean"
+        ? policy.allowNetworkFs
+        : DEFAULT_POLICY.allowNetworkFs;
+    return { allowRoots, maxNestedRepos, allowNetworkFs };
   } catch {
     return DEFAULT_POLICY;
   }
@@ -212,7 +331,11 @@ export interface RootAssessment {
 }
 
 /** Assess one candidate index root against the policy (pure: no zg, no writes). */
-export function assessRoot(root: string, policy: RootPolicy = DEFAULT_POLICY): RootAssessment {
+export function assessRoot(
+  root: string,
+  policy: RootPolicy = DEFAULT_POLICY,
+  mounts: MountEntry[] = mountTable(),
+): RootAssessment {
   // Expand a leading ~ the same way normalizeRoot does, so direct
   // callers (and tests) can pass "~" and mean the home directory.
   const expanded = root === "~" || root.startsWith("~/") ? join(homedir(), root.slice(1)) : root;
@@ -234,6 +357,18 @@ export function assessRoot(root: string, policy: RootPolicy = DEFAULT_POLICY): R
     const expanded =
       allowed === "~" || allowed.startsWith("~/") ? join(homedir(), allowed.slice(1)) : allowed;
     if (bestRealPath(expanded) === realRoot) return { allowed: true };
+  }
+  if (!policy.allowNetworkFs && isNetworkFsRoot(realRoot, mounts)) {
+    return {
+      allowed: false,
+      reason:
+        "[zvec-guard] blocked indexing a network filesystem (NFS/SMB/sshfs/…) root. " +
+        "Building a local vector store over the network is brutally slow, and every " +
+        "later freshness check re-stats the tree over the wire — sessions in that " +
+        "workspace hang. fts searches (zvec_search) and bash rg still work without " +
+        "an index. To index anyway, set rootPolicy.allowNetworkFs in " +
+        "pi-zvec-grep/config.json (or add the root to allowRoots).",
+    };
   }
   const nested = countNestedRepos(realRoot, policy.maxNestedRepos);
   if (nested >= policy.maxNestedRepos) {

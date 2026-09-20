@@ -646,12 +646,25 @@ bootstrap script (parallel submodule init/update/reset on
 `SETUP_WORKTREE_BRANCH` (default master), nested submodules, direnv /
 pre-commit hooks, `WORKTREE_READY` marker; no-submodule repos are fine —
 the submodule steps are skipped; run it from inside the worktree, it
-operates on the work tree's toplevel). It deliberately does NOT touch
+operates on the work tree's toplevel), and
+`config/pull_all.sh` → `~/.pi/pull_all.sh`: the after-pull update
+(parallel per-submodule checkout+pull of the origin default branch,
+sequential zvec reindex of each SUBMODULE checkout — the bases worktree
+seeding and umbrella fan-out rely on, never the umbrella root — then
+stage/commit/push of the updated submodule pointers). It deliberately does NOT touch
 zvec-grep — autoIndex seeds worktree indexes at the first session start;
 hand-copying `.zvec-grep` is actively harmful (frozen snapshot without the
 rootPaths rewrite, or an umbrella stub shadowing every submodule index).
-The copy in `~/code/mtv/mtv-inference` is kept identical for repo-tracked
-use. Stale-index sweep (per machine, after pulling these changes):
+The repo-tracked copies (~/code/mtv/*/setup_worktree.sh, pull_all.sh) are
+kept identical to the references;
+`scripts/utils/check-script-drift.sh` compares every copy against
+`config/{setup_worktree,pull_all}.sh` and the pi-root installs, flagging
+DRIFTED / MISSING (exit 1; read-only — `install.sh --base` plus a `cp`
+fixes what it finds). Stale-index sweep (per machine, after pulling these
+changes):
 `scripts/utils/zvec-cleanup.sh` reports, and `--apply` drops, the three
 harmful leftovers — frozen worktree copies, umbrella/container-root
-indexes, home-rooted indexes; healthy indexes are untouched.
+indexes, home-rooted indexes; healthy indexes are untouched. Indexes on
+network filesystems are always FLAGGED and dropped only with the
+additional `--network` flag (opt-in: a network mount may hold the only
+copy of something).
