@@ -53,7 +53,12 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_DIR = resolve(SCRIPT_DIR, "..");
 const PROFILES_JSON = join(REPO_DIR, "profiles.jsonc");
 
-const PI_ROOT = process.env.PPI_PI_ROOT || join(homedir(), ".pi");
+// PI_ROOT precedence: explicit PPI_PI_ROOT > dirname(PI_AGENT_DIR) when the
+// base dir is overridden (sandboxing must keep piRoot-dest resources inside
+// the sandbox) > ~/.pi. AGENT_DIR then defaults inside it as usual.
+const PI_ROOT =
+  process.env.PPI_PI_ROOT ||
+  (process.env.PI_AGENT_DIR ? dirname(process.env.PI_AGENT_DIR) : join(homedir(), ".pi"));
 const PROFILES_DIR = join(PI_ROOT, "profiles");
 const AGENT_DIR = process.env.PI_AGENT_DIR || join(PI_ROOT, "agent");
 
@@ -259,6 +264,47 @@ function piUninstall(pkg, dir) {
 // The npm package name for pi itself, used for the self-update check.
 const PI_NPM_PACKAGE = "@earendil-works/pi-coding-agent";
 
+// ---- git package freshness checks -----------------------------------------
+// git: resources (e.g. our pi-zvec-grep fork) have no registry version, so
+// without this check a machine keeps whatever it first cloned forever — a
+// fork under active development goes stale silently (this exact gap forced
+// manual manifest surgery once already). Compare the installed clone's HEAD
+// with the remote's; never fail install on network errors (offline → keep
+// what's installed, like the npm check keeps installed on lookup failure).
+
+/** The installed clone dir for a git: spec (pi's layout: <dir>/git/<repo path>). */
+function gitPkgDir(dir, spec) {
+  return join(dir, "git", spec.replace(/^git:/, ""));
+}
+
+function gitInstalledHead(dir, spec) {
+  const r = spawnSync("git", ["-C", gitPkgDir(dir, spec), "rev-parse", "HEAD"], {
+    encoding: "utf8",
+  });
+  return r.status === 0 ? r.stdout.trim() : null;
+}
+
+const remoteHeadCache = new Map();
+function gitRemoteHead(spec) {
+  const url = spec.replace(/^git:/, "https://");
+  if (remoteHeadCache.has(url)) return remoteHeadCache.get(url);
+  const r = spawnSync("git", ["ls-remote", url, "HEAD"], { encoding: "utf8", timeout: 30_000 });
+  const head = r.status === 0 ? (r.stdout.match(/^([0-9a-f]{40})\s+HEAD/m)?.[1] ?? null) : null;
+  remoteHeadCache.set(url, head);
+  return head;
+}
+
+/** Refresh a stale git clone: remove the clone + manifest rows, then reinstall. */
+function refreshGitPackage(key, dir) {
+  const map = manifestRead(dir);
+  rmSync(gitPkgDir(dir, key), { recursive: true, force: true });
+  map.delete(key);
+  manifestWrite(dir, map);
+  piInstall(key, dir);
+  manifestSet(map, key, key, join(dir, "settings.json"));
+  manifestWrite(dir, map);
+}
+
 const latestCache = new Map();
 function latestVersion(pkgName) {
   if (latestCache.has(pkgName)) return latestCache.get(pkgName);
@@ -318,6 +364,10 @@ function srcPath(key) {
 
 function destPath(dir, key, entry) {
   if (isPackageKind(classify(key))) return null;
+  // piRootDest: a machine-global file at the pi root (~/.pi) — independent
+  // of which target is being synced (validateProfiles restricts it to
+  // base-tagged config resources, so only --base selects it anyway).
+  if (entry?.piRootDest) return join(PI_ROOT, entry.piRootDest);
   return join(dir, relDestPath(key, entry));
 }
 
@@ -471,7 +521,16 @@ function buildDepList(names, profiles) {
       items.push({ key, kind, label: key, state: "missing" });
       continue;
     }
-    // update checks only apply to npm packages (git: has no registry version)
+    // git packages: no registry version — compare the installed clone's
+    // HEAD with the remote's (see the freshness block above for why).
+    if (kind === "git") {
+      const installed = gitInstalledHead(names[0].dir, key);
+      const latest = gitRemoteHead(key);
+      if (installed && latest && installed !== latest) {
+        items.push({ key, kind, label: key, state: "update", installed, latest });
+      }
+      continue;
+    }
     if (kind !== "npm") continue;
     const pkgName = pkgNameFromSpec(key);
     // installed everywhere — check for an update (first target's version)
@@ -601,8 +660,11 @@ function executeNpmInstalls(selected, items, names) {
         manifestWrite(t.dir, map);
         console.log(`  [pkg new]      ${key}  ->  ${t.base ? "base" : t.name}`);
       } else if (it.state === "update" && has) {
-        piUpdate(key, t.dir);
-        console.log(`  [pkg updated]  ${key}  ->  ${t.base ? "base" : t.name}`);
+        if (it.kind === "git") refreshGitPackage(key, t.dir);
+        else piUpdate(key, t.dir);
+        console.log(
+          `  [pkg updated]  ${key}${it.kind === "git" ? ` (${String(it.latest).slice(0, 7)})` : ""}  ->  ${t.base ? "base" : t.name}`,
+        );
       }
     }
   }
@@ -710,6 +772,30 @@ function settingsHasPackage(dir, spec) {
   } catch {
     return false;
   }
+}
+
+// pi-zvec-grep moved from the upstream npm package to our fork
+// (git:github.com/alexandrekm/pi-zvec-grep, 2026-09-18). install.sh's
+// non-clobber package[] handling would keep BOTH entries on machines that
+// had the npm one (pi would then fail to load a half-uninstalled package),
+// so migrate explicitly: uninstall the npm package, drop its manifest row.
+const LEGACY_ZVEC_NPM_PKG = "npm:@luminascale/pi-zvec-grep";
+const LEGACY_ZVEC_NPM_DIR = join("npm", "node_modules", "@luminascale", "pi-zvec-grep");
+
+function migrateLegacyZvecNpm(t) {
+  const map = manifestRead(t.dir);
+  const hasPkg =
+    Boolean(manifestGet(map, LEGACY_ZVEC_NPM_PKG)) ||
+    existsSync(join(t.dir, LEGACY_ZVEC_NPM_DIR)) ||
+    settingsHasPackage(t.dir, LEGACY_ZVEC_NPM_PKG);
+  if (!hasPkg) return;
+  settingsHasPackage(t.dir, LEGACY_ZVEC_NPM_PKG) && piUninstall(LEGACY_ZVEC_NPM_PKG, t.dir);
+  rmSync(join(t.dir, LEGACY_ZVEC_NPM_DIR), { recursive: true, force: true });
+  map.delete(LEGACY_ZVEC_NPM_PKG);
+  manifestWrite(t.dir, map);
+  console.log(
+    `  [migrated]    removed npm:@luminascale/pi-zvec-grep (replaced by the alexandrekm fork)`,
+  );
 }
 
 function migrateLegacyPermissionSystem(t) {
@@ -1414,6 +1500,7 @@ async function main() {
       migrateLegacyPermissionSystem(t);
       migrateLegacyDroidStyling(t);
       migrateLegacyCreatePrPersonal(t);
+      migrateLegacyZvecNpm(t);
       doInstallFiles(t, profiles);
       doInstallSettings(t, profiles);
       prunePackagePaths(t, profiles);

@@ -131,6 +131,9 @@ export function relDestPath(key, entry) {
   const kind = classify(key);
   if (isPackageKind(kind))
     throw new Error(`relDestPath: package resource "${key}" has no file dest`);
+  // piRootDest: machine-global dest at the pi root (~/.pi) — the path is
+  // relative to PI_ROOT, not the target dir; resolved by install.mjs.
+  if (entry?.piRootDest) return join("piRoot:", entry.piRootDest);
   if (kind === "file") return entry?.dest || join("extensions", basename(key));
   if (kind === "agent") return entry?.dest || join("agents", basename(key));
   if (kind === "prompt") return entry?.dest || join("prompts", basename(key));
@@ -310,6 +313,28 @@ export function validateProfiles(profiles, repoDir) {
           dest.split("/").includes("..")
         ) {
           errors.push(`resource "${key}" .dest must be a relative path inside the profile dir`);
+        }
+      }
+      const piRootDest = resources[key]?.piRootDest;
+      if (piRootDest !== undefined) {
+        // Machine-global file at the pi root (~/.pi). Exactly one copy per
+        // machine, so it belongs to the base target's job: require the base
+        // tag alone, config-kind keys only, and a safe relative path.
+        if (kind !== "config") {
+          errors.push(`resource "${key}" .piRootDest is only allowed on config/ resources`);
+        } else if (
+          typeof piRootDest !== "string" ||
+          !piRootDest ||
+          piRootDest.startsWith("/") ||
+          piRootDest.split("/").includes("..")
+        ) {
+          errors.push(
+            `resource "${key}" .piRootDest must be a relative path under the pi root (~/.pi)`,
+          );
+        } else if (JSON.stringify(tags) !== JSON.stringify(["base"])) {
+          errors.push(
+            `resource "${key}" .piRootDest must be tagged ["base"] only (one machine-global copy)`,
+          );
         }
       }
     }

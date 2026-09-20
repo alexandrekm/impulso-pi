@@ -32,7 +32,7 @@ npm run check:json
 
 if command -v shellcheck >/dev/null 2>&1; then
   echo "==> pre-commit: shellcheck"
-  shellcheck install.sh
+  shellcheck install.sh $(find config scripts/utils -name "*.sh" -print 2>/dev/null)
 else
   echo "==> pre-commit: shellcheck not installed, skipping"
 fi

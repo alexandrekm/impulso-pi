@@ -43,7 +43,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck install.sh
+          shellcheck install.sh $(find config scripts/utils -name "*.sh" -print 2>/dev/null)
 
       - name: install.sh smoke test
         run: |
@@ -53,7 +53,12 @@ jobs:
           # a registry stall has hung this step past the 10m job cap twice
           # already. install.mjs skips tools when IMPULSO_SKIP_TOOLS is set.
           export IMPULSO_SKIP_TOOLS=1
-          TEST_AGENT_DIR="$(mktemp -d)"
+          # Sandbox the whole pi root (not just the agent dir): piRootDest
+          # resources (e.g. config/setup_worktree.sh) land at the pi ROOT,
+          # so the test must own it too.
+          TEST_PI_ROOT="$(mktemp -d)"
+          export PPI_PI_ROOT="$TEST_PI_ROOT"
+          TEST_AGENT_DIR="$TEST_PI_ROOT/agent"
           # Stub out the `pi` CLI so the smoke test doesn't need network
           # access or a real pi installation to exercise the file-sync logic.
           STUB_BIN="$(mktemp -d)"
@@ -82,5 +87,12 @@ jobs:
             const keys = resolveFileKeys(Object.keys(p.resources).filter((k) => !isPackageKind(classify(k))), p.resources);
             for (const k of keys) console.log(relDestPath(k, p.resources[k]));
           ' | while read -r dest; do
-            test -e "$TEST_AGENT_DIR/$dest" || { echo "missing: $dest" >&2; exit 1; }
+            # piRoot:-prefixed dests are pi-root-relative (piRootDest
+            # resources): resolve them against the sandboxed PI_ROOT.
+            case "$dest" in
+              piRoot:/*)
+                test -e "$TEST_PI_ROOT/${dest#piRoot:/}" || { echo "missing: $dest" >&2; exit 1; } ;;
+              *)
+                test -e "$TEST_AGENT_DIR/$dest" || { echo "missing: $dest" >&2; exit 1; } ;;
+            esac
           done
