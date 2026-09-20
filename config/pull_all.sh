@@ -37,6 +37,9 @@ if [[ ${#dirs[@]} -gt 0 ]]; then
   pids=()
 
   for dir in "${dirs[@]}"; do
+    # a submodule path may be nested (e.g. vendor/foo) — its log path needs
+    # the intermediate dirs to exist or the redirection kills the subshell
+    mkdir -p "$(dirname "$LOG_DIR/$dir.log")"
     (
       cd "$dir"
       default_branch=$(git remote show origin | awk '/HEAD branch/ {print $NF}')
