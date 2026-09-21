@@ -366,7 +366,8 @@
     // extensions/on-demand-skills/config.json. Triggers datadog on
     // `datadog` only (kept narrow deliberately — generic words like
     // `dashboard`/`metrics` false-triggered in ordinary web-dev talk);
-    // obscura on `obscura`/`browser`/`render`/`screenshot`/etc. Toggled in
+    // obscura on `obscura`/`browser`/`render`/etc. (`screenshot` deliberately
+    // left out — too common in ordinary UI/design talk). Toggled in
     // /settings → Pi → Input.
     // Generic — add more skills to the config anytime.
     "extensions/on-demand-skills/": { "tags": ["core"] },
@@ -648,7 +649,8 @@
     // disclosure files loaded on demand. Binary installed manually at
     // ~/.local/bin (obscura + obscura-worker — see the skill's REFERENCE.md
     // for fresh-machine install). Activated via the on-demand-skills keyword
-    // trigger (`obscura`/`browser`/`render`/`screenshot`/…).
+    // trigger (`obscura`/`browser`/`render`/`headless`/… — `screenshot` was
+    // removed: too common in ordinary UI/design talk).
     "skills/obscura/": { "tags": ["core"] },
 
     // pi-provider-litellm (balcsida): LiteLLM proxy native Provider extension.

@@ -93,15 +93,20 @@ describe("input handler", () => {
     }
   });
 
-  test("obscura trigger fires on browser/render/screenshot words", async () => {
+  test("obscura trigger fires on browser/render/obscura words, not 'screenshot'", async () => {
     const h = makePi();
     for (const text of [
       "use the browser to render that page",
-      "take a screenshot of the login form",
+      "scrape that site headless",
       "run obscura against the site",
     ]) {
       const result = (await h({ text })) as { text: string };
       assert.ok(result.text.includes("Obscura skill"), `should trigger on: ${text}`);
     }
+    // 'screenshot' was removed from the keyword list: too common in ordinary
+    // UI/design talk (same reasoning as the datadog narrowing) — a screenshot
+    // request without any other obscura keyword should NOT pull the skill in.
+    const noTrigger = (await h({ text: "take a screenshot of the login form" })) as undefined;
+    assert.equal(noTrigger, undefined);
   });
 });

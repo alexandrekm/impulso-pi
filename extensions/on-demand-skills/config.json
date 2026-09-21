@@ -7,16 +7,7 @@
       "hint": "Use the Datadog skill at {path} — load it with the `read` tool for how to interact with Datadog via the `pup` CLI (dashboards, metrics, monitors, logs, SLOs, synthetics, APM)."
     },
     "obscura": {
-      "keywords": [
-        "obscura",
-        "browser",
-        "render",
-        "screenshot",
-        "headless",
-        "screencast",
-        "pdf",
-        "scrape"
-      ],
+      "keywords": ["obscura", "browser", "render", "headless", "screencast", "pdf", "scrape"],
       "hint": "Use the Obscura skill at {path} — load it with the `read` tool for how to render pages and browse the web via the `obscura` CLI (screenshots, PDFs, JS-rendered extraction, headless automation) instead of assuming a regular browser."
     },
     "glean": {
