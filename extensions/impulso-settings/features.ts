@@ -456,7 +456,8 @@ export const FEATURES: Feature[] = [
     tab: "tools",
     group: "Appearance",
     label: "pi-themes",
-    description: "Companion themes incl. catppuccin-mocha. git:github.com/sting8k/pi-themes.",
+    description:
+      "Companion themes incl. catppuccin-mocha (base of our impulso-mocha variant, the selected theme: adds a visible surface1-gray user-message background). git:github.com/sting8k/pi-themes.",
     kind: "package",
     spec: "git:github.com/sting8k/pi-themes",
   },
@@ -587,7 +588,7 @@ export const FEATURES: Feature[] = [
     group: "Observational memory",
     label: "Memory worker model…",
     description:
-      "Model used for background observation/reflection work. 'Same as main thread' uses the session model; pick a cheaper/faster model (Haiku/Flash/mini/gemma) to keep memory work off the main budget. Written to settings.json observational-memory.model.{provider,id}.",
+      "Model used for background observation/reflection work. 'Same as main thread' uses the session model. Seeded to deepseek-v4.1-flash (litellm/deepseek-flash on the personal machine) from profiles.jsonc settingsDefaults so background memory work runs on a cheap tier; picks made here survive syncs (fill-only seed). Written to settings.json observational-memory.model.{provider,id}.",
     kind: "pi-setting",
     key: "observational-memory.model",
     modelKey: "observational-memory.model",
