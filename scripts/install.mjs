@@ -215,25 +215,128 @@ function hintNpmPermissionError(errText, { command } = {}) {
 // left completely untouched; install.sh only acts when `pi` is absent, and
 // never reinstalls or overwrites. The opt-in self-update offered during the
 // dependency review is the only update path, and it stays explicit.
-function ensurePiInstalled() {
+function ensurePiInstalled(pin) {
   if (hasCmd("pi")) {
     const v = installedPiVersion();
-    console.log(`==> pi ${v ?? "(unknown version)"} already on PATH — leaving untouched`);
+    console.log(
+      `==> pi ${v ?? "(unknown version)"} already on PATH — leaving untouched${pin ? ` (pin: ${pin})` : ""}`,
+    );
     return;
   }
+  const spec = pin ? `${PI_NPM_PACKAGE}@${pin}` : PI_NPM_PACKAGE;
   console.log(
-    `==> pi CLI not found — installing via the official method: npm install -g --ignore-scripts ${PI_NPM_PACKAGE}`,
+    `==> pi CLI not found — installing ${pin ? `pinned ${pin} via ` : "via "}the official method: npm install -g --ignore-scripts ${spec}`,
   );
-  const r = spawnSync("npm", ["install", "-g", "--ignore-scripts", PI_NPM_PACKAGE], {
+  const r = spawnSync("npm", ["install", "-g", "--ignore-scripts", spec], {
     stdio: ["inherit", "inherit", "pipe"],
   });
   if (r.error || r.status !== 0) {
     console.error("");
     hintNpmPermissionError((r.stderr && r.stderr.toString()) || "", {
-      command: `'npm install -g --ignore-scripts ${PI_NPM_PACKAGE}'`,
+      command: `'npm install -g --ignore-scripts ${spec}'`,
     });
-    throw new Error(`'npm install -g --ignore-scripts ${PI_NPM_PACKAGE}' failed`);
+    throw new Error(`'npm install -g --ignore-scripts ${spec}' failed`);
   }
+}
+
+// ── pi version pin ──────────────────────────────────────────────────────────
+// Emergency lever for "an update broke something" (e.g. the pi-observational-
+// memory detached-streamSimple crash, AGENTS.md → Known upstream bugs): declare
+// `"pi": { "pin": "<version>" }` at the top level of profiles.jsonc and
+// install.sh enforces it — installs the pinned version when pi is missing,
+// switches to it when the running version drifts, and suppresses the
+// opt-in self-update offer while set (a pin and "update to latest" would
+// fight each other). Remove the key to unpin. NOTE: `pi update` run by hand
+// ignores the pin; re-run ./install.sh afterwards to enforce it back.
+
+// The managed install layout (pi.dev installer, releases-v1) is inherently
+// pinnable: releases live under <agentDir>/install/releases/<version>/, the
+// active version in <agentDir>/install/current-version, and the launcher
+// execs releases/<current-version>/node_modules/.bin/pi — so switching
+// versions = (install the release dir if absent) + write current-version.
+// The launcher dir is <agentDir>/bin, one level above <agentDir>/install.
+function piInstallKind() {
+  const r = spawnSync("sh", ["-c", "command -v pi"], { encoding: "utf8" });
+  const binPath = (r.stdout || "").trim();
+  if (!binPath) return { kind: "absent", binPath: "" };
+  let real = binPath;
+  try {
+    real = realpathSync(binPath);
+  } catch {
+    /* not a symlink / resolution failure — treat as a plain install */
+  }
+  const agentDir = dirname(dirname(real)); // <agentDir>/bin/pi → <agentDir>
+  const installRoot = join(agentDir, "install");
+  if (existsSync(join(installRoot, "managed-install.json"))) {
+    return { kind: "managed", binPath, installRoot };
+  }
+  return { kind: "npm-global", binPath };
+}
+
+// Validate + read the pin from profiles.jsonc. Returns null when unset.
+function readPiPin(profiles) {
+  const pin = profiles.pi?.pin;
+  if (pin === undefined) return null;
+  // Same charset pi's launcher accepts in current-version.
+  if (typeof pin !== "string" || !/^[0-9A-Za-z._+-]+$/.test(pin)) {
+    throw new Error(
+      `profiles.jsonc: "pi"."pin" must be a version string (e.g. "0.84.1"), got: ${JSON.stringify(pin)}`,
+    );
+  }
+  return pin;
+}
+
+// Enforce the pin on an existing pi. Managed layout: materialize the
+// pinned release with plain npm (the official installer always installs
+// latest) then flip current-version — old releases stay staged for rollback.
+// npm-global layout: npm install -g the exact version.
+function enforcePiPin(pin) {
+  const current = installedPiVersion();
+  if (current === pin) {
+    console.log(`==> pi is pinned at ${pin} — OK`);
+    return;
+  }
+  const kind = piInstallKind();
+  console.log(`==> pi ${current ?? "(unknown)"} != pinned ${pin} — switching to ${pin}`);
+  if (kind.kind === "managed") {
+    const releaseDir = join(kind.installRoot, "releases", pin);
+    const releaseBin = join(releaseDir, "node_modules", ".bin", "pi");
+    if (!existsSync(releaseBin)) {
+      mkdirSync(releaseDir, { recursive: true });
+      writeFileSync(
+        join(releaseDir, "package.json"),
+        JSON.stringify({ name: "pi-managed-release", private: true, version: "0.0.0" }, null, 2) +
+          "\n",
+      );
+      const r = spawnSync(
+        "npm",
+        ["install", "--ignore-scripts", "--save-exact", `${PI_NPM_PACKAGE}@${pin}`],
+        { cwd: releaseDir, stdio: ["inherit", "inherit", "pipe"] },
+      );
+      if (r.error || r.status !== 0 || !existsSync(releaseBin)) {
+        rmSync(releaseDir, { recursive: true, force: true });
+        hintNpmPermissionError((r.stderr && r.stderr.toString()) || "", {
+          command: `'npm install --ignore-scripts ${PI_NPM_PACKAGE}@${pin}' (managed release)`,
+        });
+        throw new Error(`failed to stage pinned pi release ${pin}`);
+      }
+    }
+    writeFileSync(join(kind.installRoot, "current-version"), pin + "\n");
+  } else {
+    const r = spawnSync("npm", ["install", "-g", "--ignore-scripts", `${PI_NPM_PACKAGE}@${pin}`], {
+      stdio: ["inherit", "inherit", "pipe"],
+    });
+    if (r.error || r.status !== 0) {
+      hintNpmPermissionError((r.stderr && r.stderr.toString()) || "", {
+        command: `'npm install -g --ignore-scripts ${PI_NPM_PACKAGE}@${pin}'`,
+      });
+      throw new Error(`failed to install pinned pi ${pin}`);
+    }
+  }
+  const now = installedPiVersion();
+  console.log(
+    `==> pi is now ${now ?? "(version unknown — restart your shell?)"}${now === pin ? " — pin enforced" : " — WARNING: expected " + pin}`,
+  );
 }
 
 function ensurePpiInstalled() {
@@ -496,8 +599,10 @@ function buildDepList(names, profiles) {
 
   // ensurePiInstalled() ran before we got here, so a usable `pi` is on
   // PATH. Offer a self-update only when a newer version is published — an
-  // up-to-date pi stays silent; the offer is opt-in, never automatic.
-  {
+  // up-to-date pi stays silent; the offer is opt-in, never automatic. A
+  // version pin (profiles.jsonc "pi"."pin") suppresses the offer entirely:
+  // a pin and "update to latest" would fight each other.
+  if (!readPiPin(profiles)) {
     const installed = installedPiVersion();
     const latest = latestVersion(PI_NPM_PACKAGE);
     if (installed && latest && installed !== latest) {
@@ -1503,7 +1608,13 @@ async function main() {
   // status/pull we only read/move files, so pi isn't required. Missing →
   // install via the official method; present → reported and never touched.
   if (cmd === "install") {
-    ensurePiInstalled();
+    // Missing → install via the official method (pinned version when a pin
+    // is declared). Present → reported and never touched… unless a pin is
+    // declared, in which case the pin is enforced (the pin IS an explicit
+    // declaration that this machine should run that exact version).
+    const pin = readPiPin(profiles);
+    ensurePiInstalled(pin);
+    if (pin) enforcePiPin(pin);
   }
 
   const names = resolveNames(spec, profiles);

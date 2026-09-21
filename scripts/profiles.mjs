@@ -224,6 +224,20 @@ export function validateProfiles(profiles, repoDir) {
     }
   }
 
+  // pi — version pin for the pi CLI itself (emergency lever when an update
+  // breaks something; see AGENTS.md → Known upstream bugs). Shape only —
+  // install.mjs enforces it.
+  const pi = profiles.pi;
+  if (pi !== undefined) {
+    if (typeof pi !== "object" || pi === null || Array.isArray(pi)) {
+      errors.push('"pi" must be an object');
+    } else if (pi.pin !== undefined) {
+      if (typeof pi.pin !== "string" || !/^[0-9A-Za-z._+-]+$/.test(pi.pin)) {
+        errors.push('"pi"."pin" must be a version string, e.g. "0.84.1"');
+      }
+    }
+  }
+
   const settings = profiles.settings;
   if (settings !== undefined) {
     if (typeof settings !== "object" || settings === null || Array.isArray(settings)) {
