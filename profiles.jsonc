@@ -364,7 +364,11 @@
     // message — not the system prompt — when it matches configured keywords,
     // so the model reads it as part of the user's turn. Config:
     // extensions/on-demand-skills/config.json. Triggers datadog on
-    // `datadog`/`dashboard`/`metrics`/etc. Toggled in /settings → Pi → Input.
+    // `datadog` only (kept narrow deliberately — generic words like
+    // `dashboard`/`metrics` false-triggered in ordinary web-dev talk);
+    // obscura on `obscura`/`browser`/`render`/etc. (`screenshot` deliberately
+    // left out — too common in ordinary UI/design talk). Toggled in
+    // /settings → Pi → Input.
     // Generic — add more skills to the config anytime.
     "extensions/on-demand-skills/": { "tags": ["core"] },
     // modes: per-profile skill mode switch (code | doc) layered on top of
@@ -637,6 +641,17 @@
     // always-on <available_skills> block (zero context cost until triggered).
     // Core so every profile gets the hint.
     "skills/scout/": { "tags": ["core"] },
+    // obscura: render pages and browse the web via the `obscura` CLI (a
+    // Rust headless browser with native rendering — screenshots, PDFs,
+    // screencasts, JS-rendered extraction, CDP/Puppeteer/Playwright
+    // automation; no Chromium). SKILL.md keeps only the when-to-use-what
+    // table in context; RENDER/FETCH/CDP/REFERENCE are progressive-
+    // disclosure files loaded on demand. Binary installed manually at
+    // ~/.local/bin (obscura + obscura-worker — see the skill's REFERENCE.md
+    // for fresh-machine install). Activated via the on-demand-skills keyword
+    // trigger (`obscura`/`browser`/`render`/`headless`/… — `screenshot` was
+    // removed: too common in ordinary UI/design talk).
+    "skills/obscura/": { "tags": ["core"] },
 
     // pi-provider-litellm (balcsida): LiteLLM proxy native Provider extension.
     // Discovers models from a self-hosted LiteLLM proxy and registers them
