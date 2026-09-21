@@ -629,11 +629,66 @@ mutants = 0) would be the stronger follow-up.
 npm install -g pi-profiles   # provides `ppi` (auto-installed by ./install.sh if missing)
 ```
 
+The `pi` CLI itself is **not** a manual prerequisite anymore: `./install.sh`
+installs it when missing via the official method (`npm install -g
+--ignore-scripts @earendil-works/pi-coding-agent`) and **never overwrites an
+existing install** — any `pi` already on PATH (npm global, pi.dev installer,
+managed install, distro package) is reported and left untouched. The only
+update path is the opt-in self-update offered during the dependency review.
+Alternative installers (pi.dev `install.sh`, which also supports an
+experimental managed install under `~/.pi/agent/install` + a
+`~/.local/bin` symlink) work fine too — install.sh's detect-first logic
+picks them up like any other install.
+
+**Version pin (emergency rollback lever):** declare `"pi": { "pin":
+"<version>" }` at the top level of `profiles.jsonc` and install.sh enforces
+it — installs that exact version when pi is missing, switches to it when the
+running version drifts (managed installs: stage the release dir + flip
+`install/current-version`; npm-global: install the exact version), and
+suppresses the self-update offer while set. The managed layout keeps old
+releases staged under `install/releases/`, so switching back is instant.
+Unpin by removing the key. A hand-run `pi update` ignores the pin — re-run
+`./install.sh` to enforce it back. See the commented-out example in
+`profiles.jsonc`.
+
 If `npm install -g` fails with a permissions error (user can't write to the
 global npm prefix), the root-free fix is to point npm at a user-owned prefix
 (`mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global`, then add
 `~/.npm-global/bin` to PATH) — or re-run with `sudo ./install.sh <args>`.
 `./install.sh` detects the permission failure and prints these hints itself.
+
+## Known upstream bugs (local patches)
+
+### pi-observational-memory ≤ 3.1.3 crashes pi ≥ 0.85 (detached streamSimple)
+
+`resolveWorkerStreamSimple` in the package's `src/agents/worker-stream.ts`
+pulls `modelRegistry.streamSimple` out as a bare function reference and calls
+it later **without the receiver**. pi's `ModelRegistry.streamSimple` is a
+prototype method reading `this.runtime` (the facade shipped in the 0.85/0.86
+line — verified absent at v0.84.1), so the detached call runs with
+`this === undefined` → `TypeError: Cannot read properties of undefined
+(reading 'runtime')`, thrown inside a background memory worker →
+`uncaughtException` → **pi exits**. The same detachment exists in its
+`getRegisteredProviderConfig` fallback path.
+
+**RESOLVED upstream in 3.1.4** (2026-09-20): the registry path now calls
+`registryStream.call(modelRegistry, …)`. The local bind-patch was removed by
+the 3.1.4 update. The `getRegisteredProviderConfig` fallback still returns
+`composed` detached, but registered-provider configs are closures — no
+receiver needed — so it's low-risk. Kept here as the record + the recipe for
+future detached-method crashes: identify the bare method extraction, re-bind
+the receiver in the installed copies, and note it in this section — plus the
+two levers that made this incident survivable:
+
+- **Version pin** (see Prerequisites): when a pi upgrade breaks something
+  with no local patch available, pin back to the last known-good version —
+  for this bug that was **0.84.1** (last release without the
+  `ModelRegistry.streamSimple` facade). The managed install keeps old
+  releases staged, so switching is instant.
+- **Package-level bind-patch**: the installed copies live under
+  `<profile>/npm/node_modules/<pkg>/`; a patch there survives syncs (npm
+  packages are only touched when missing or on update) and is overwritten
+  by the next `pi update` — check upstream for the real fix first.
 
 ## Machine-global pi-root files (`piRootDest`)
 
