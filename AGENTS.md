@@ -651,6 +651,36 @@ Unpin by removing the key. A hand-run `pi update` ignores the pin — re-run
 `./install.sh` to enforce it back. See the commented-out example in
 `profiles.jsonc`.
 
+### Migrating a machine off a Homebrew-prefix pi
+
+With Homebrew's node, `npm install -g` lands in `/opt/homebrew/lib/
+node_modules/` — a prefix Homebrew owns, so pi "lives in brew's world"
+even though it was never a brew formula. To move an existing install to a
+fully user-owned managed one (the work laptop did this on 2026-09-20), run
+the helper — report-only by default, `--apply` to migrate:
+
+```bash
+scripts/utils/migrate-pi-official.sh            # report what it found
+scripts/utils/migrate-pi-official.sh --apply   # do the migration
+```
+
+It detects the current install (npm-global in any prefix, an actual brew
+formula, already-managed, absent, or unknown → refuses), removes the old
+copy, fetches the official pi.dev installer, and runs it in managed mode
+with `PI_CODING_AGENT_DIR` stripped (a pi session exports it and would
+misdirect the managed install into the active profile dir — so the script
+is safe to run from inside pi). Result: releases under
+`~/.pi/agent/install/releases/<version>/`, launcher at `~/.pi/agent/bin/`,
+`pi` symlink in `~/.local/bin`; old releases stay staged, which is what
+makes the version pin instant. After it finishes: restart pi sessions,
+then re-run `./install.sh <target>` — it detects the new pi, syncs
+resources, and offers package updates (e.g. it caught pi-observational-
+memory 3.1.4 with the streamSimple fix).
+
+On a fresh machine none of this is needed: `./install.sh` installs pi via
+the official npm command when missing — the managed-layout migration is
+only for moving an existing install out of Homebrew's prefix.
+
 If `npm install -g` fails with a permissions error (user can't write to the
 global npm prefix), the root-free fix is to point npm at a user-owned prefix
 (`mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global`, then add
