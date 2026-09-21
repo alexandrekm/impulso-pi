@@ -207,6 +207,138 @@ function hintNpmPermissionError(errText, { command } = {}) {
   return true;
 }
 
+// Install the `pi` CLI itself when missing, via pi's official install
+// command (the Quick Start in pi's README: `npm install -g --ignore-scripts
+// @earendil-works/pi-coding-agent`). Detect-first and never overwrite: an
+// existing `pi` on PATH — however it was installed (npm global, the
+// pi.dev installer, a managed install, a distro package) — is reported and
+// left completely untouched; install.sh only acts when `pi` is absent, and
+// never reinstalls or overwrites. The opt-in self-update offered during the
+// dependency review is the only update path, and it stays explicit.
+function ensurePiInstalled(pin) {
+  if (hasCmd("pi")) {
+    const v = installedPiVersion();
+    console.log(
+      `==> pi ${v ?? "(unknown version)"} already on PATH — leaving untouched${pin ? ` (pin: ${pin})` : ""}`,
+    );
+    return;
+  }
+  const spec = pin ? `${PI_NPM_PACKAGE}@${pin}` : PI_NPM_PACKAGE;
+  console.log(
+    `==> pi CLI not found — installing ${pin ? `pinned ${pin} via ` : "via "}the official method: npm install -g --ignore-scripts ${spec}`,
+  );
+  const r = spawnSync("npm", ["install", "-g", "--ignore-scripts", spec], {
+    stdio: ["inherit", "inherit", "pipe"],
+  });
+  if (r.error || r.status !== 0) {
+    console.error("");
+    hintNpmPermissionError((r.stderr && r.stderr.toString()) || "", {
+      command: `'npm install -g --ignore-scripts ${spec}'`,
+    });
+    throw new Error(`'npm install -g --ignore-scripts ${spec}' failed`);
+  }
+}
+
+// ── pi version pin ──────────────────────────────────────────────────────────
+// Emergency lever for "an update broke something" (e.g. the pi-observational-
+// memory detached-streamSimple crash, AGENTS.md → Known upstream bugs): declare
+// `"pi": { "pin": "<version>" }` at the top level of profiles.jsonc and
+// install.sh enforces it — installs the pinned version when pi is missing,
+// switches to it when the running version drifts, and suppresses the
+// opt-in self-update offer while set (a pin and "update to latest" would
+// fight each other). Remove the key to unpin. NOTE: `pi update` run by hand
+// ignores the pin; re-run ./install.sh afterwards to enforce it back.
+
+// The managed install layout (pi.dev installer, releases-v1) is inherently
+// pinnable: releases live under <agentDir>/install/releases/<version>/, the
+// active version in <agentDir>/install/current-version, and the launcher
+// execs releases/<current-version>/node_modules/.bin/pi — so switching
+// versions = (install the release dir if absent) + write current-version.
+// The launcher dir is <agentDir>/bin, one level above <agentDir>/install.
+function piInstallKind() {
+  const r = spawnSync("sh", ["-c", "command -v pi"], { encoding: "utf8" });
+  const binPath = (r.stdout || "").trim();
+  if (!binPath) return { kind: "absent", binPath: "" };
+  let real = binPath;
+  try {
+    real = realpathSync(binPath);
+  } catch {
+    /* not a symlink / resolution failure — treat as a plain install */
+  }
+  const agentDir = dirname(dirname(real)); // <agentDir>/bin/pi → <agentDir>
+  const installRoot = join(agentDir, "install");
+  if (existsSync(join(installRoot, "managed-install.json"))) {
+    return { kind: "managed", binPath, installRoot };
+  }
+  return { kind: "npm-global", binPath };
+}
+
+// Validate + read the pin from profiles.jsonc. Returns null when unset.
+function readPiPin(profiles) {
+  const pin = profiles.pi?.pin;
+  if (pin === undefined) return null;
+  // Same charset pi's launcher accepts in current-version.
+  if (typeof pin !== "string" || !/^[0-9A-Za-z._+-]+$/.test(pin)) {
+    throw new Error(
+      `profiles.jsonc: "pi"."pin" must be a version string (e.g. "0.84.1"), got: ${JSON.stringify(pin)}`,
+    );
+  }
+  return pin;
+}
+
+// Enforce the pin on an existing pi. Managed layout: materialize the
+// pinned release with plain npm (the official installer always installs
+// latest) then flip current-version — old releases stay staged for rollback.
+// npm-global layout: npm install -g the exact version.
+function enforcePiPin(pin) {
+  const current = installedPiVersion();
+  if (current === pin) {
+    console.log(`==> pi is pinned at ${pin} — OK`);
+    return;
+  }
+  const kind = piInstallKind();
+  console.log(`==> pi ${current ?? "(unknown)"} != pinned ${pin} — switching to ${pin}`);
+  if (kind.kind === "managed") {
+    const releaseDir = join(kind.installRoot, "releases", pin);
+    const releaseBin = join(releaseDir, "node_modules", ".bin", "pi");
+    if (!existsSync(releaseBin)) {
+      mkdirSync(releaseDir, { recursive: true });
+      writeFileSync(
+        join(releaseDir, "package.json"),
+        JSON.stringify({ name: "pi-managed-release", private: true, version: "0.0.0" }, null, 2) +
+          "\n",
+      );
+      const r = spawnSync(
+        "npm",
+        ["install", "--ignore-scripts", "--save-exact", `${PI_NPM_PACKAGE}@${pin}`],
+        { cwd: releaseDir, stdio: ["inherit", "inherit", "pipe"] },
+      );
+      if (r.error || r.status !== 0 || !existsSync(releaseBin)) {
+        rmSync(releaseDir, { recursive: true, force: true });
+        hintNpmPermissionError((r.stderr && r.stderr.toString()) || "", {
+          command: `'npm install --ignore-scripts ${PI_NPM_PACKAGE}@${pin}' (managed release)`,
+        });
+        throw new Error(`failed to stage pinned pi release ${pin}`);
+      }
+    }
+    writeFileSync(join(kind.installRoot, "current-version"), pin + "\n");
+  } else {
+    const r = spawnSync("npm", ["install", "-g", "--ignore-scripts", `${PI_NPM_PACKAGE}@${pin}`], {
+      stdio: ["inherit", "inherit", "pipe"],
+    });
+    if (r.error || r.status !== 0) {
+      hintNpmPermissionError((r.stderr && r.stderr.toString()) || "", {
+        command: `'npm install -g --ignore-scripts ${PI_NPM_PACKAGE}@${pin}'`,
+      });
+      throw new Error(`failed to install pinned pi ${pin}`);
+    }
+  }
+  const now = installedPiVersion();
+  console.log(
+    `==> pi is now ${now ?? "(version unknown — restart your shell?)"}${now === pin ? " — pin enforced" : " — WARNING: expected " + pin}`,
+  );
+}
+
 function ensurePpiInstalled() {
   // npm prints progress to stdout (inherit) but writes errors to stderr;
   // capture stderr so we can detect a permission failure and hint at it.
@@ -465,10 +597,12 @@ function buildDepList(names, profiles) {
   const needsPpi = names.some((n) => !n.base);
   const items = [];
 
-  // `pi` CLI presence is a hard prerequisite checked before we get here,
-  // so hasCmd("pi") is true. Offer a self-update only when a newer version
-  // is published — an up-to-date pi stays silent.
-  {
+  // ensurePiInstalled() ran before we got here, so a usable `pi` is on
+  // PATH. Offer a self-update only when a newer version is published — an
+  // up-to-date pi stays silent; the offer is opt-in, never automatic. A
+  // version pin (profiles.jsonc "pi"."pin") suppresses the offer entirely:
+  // a pin and "update to latest" would fight each other.
+  if (!readPiPin(profiles)) {
     const installed = installedPiVersion();
     const latest = latestVersion(PI_NPM_PACKAGE);
     if (installed && latest && installed !== latest) {
@@ -497,6 +631,36 @@ function buildDepList(names, profiles) {
           key: "ppi",
           kind: "ppi",
           label: "ppi (pi-profiles)",
+          state: "update",
+          installed,
+          latest,
+        });
+      }
+    }
+  }
+
+  // External global CLI tools (profiles.tools entries WITHOUT a "path",
+  // e.g. @zvec/zvec-grep / `zg`): detect-first, like pi and ppi — an
+  // installed + up-to-date tool stays silent and is never touched; a
+  // missing one asks here (the dependency review IS the ask; -y installs
+  // all missing); an outdated one surfaces an opt-in update offer. Repo-
+  // local tools (with "path") stay out of this — they are always-rebuilt
+  // in installStandaloneTools because a version check can't detect a git
+  // pull that changed the source. CI's IMPULSO_SKIP_TOOLS=1 skips external
+  // tools entirely (registry hits) — the smoke test verifies file sync, not
+  // tool installs.
+  if (!process.env.IMPULSO_SKIP_TOOLS) {
+    for (const [name, tool] of Object.entries(profiles.tools || {})) {
+      if (!tool || tool.path) continue;
+      const installed = installedGlobalPkgVersion(name);
+      const latest = latestVersion(name);
+      if (!installed) {
+        items.push({ key: `tool:${name}`, kind: "tool", label: name, state: "missing" });
+      } else if (latest && installed !== latest) {
+        items.push({
+          key: `tool:${name}`,
+          kind: "tool",
+          label: name,
           state: "update",
           installed,
           latest,
@@ -1166,11 +1330,14 @@ function deployPpiAuto() {
 //     behind if we skip the rebuild. `npm install` (dist/ via `prepare`) and
 //     `npm install -g .` are both cheap/idempotent when nothing changed.
 //   {} (no path) — an external npm registry package (e.g. @zvec/zvec-grep):
-//     installed straight from the registry with `npm i -g <name>` (also
-//     cheap/idempotent; npm resolves it against the installed version).
+//     NOT installed unconditionally — it appears in the dependency review
+//     (buildDepList): missing asks there, outdated offers an opt-in update,
+//     and installed+current is reported and left untouched. This function
+//     only installs what the review selected (the `selected` key list) —
+//     detect-first, never overwrite, same philosophy as pi itself.
 // Separate from the profile resource sync — these are not synced into any
 // profile dir.
-export function installStandaloneTools(profiles) {
+export function installStandaloneTools(profiles, selected) {
   const tools = profiles.tools || {};
   const entries = Object.entries(tools);
   const freshlyInstalled = [];
@@ -1193,9 +1360,20 @@ export function installStandaloneTools(profiles) {
 
   for (const [name, tool] of entries) {
     if (!tool.path) {
-      // External npm registry package: install straight from npm. Not
-      // pushed to freshlyInstalled — the pi-omp-stats service offer only
-      // applies to the local repo package.
+      // External npm registry package — only install what the dependency
+      // review selected (missing → asked there; outdated → opted in there).
+      // Not pushed to freshlyInstalled — the pi-omp-stats service offer
+      // only applies to the local repo package.
+      const key = `tool:${name}`;
+      if (!selected || !selected.includes(key)) {
+        const installed = installedGlobalPkgVersion(name);
+        console.log(
+          installed
+            ? `  ${name}: v${installed} installed globally — leaving untouched`
+            : `  ${name}: not selected in the dependency review — skipping`,
+        );
+        continue;
+      }
       console.log(`==> tool -> ${name} (global install from npm registry)`);
       const regRes = spawnSync("npm", ["install", "-g", name, "--no-audit", "--no-fund"], {
         stdio: ["inherit", "inherit", "pipe"],
@@ -1471,10 +1649,16 @@ async function main() {
   }
 
   // `pi` CLI is a hard prerequisite for install (needs pi install); for
-  // status/pull we only read/move files, so pi isn't required.
-  if (cmd === "install" && !hasCmd("pi")) {
-    console.error("'pi' CLI not found on PATH. Install pi first: https://pi.dev");
-    process.exit(1);
+  // status/pull we only read/move files, so pi isn't required. Missing →
+  // install via the official method; present → reported and never touched.
+  if (cmd === "install") {
+    // Missing → install via the official method (pinned version when a pin
+    // is declared). Present → reported and never touched… unless a pin is
+    // declared, in which case the pin is enforced (the pin IS an explicit
+    // declaration that this machine should run that exact version).
+    const pin = readPiPin(profiles);
+    ensurePiInstalled(pin);
+    if (pin) enforcePiPin(pin);
   }
 
   const names = resolveNames(spec, profiles);
@@ -1511,7 +1695,7 @@ async function main() {
     if (names.some((t) => t.name === "work" || t.base)) deployPpiAuto();
     // Standalone global CLI tools (profiles.tools) — regular npm packages
     // installed globally, separate from the profile sync above.
-    const freshlyInstalledTools = installStandaloneTools(profiles);
+    const freshlyInstalledTools = installStandaloneTools(profiles, selected);
     // Offer to register pi-omp-stats as a background service after a fresh
     // install (interactive only; --yes prints a hint instead).
     await maybeOfferStatsService(freshlyInstalledTools, yes, profilesExistOnDisk());

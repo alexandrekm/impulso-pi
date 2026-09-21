@@ -232,12 +232,13 @@ alongside the repo.
 
 `path` is relative to the repo root; the bin name and version are read from
 the tool's `package.json`. On install, `install.sh` runs `npm install` (builds
-`dist/` via `prepare`) then `npm i -g .` for each tool, **every run** — these
-packages are checked out from git rather than published, so a plain
+`dist/` via `prepare`) then `npm i -g .` for each **path tool, every run** —
+these packages are checked out from git rather than published, so a plain
 version-string comparison can't detect a `git pull`/merge that changed the
 source without bumping `version`; both npm commands are cheap/idempotent when
 nothing changed, so always rebuilding is what keeps the global bin in sync.
-Currently the only tool is `pi-omp-stats` (see `packages/pi-omp-stats/`).
+Currently the only path tool is `pi-omp-stats` (see `packages/pi-omp-stats/`).
+
 Besides usage/cost/tool stats, it now also tracks **compaction** events,
 **observational-memory** events (observations/reflections/drops + the
 `om.folded` snapshot carried through compactions), and **guard blocks**
@@ -286,6 +287,15 @@ up the freshly-built binary — without this, KeepAlive keeps the old process
 alive forever and the dashboard serves stale assets after an upgrade. In
 profiles mode it re-runs `service install` first to re-bake
 `PI_STATS_PROFILES_DIR` into the plist/unit, then restarts.
+
+**External registry tools** (an entry with no `path`, e.g.
+`@zvec/zvec-grep` / `zg`) are detect-first instead: they appear in the
+dependency review — missing → asks (the `-y` mode installs all missing),
+outdated → opt-in update offer, installed + current → reported as "leaving
+untouched" and never reinstalled. `installStandaloneTools` only installs
+what the review selected — same never-overwrite philosophy as `pi` itself.
+(A registry version check IS safe for these, unlike git checkouts — the
+registry bumps `version` on every publish.)
 
 The tools section hits the npm registry (real downloads, no overall
 timeout), so CI's install.sh smoke test sets `IMPULSO_SKIP_TOOLS=1` to skip
@@ -629,11 +639,96 @@ mutants = 0) would be the stronger follow-up.
 npm install -g pi-profiles   # provides `ppi` (auto-installed by ./install.sh if missing)
 ```
 
+The `pi` CLI itself is **not** a manual prerequisite anymore: `./install.sh`
+installs it when missing via the official method (`npm install -g
+--ignore-scripts @earendil-works/pi-coding-agent`) and **never overwrites an
+existing install** — any `pi` already on PATH (npm global, pi.dev installer,
+managed install, distro package) is reported and left untouched. The only
+update path is the opt-in self-update offered during the dependency review.
+Alternative installers (pi.dev `install.sh`, which also supports an
+experimental managed install under `~/.pi/agent/install` + a
+`~/.local/bin` symlink) work fine too — install.sh's detect-first logic
+picks them up like any other install.
+
+**Version pin (emergency rollback lever):** declare `"pi": { "pin":
+"<version>" }` at the top level of `profiles.jsonc` and install.sh enforces
+it — installs that exact version when pi is missing, switches to it when the
+running version drifts (managed installs: stage the release dir + flip
+`install/current-version`; npm-global: install the exact version), and
+suppresses the self-update offer while set. The managed layout keeps old
+releases staged under `install/releases/`, so switching back is instant.
+Unpin by removing the key. A hand-run `pi update` ignores the pin — re-run
+`./install.sh` to enforce it back. See the commented-out example in
+`profiles.jsonc`.
+
+### Migrating a machine off a Homebrew-prefix pi
+
+With Homebrew's node, `npm install -g` lands in `/opt/homebrew/lib/
+node_modules/` — a prefix Homebrew owns, so pi "lives in brew's world"
+even though it was never a brew formula. To move an existing install to a
+fully user-owned managed one (the work laptop did this on 2026-09-20), run
+the helper — report-only by default, `--apply` to migrate:
+
+```bash
+scripts/utils/migrate-pi-official.sh            # report what it found
+scripts/utils/migrate-pi-official.sh --apply   # do the migration
+```
+
+It detects the current install (npm-global in any prefix, an actual brew
+formula, already-managed, absent, or unknown → refuses), removes the old
+copy, fetches the official pi.dev installer, and runs it in managed mode
+with `PI_CODING_AGENT_DIR` stripped (a pi session exports it and would
+misdirect the managed install into the active profile dir — so the script
+is safe to run from inside pi). Result: releases under
+`~/.pi/agent/install/releases/<version>/`, launcher at `~/.pi/agent/bin/`,
+`pi` symlink in `~/.local/bin`; old releases stay staged, which is what
+makes the version pin instant. After it finishes: restart pi sessions,
+then re-run `./install.sh <target>` — it detects the new pi, syncs
+resources, and offers package updates (e.g. it caught pi-observational-
+memory 3.1.4 with the streamSimple fix).
+
+On a fresh machine none of this is needed: `./install.sh` installs pi via
+the official npm command when missing — the managed-layout migration is
+only for moving an existing install out of Homebrew's prefix.
+
 If `npm install -g` fails with a permissions error (user can't write to the
 global npm prefix), the root-free fix is to point npm at a user-owned prefix
 (`mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global`, then add
 `~/.npm-global/bin` to PATH) — or re-run with `sudo ./install.sh <args>`.
 `./install.sh` detects the permission failure and prints these hints itself.
+
+## Known upstream bugs (local patches)
+
+### pi-observational-memory ≤ 3.1.3 crashes pi ≥ 0.85 (detached streamSimple)
+
+`resolveWorkerStreamSimple` in the package's `src/agents/worker-stream.ts`
+pulls `modelRegistry.streamSimple` out as a bare function reference and calls
+it later **without the receiver**. pi's `ModelRegistry.streamSimple` is a
+prototype method reading `this.runtime` (the facade shipped in the 0.85/0.86
+line — verified absent at v0.84.1), so the detached call runs with
+`this === undefined` → `TypeError: Cannot read properties of undefined
+(reading 'runtime')`, thrown inside a background memory worker →
+`uncaughtException` → **pi exits**. The same detachment exists in its
+`getRegisteredProviderConfig` fallback path.
+
+**RESOLVED upstream in 3.1.4** (2026-09-20): the registry path now calls
+`registryStream.call(modelRegistry, …)`. The local bind-patch was removed by
+the 3.1.4 update. The `getRegisteredProviderConfig` fallback still returns
+`composed` detached, but registered-provider configs are closures — no
+receiver needed — so it's low-risk. Kept here as the record + the recipe for
+future detached-method crashes: identify the bare method extraction, re-bind
+the receiver in the installed copies, and note it in this section — plus the
+two levers that made this incident survivable:
+
+- **Version pin** (see Prerequisites): when a pi upgrade breaks something
+  with no local patch available, pin back to the last known-good version —
+  for this bug that was **0.84.1** (last release without the
+  `ModelRegistry.streamSimple` facade). The managed install keeps old
+  releases staged, so switching is instant.
+- **Package-level bind-patch**: the installed copies live under
+  `<profile>/npm/node_modules/<pkg>/`; a patch there survives syncs (npm
+  packages are only touched when missing or on update) and is overwritten
+  by the next `pi update` — check upstream for the real fix first.
 
 ## Machine-global pi-root files (`piRootDest`)
 

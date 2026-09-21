@@ -74,6 +74,20 @@
     },
   },
 
+  // pi CLI version pin — the emergency lever for "an update broke
+  // something" (e.g. pi-observational-memory's detached streamSimple,
+  // AGENTS.md → Known upstream bugs). While set, install.sh installs the
+  // pinned version when pi is missing, switches to it when the running
+  // version drifts (managed installs: stage the release + flip
+  // current-version; npm-global: install the exact version), and
+  // suppresses the opt-in self-update offer. Unpin = remove the key.
+  // NOTE: a hand-run `pi update` ignores the pin; re-run ./install.sh to
+  // enforce it back. Keep it unset while things work — we ride latest +
+  // the local patch.
+  // "pi": {
+  //   "pin": "0.84.1"
+  // },
+
   "profiles": {
     "work": {
       "tags": ["work"],
@@ -534,6 +548,10 @@
     // memory (worker model + thinking, passive mode, worker notices, compaction
     // trigger mode) and persists across installs (fill-only, never reset).
     // https://pi.dev/packages/pi-observational-memory
+    // NOTE: ≤ 3.1.3 detached pi's ModelRegistry.streamSimple from its
+    // receiver and crashed pi ≥ 0.85; fixed upstream in 3.1.4 — see
+    // "Known upstream bugs (local patches)" in AGENTS.md for the record
+    // and the emergency levers (version pin + bind-patch recipe).
     "npm:pi-observational-memory": { "tags": ["core"] },
 
     // Orca Dev integration: Orca hardcodes ~/.pi/agent for its managed pi
