@@ -639,6 +639,36 @@ function buildDepList(names, profiles) {
     }
   }
 
+  // External global CLI tools (profiles.tools entries WITHOUT a "path",
+  // e.g. @zvec/zvec-grep / `zg`): detect-first, like pi and ppi — an
+  // installed + up-to-date tool stays silent and is never touched; a
+  // missing one asks here (the dependency review IS the ask; -y installs
+  // all missing); an outdated one surfaces an opt-in update offer. Repo-
+  // local tools (with "path") stay out of this — they are always-rebuilt
+  // in installStandaloneTools because a version check can't detect a git
+  // pull that changed the source. CI's IMPULSO_SKIP_TOOLS=1 skips external
+  // tools entirely (registry hits) — the smoke test verifies file sync, not
+  // tool installs.
+  if (!process.env.IMPULSO_SKIP_TOOLS) {
+    for (const [name, tool] of Object.entries(profiles.tools || {})) {
+      if (!tool || tool.path) continue;
+      const installed = installedGlobalPkgVersion(name);
+      const latest = latestVersion(name);
+      if (!installed) {
+        items.push({ key: `tool:${name}`, kind: "tool", label: name, state: "missing" });
+      } else if (latest && installed !== latest) {
+        items.push({
+          key: `tool:${name}`,
+          kind: "tool",
+          label: name,
+          state: "update",
+          installed,
+          latest,
+        });
+      }
+    }
+  }
+
   // packages (npm: and git:): union across targets.
   const pkgKeys = new Set();
   for (const t of names) {
@@ -1300,11 +1330,14 @@ function deployPpiAuto() {
 //     behind if we skip the rebuild. `npm install` (dist/ via `prepare`) and
 //     `npm install -g .` are both cheap/idempotent when nothing changed.
 //   {} (no path) — an external npm registry package (e.g. @zvec/zvec-grep):
-//     installed straight from the registry with `npm i -g <name>` (also
-//     cheap/idempotent; npm resolves it against the installed version).
+//     NOT installed unconditionally — it appears in the dependency review
+//     (buildDepList): missing asks there, outdated offers an opt-in update,
+//     and installed+current is reported and left untouched. This function
+//     only installs what the review selected (the `selected` key list) —
+//     detect-first, never overwrite, same philosophy as pi itself.
 // Separate from the profile resource sync — these are not synced into any
 // profile dir.
-export function installStandaloneTools(profiles) {
+export function installStandaloneTools(profiles, selected) {
   const tools = profiles.tools || {};
   const entries = Object.entries(tools);
   const freshlyInstalled = [];
@@ -1327,9 +1360,20 @@ export function installStandaloneTools(profiles) {
 
   for (const [name, tool] of entries) {
     if (!tool.path) {
-      // External npm registry package: install straight from npm. Not
-      // pushed to freshlyInstalled — the pi-omp-stats service offer only
-      // applies to the local repo package.
+      // External npm registry package — only install what the dependency
+      // review selected (missing → asked there; outdated → opted in there).
+      // Not pushed to freshlyInstalled — the pi-omp-stats service offer
+      // only applies to the local repo package.
+      const key = `tool:${name}`;
+      if (!selected || !selected.includes(key)) {
+        const installed = installedGlobalPkgVersion(name);
+        console.log(
+          installed
+            ? `  ${name}: v${installed} installed globally — leaving untouched`
+            : `  ${name}: not selected in the dependency review — skipping`,
+        );
+        continue;
+      }
       console.log(`==> tool -> ${name} (global install from npm registry)`);
       const regRes = spawnSync("npm", ["install", "-g", name, "--no-audit", "--no-fund"], {
         stdio: ["inherit", "inherit", "pipe"],
@@ -1651,7 +1695,7 @@ async function main() {
     if (names.some((t) => t.name === "work" || t.base)) deployPpiAuto();
     // Standalone global CLI tools (profiles.tools) — regular npm packages
     // installed globally, separate from the profile sync above.
-    const freshlyInstalledTools = installStandaloneTools(profiles);
+    const freshlyInstalledTools = installStandaloneTools(profiles, selected);
     // Offer to register pi-omp-stats as a background service after a fresh
     // install (interactive only; --yes prints a hint instead).
     await maybeOfferStatsService(freshlyInstalledTools, yes, profilesExistOnDisk());
