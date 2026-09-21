@@ -232,12 +232,13 @@ alongside the repo.
 
 `path` is relative to the repo root; the bin name and version are read from
 the tool's `package.json`. On install, `install.sh` runs `npm install` (builds
-`dist/` via `prepare`) then `npm i -g .` for each tool, **every run** — these
-packages are checked out from git rather than published, so a plain
+`dist/` via `prepare`) then `npm i -g .` for each **path tool, every run** —
+these packages are checked out from git rather than published, so a plain
 version-string comparison can't detect a `git pull`/merge that changed the
 source without bumping `version`; both npm commands are cheap/idempotent when
 nothing changed, so always rebuilding is what keeps the global bin in sync.
-Currently the only tool is `pi-omp-stats` (see `packages/pi-omp-stats/`).
+Currently the only path tool is `pi-omp-stats` (see `packages/pi-omp-stats/`).
+
 Besides usage/cost/tool stats, it now also tracks **compaction** events,
 **observational-memory** events (observations/reflections/drops + the
 `om.folded` snapshot carried through compactions), and **guard blocks**
@@ -286,6 +287,15 @@ up the freshly-built binary — without this, KeepAlive keeps the old process
 alive forever and the dashboard serves stale assets after an upgrade. In
 profiles mode it re-runs `service install` first to re-bake
 `PI_STATS_PROFILES_DIR` into the plist/unit, then restarts.
+
+**External registry tools** (an entry with no `path`, e.g.
+`@zvec/zvec-grep` / `zg`) are detect-first instead: they appear in the
+dependency review — missing → asks (the `-y` mode installs all missing),
+outdated → opt-in update offer, installed + current → reported as "leaving
+untouched" and never reinstalled. `installStandaloneTools` only installs
+what the review selected — same never-overwrite philosophy as `pi` itself.
+(A registry version check IS safe for these, unlike git checkouts — the
+registry bumps `version` on every publish.)
 
 The tools section hits the npm registry (real downloads, no overall
 timeout), so CI's install.sh smoke test sets `IMPULSO_SKIP_TOOLS=1` to skip
