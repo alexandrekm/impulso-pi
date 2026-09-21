@@ -651,6 +651,40 @@ Unpin by removing the key. A hand-run `pi update` ignores the pin — re-run
 `./install.sh` to enforce it back. See the commented-out example in
 `profiles.jsonc`.
 
+### Migrating a machine off a Homebrew-prefix pi
+
+With Homebrew's node, `npm install -g` lands in `/opt/homebrew/lib/
+node_modules/` — a prefix Homebrew owns, so pi "lives in brew's world"
+even though it was never a brew formula. To move pi to a fully user-owned
+install (the work laptop did this on 2026-09-20):
+
+1. **See what you have**: `readlink -f "$(command -v pi)"` (or
+   `python3 -c "import os;print(os.path.realpath('$(command -v pi)'))"`
+   on macOS, which lacks GNU readlink).
+   `/opt/homebrew/lib/node_modules/...` → npm-global in brew's prefix;
+   `/opt/homebrew/Cellar/...` → an actual brew formula (`brew uninstall`
+   it).
+2. **Remove the old copy**: `npm uninstall -g @earendil-works/pi-coding-
+   agent` (npm-global case). Live pi sessions keep running, but restart
+   them after the migration.
+3. **Install user-owned via the official installer's managed mode** —
+   run from a PLAIN shell (not inside a pi session, which exports
+   `PI_CODING_AGENT_DIR` and would misdirect the managed install into the
+   active profile dir): `env -u PI_CODING_AGENT_DIR PI_EXPERIMENTAL=1 sh`
+   the pi.dev `install.sh` (or `curl -fsSL https://pi.dev/install.sh |
+   PI_EXPERIMENTAL=1 env -u PI_CODING_AGENT_DIR sh`). Result: releases under
+   `~/.pi/agent/install/releases/<version>/`, launcher at `~/.pi/agent/bin/`,
+   `pi` symlink in `~/.local/bin` — old releases stay staged, which
+   is what makes the version pin instant.
+4. **Re-run `./install.sh <target>`** — detects the new pi ("already on
+   PATH — leaving untouched"), syncs resources, and offers package updates
+   (e.g. it caught pi-observational-memory 3.1.4 with the streamSimple fix).
+5. **Verify**: `command -v pi` → `~/.local/bin/pi`; `pi --version`.
+
+On a fresh machine none of this is needed: `./install.sh` installs pi via
+the official npm command when missing — the managed-layout migration is only
+for moving an existing install out of Homebrew's prefix.
+
 If `npm install -g` fails with a permissions error (user can't write to the
 global npm prefix), the root-free fix is to point npm at a user-owned prefix
 (`mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global`, then add
