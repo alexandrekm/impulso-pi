@@ -12,8 +12,10 @@
   // (including packages[]) is left alone.
   "settings": {
     "hideThinkingBlock": true,
-    // Catppuccin Mocha, from the pi-themes package (git: below).
-    "theme": "catppuccin-mocha",
+    // impulso-mocha: repo-owned variant of catppuccin-mocha (pi-themes) with
+    // a visible user-message background (surface1 gray) — see the
+    // config/themes/impulso-mocha.json resource below.
+    "theme": "impulso-mocha",
   },
 
   // DEFAULT settings — deep fill-only: a key (and nested sub-keys) is
@@ -33,8 +35,8 @@
     //     provider/id or bare id). Order = cycle order.
     // pi-observational-memory: by default the proactive compaction trigger
     // fires at a fixed 81k-token threshold (calibrated mode), which compacts
-    // far too often on large-context models. Ratio mode + 0.6 makes it fire
-    // at ~60% of the active model's context window instead — early enough to
+    // far too often on large-context models. Ratio mode + 0.5 makes it fire
+    // at ~50% of the active model's context window instead — early enough to
     // keep per-request cache-read cost down on huge-context models (claude
     // was averaging ~360k cache-read tokens/request at ratio 0.9); pi's
     // native window-pressure compaction remains the safety net. The
@@ -42,7 +44,16 @@
     // to `calibrated` — install only fills these when absent, never resets.
     "observational-memory": {
       "compactAfterTokensMode": "ratio",
-      "compactAfterTokensRatio": 0.6,
+      "compactAfterTokensRatio": 0.5,
+      // Memory worker model: deepseek-v4.1-flash — a fast, cheap tier so
+      // background observer/reflector/compaction work stays off the main
+      // model's budget. Unset ("same as main thread") is also valid; this
+      // seeds fresh machines cheap. Fill-only: pick another model in
+      // /settings → Pi → Observational memory (persists across syncs). On
+      // machines without OpenRouter credentials the runtime falls back to
+      // the session model (logged); the personal machine overrides this
+      // with its LiteLLM deepseek-flash in machines.personal below.
+      "model": { "provider": "openrouter", "id": "deepseek/deepseek-v4.1-flash" },
     },
 
     // pi-subagents: seeded here (fill-only) instead of managed `settings` so
@@ -157,6 +168,13 @@
             "litellm/gpt-5.6-terra",
             "litellm/deepseek-flash",
           ],
+          // Memory worker on the personal machine: the LiteLLM proxy's
+          // deepseek-flash instead of the global OpenRouter seed — no
+          // OpenRouter credentials here, so the runtime would otherwise
+          // fall back to the session model.
+          "observational-memory": {
+            "model": { "provider": "litellm", "id": "deepseek-flash" },
+          },
         },
       },
     },
@@ -302,11 +320,26 @@
     "npm:@ff-labs/pi-fff": { "tags": ["core"] },
     "extensions/fff/fff-env.ts": { "tags": ["core"] },
 
-    // pi-themes (sting8k): companion themes for pi, incl. catppuccin-mocha
-    // (pinned as the shared "theme" in the settings object above). Core so
-    // every profile gets it. Git-only (not on npm), so it uses the git:
-    // resource kind. https://github.com/sting8k/pi-themes
+    // pi-themes (sting8k): companion themes for pi, incl. catppuccin-mocha —
+    // the base of our repo-owned impulso-mocha variant (the selected
+    // "theme", see the config/themes/ resource below). Core so every profile
+    // gets it. Git-only (not on npm), so it uses the git: resource kind.
+    // https://github.com/sting8k/pi-themes
     "git:github.com/sting8k/pi-themes": { "tags": ["core"] },
+    // impulso-mocha — the SELECTED theme (managed `settings.theme` above):
+    // a repo-owned copy of pi-themes' catppuccin-mocha with ONE change —
+    // userMsgBg "" (terminal default, invisible) → #45475a (catppuccin
+    // surface1 — the theme's own clear gray tier — so the `┌─ You ─┐`
+    // boxes (border-on-user-messages) and user messages stand out
+    // clearly against dark terminal backgrounds. pi offers no per-token
+    // theme override in settings.json, so a named copy is the only way;
+    // trade-off: pi-themes updates to catppuccin-mocha no longer flow in —
+    // re-diff after a `pi update` of the package. Lands at
+    // <target>/themes/impulso-mocha.json (pi loads <agentDir>/themes/*.json).
+    "config/themes/impulso-mocha.json": {
+      "tags": ["core"],
+      "dest": "themes/impulso-mocha.json",
+    },
 
     // pi-dynamic-footer (vendored from @juanbenjumea/pi-dynamic-footer v0.1.7
     // by Juan Benjumea): dynamic footer with live observability — context
@@ -544,7 +577,7 @@
     // agent tool recovers source evidence by id. Config lives under the
     // `observational-memory` namespace in settings.json. Safe defaults for the
     // compaction trigger are seeded by `settingsDefaults` above (ratio mode,
-    // 0.9) so the proactive auto-trigger rarely fires on large-context
+    // 0.5) so the proactive auto-trigger rarely fires on large-context
     // models; everything else is tuned from /settings → Pi → Observational
     // memory (worker model + thinking, passive mode, worker notices, compaction
     // trigger mode) and persists across installs (fill-only, never reset).

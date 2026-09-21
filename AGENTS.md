@@ -163,17 +163,26 @@ deliberately different semantics:
 - **`"settings"` (MANAGED):** repo-owned keys that are **overwritten** on every
   sync. `packages[]` and any other existing keys are preserved; `"packages"`
   is rejected here — use `npm:`/`git:` resources instead. Currently used for
-  `"hideThinkingBlock": true` and the shared `"theme": "catppuccin-mocha"`
-  (from the pi-themes package).
+  `"hideThinkingBlock": true` and the shared `"theme": "impulso-mocha"`
+  (a repo-owned copy of pi-themes' catppuccin-mocha — see
+  `config/themes/impulso-mocha.json` — with one change: a visible
+  user-message background (`userMsgBg` #45475a, catppuccin surface1 —
+  the theme's clear gray tier), so the `┌─ You ─┐` boxes stand out; pi has
+  no per-token theme override, so the variant ships as a synced theme
+  resource).
 - **`"settingsDefaults"` (DEFAULTS):** deep **fill-only** — a key (and its
   nested sub-keys) is written **only when absent** in `settings.json`, so
   user overrides made via `/settings` survive sync. Use this to seed safe
   initial values for extension-managed namespaces on fresh machines without
   clobbering per-user tuning. Currently used for `observational-memory`
   compaction thresholds (`compactAfterTokensMode: "ratio"`,
-  `compactAfterTokensRatio: 0.6`) so the proactive auto-compaction
+  `compactAfterTokensRatio: 0.5`) so the proactive auto-compaction
   trigger doesn't fire at the default 81k-token threshold on
-  large-context models,
+  large-context models, for the memory worker model seed
+  (`deepseek/deepseek-v4.1-flash` via OpenRouter; the personal machine
+  overrides it with `litellm/deepseek-flash` via machine-layered defaults —
+  without matching credentials the om runtime falls back to the session
+  model),
   and for `litellm.skills.enabled: false`, which stops pi-provider-litellm
   from registering the LiteLLM Skills Gateway tools
   (`litellm_skill_list/create/delete`) and injecting the proxy's skill
@@ -331,7 +340,12 @@ versioned).
   baked its footer into the BoxEditor with no disable flag) and
   `footer-status-widgets` (whose toks/cost/cache widgets duplicated this
   footer's). Persists session summaries under `~/.pi/agent/observability/`
-- `git:github.com/sting8k/pi-themes` — companion themes (incl. catppuccin-mocha)
+- `git:github.com/sting8k/pi-themes` — companion themes (incl.
+  catppuccin-mocha, the base of our repo-owned `impulso-mocha` variant:
+  `config/themes/impulso-mocha.json`, the selected theme, which adds a
+  visible user-message background (surface1 gray) so your messages are easy
+  to spot; pi offers no per-token theme override, so a named copy is the
+  only way — re-diff against upstream after a `pi update` of the package)
 - `npm:@juicesharp/rpiv-ask-user-question` — ask-user-question tool
 - `npm:@ff-labs/pi-fff` — FFF file finder; replaces pi's built-in
   `find`/`grep` (override mode, home-dir indexing off; both pinned by
