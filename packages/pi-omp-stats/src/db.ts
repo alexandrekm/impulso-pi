@@ -487,6 +487,31 @@ export function resetAllFileOffsets(): void {
   db.exec("DELETE FROM file_offsets");
 }
 
+/**
+ * Delete every row belonging to sessions whose `session_file` lives under a
+ * filesystem prefix — retires a machine mirror from the selected DB when its
+ * machine opts out of the aggregate (`includeInAll: false`) or is disabled.
+ * Touches every table with a `session_file` column (messages, tool_calls,
+ * user_messages, file_offsets, …), so re-enabling later re-parses from zero.
+ */
+export function purgeSessionsUnder(prefix: string): number {
+  if (!db) throw new Error("db not initialised");
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as {
+    name: string;
+  }[];
+  const pattern = prefix.replace(/[\\%_]/g, (c) => "\\" + c) + "%";
+  let purged = 0;
+  for (const table of tables) {
+    const cols = db.prepare(`PRAGMA table_info(${table.name})`).all() as { name: string }[];
+    if (!cols.some((col) => col.name === "session_file")) continue;
+    purged += Number(
+      db.prepare(`DELETE FROM ${table.name} WHERE session_file LIKE ? ESCAPE '\\'`).run(pattern)
+        .changes,
+    );
+  }
+  return purged;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Inserts                                                                     */
 /* -------------------------------------------------------------------------- */

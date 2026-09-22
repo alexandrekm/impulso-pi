@@ -159,15 +159,20 @@ adds or overrides entries:
   "syncTtlMinutes": 30,
   "machines": [
     { "host": "my-server", "kind": "ssh" },
-    { "host": "gpu-devbox-1", "includeInAll": true }
+    { "host": "gpu-devbox-1", "includeInAll": false }
   ]
 }
 ```
 
 `kind: "ssh"` machines are probed with a batch-mode `ssh true` (safe: no
-auto-start ProxyCommand). `includeInAll` also folds the machine's sessions
-into the "All profiles" aggregate (default: machine data stays in its own
-view). `enabled: false` removes a discovered machine from the rotation.
+auto-start ProxyCommand). Machine sessions are part of the **All profiles**
+aggregate by default, like local profiles (each machine also gets its own
+`<host>/<profile>` selector view) — set `"includeInAll": false` per machine
+to keep it out of the aggregate. Switching a machine out (opt-out, disable,
+or removing its ssh entry) purges its rows from the aggregate DB on the
+next sync, so "All profiles" never lingers stale data; the machine's own
+view DB is kept. `enabled: false` removes a discovered machine from the
+rotation.
 
 ## Environment variables
 

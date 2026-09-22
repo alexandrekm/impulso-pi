@@ -425,7 +425,9 @@ async function syncMachineLocked(
     // on the remote profile). `-m` prunes profile skeletons without sessions.
     // The dir + contents split (`sessions/` then `**`) keeps the filter
     // compatible with rsync 2.6.9 — `***` is 3.x-only and would match nothing,
-    // silently mirroring zero files.
+    // silently mirroring zero files. The per-profile pin-state file rides
+    // along (depth-2 file, exact match) so the Session Pins panel can join
+    // machine sessions to their pinned backend in the aggregate view.
     await runCommand(
       "rsync",
       [
@@ -437,6 +439,8 @@ async function syncMachineLocked(
         "/*/sessions/",
         "--include",
         "/*/sessions/**",
+        "--include",
+        "/*/openrouter-session-pin-state.json",
         "--exclude",
         "*",
         "-e",
@@ -522,7 +526,9 @@ export async function listMachineSources(): Promise<MachineSource[]> {
         id: `${hostEntry.name}/${profileEntry.name}`,
         dir: sessions,
         machine: hostEntry.name,
-        includeInAll: byHost.get(hostEntry.name)?.includeInAll === true,
+        // Machine sessions join the aggregate "All profiles" view by default,
+        // like local profiles; a machine opts out with includeInAll: false.
+        includeInAll: byHost.get(hostEntry.name)?.includeInAll !== false,
       });
     }
   }
