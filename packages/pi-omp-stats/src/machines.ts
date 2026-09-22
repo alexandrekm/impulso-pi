@@ -303,7 +303,9 @@ async function readSyncState(host: string): Promise<SyncState> {
     const parsed: unknown = JSON.parse(await fsp.readFile(syncStatePath(host), "utf8"));
     if (parsed && typeof parsed === "object") {
       const s = parsed as SyncState;
-      return { lastSyncAt: s.lastSyncAt ?? null, lastStatus: s.lastStatus ?? "skipped" };
+      // Preserve the full record (files/bytes/durationMs/lastError too) —
+      // the Machines tab reads them, and skip paths must not erase history.
+      return { ...s, lastSyncAt: s.lastSyncAt ?? null, lastStatus: s.lastStatus ?? "skipped" };
     }
   } catch {
     /* absent or invalid */
@@ -354,12 +356,32 @@ export async function syncMachine(
   m: MachineConfig,
   opts?: { force?: boolean; probe?: ProbeResult },
 ): Promise<SyncState> {
-  if (syncingHosts.has(m.host)) return { ...(await readSyncState(m.host)), lastStatus: "skipped" };
+  // Reserve the host SYNCHRONOUSLY, before any await: /api/sync and
+  // /api/machines both trigger pulls on dashboard load, so a lock taken
+  // only after the probe/state reads would let two callers race into two
+  // concurrent rsyncs writing the same mirror.
+  if (syncingHosts.has(m.host)) {
+    return { ...(await readSyncState(m.host)), lastStatus: "skipped" };
+  }
+  syncingHosts.add(m.host);
+  try {
+    return await syncMachineLocked(m, opts);
+  } finally {
+    syncingHosts.delete(m.host);
+  }
+}
+
+async function syncMachineLocked(
+  m: MachineConfig,
+  opts?: { force?: boolean; probe?: ProbeResult },
+): Promise<SyncState> {
   const probe = opts?.probe ?? (await probeCached(m));
   if (!isSyncable(m, probe)) {
-    const state = {
-      lastSyncAt: (await readSyncState(m.host)).lastSyncAt,
-      lastStatus: "skipped" as const,
+    // Keep the previous record's fields (lastSyncAt/files/bytes/durationMs):
+    // a down machine must not erase its last successful sync's history.
+    const state: SyncState = {
+      ...(await readSyncState(m.host)),
+      lastStatus: "skipped",
       lastError: `machine ${probe.state}`,
     };
     await writeSyncState(m.host, state);
@@ -371,10 +393,13 @@ export async function syncMachine(
   if (!opts?.force && previous.lastSyncAt && Date.now() - previous.lastSyncAt < ttl) {
     return previous;
   }
-  syncingHosts.add(m.host);
   const startedAt = Date.now();
   try {
-    const remote = `${m.host}:${m.remoteProfilesPath ?? ".pi/profiles/"}`;
+    // Trailing slash normalized so a misconfigured remoteProfilesPath
+    // can't nest `profiles/` inside `profiles/`.
+    const remotePath = (m.remoteProfilesPath ?? ".pi/profiles/").replace(/\/?$/, "/");
+    const remote = `${m.host}:${remotePath}`;
+    await fsp.mkdir(machineMirror(m), { recursive: true });
     // Only `<profile>/sessions/**` is mirrored (anchored at depth 1 — a bare
     // `sessions/***` would also match e.g. `git/<pkg>/node_modules/**/sessions/`
     // on the remote profile). `-m` prunes profile skeletons without sessions.
@@ -409,14 +434,12 @@ export async function syncMachine(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const state: SyncState = {
-      lastSyncAt: previous.lastSyncAt,
+      ...previous,
       lastStatus: "error",
       lastError: message.split("\n").slice(-2).join(" ").slice(0, 300),
     };
     await writeSyncState(m.host, state);
     return state;
-  } finally {
-    syncingHosts.delete(m.host);
   }
 }
 
@@ -456,7 +479,9 @@ export async function listMachineSources(): Promise<MachineSource[]> {
     return sources;
   }
   for (const hostEntry of hosts) {
-    if (!hostEntry.isDirectory()) continue;
+    // Only mirrors of registered, enabled machines are aggregated — disabling a
+    // machine (or removing its ssh config entry) retires its existing mirror.
+    if (!hostEntry.isDirectory() || !byHost.has(hostEntry.name)) continue;
     const profilesDir = path.join(root, hostEntry.name, "profiles");
     let profiles;
     try {
@@ -514,6 +539,34 @@ function readMachineSummary(viewId: string): MachineSummary | null {
   }
 }
 
+/** Totals summed across every view DB of one machine (multi-profile hosts). */
+function readMachineSummaries(viewIds: string[]): MachineSummary | null {
+  const totals: MachineSummary = {
+    sessions: 0,
+    requests: 0,
+    tokens: 0,
+    cost: 0,
+    lastActivityMs: null,
+  };
+  let any = false;
+  for (const viewId of viewIds) {
+    const s = readMachineSummary(viewId);
+    if (!s) continue;
+    any = true;
+    totals.sessions += s.sessions;
+    totals.requests += s.requests;
+    totals.tokens += s.tokens;
+    totals.cost += s.cost;
+    if (
+      s.lastActivityMs != null &&
+      (totals.lastActivityMs == null || s.lastActivityMs > totals.lastActivityMs)
+    ) {
+      totals.lastActivityMs = s.lastActivityMs;
+    }
+  }
+  return any ? totals : null;
+}
+
 /** Everything the Machines tab needs, with wake-safe probes. */
 export async function getMachinesOverview(): Promise<MachineOverview[]> {
   const machines = await listMachines();
@@ -541,7 +594,7 @@ export async function getMachinesOverview(): Promise<MachineOverview[]> {
     }),
   );
   for (const overview of overviews) {
-    overview.summary = overview.views[0] ? readMachineSummary(overview.views[0]) : null;
+    overview.summary = readMachineSummaries(overview.views);
   }
   return overviews;
 }
