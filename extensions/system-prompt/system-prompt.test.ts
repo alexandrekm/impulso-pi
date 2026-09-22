@@ -42,6 +42,20 @@ describe("buildGuidelinesSection", () => {
     assert.ok(!section.includes("- -"));
   });
 
+  test("merges toolGuidelines (pi 0.87) and promptGuidelines (pi ≤0.86) with dedupe", () => {
+    const section = buildGuidelinesSection(
+      {
+        promptGuidelines: ["extra bullet", "shared rule"],
+        toolGuidelines: { read: ["shared rule", "read guideline"] },
+        skills: [],
+      },
+      ["read"],
+    );
+    assert.ok(section.includes("- read guideline"));
+    assert.ok(section.includes("- extra bullet"));
+    assert.equal(section.split("shared rule").length, 2, "shared rule appears once");
+  });
+
   test("emits the pi-development pointer only when that skill is model-visible", () => {
     const withSkill = buildGuidelinesSection(
       { promptGuidelines: [], skills: [{ name: "pi-development" }] },

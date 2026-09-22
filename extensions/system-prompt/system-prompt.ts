@@ -9,8 +9,8 @@
 // our own fixed sections and a concise pointer to the pi-development skill.
 //
 // The dynamic pieces (selectedTools/toolSnippets, promptGuidelines,
-// appendSystemPrompt, contextFiles, skills, cwd) come straight from the
-// options, so tool activation, skill loading, AGENTS.md, /append, etc. keep
+// toolGuidelines, appendSystemPrompt, contextFiles, skills, cwd) come straight
+// from the options, so tool activation, skill loading, AGENTS.md, /append, etc. keep
 // working without us having to know about them.
 //
 // If the user supplied their own custom prompt (SYSTEM.md / --system-prompt),
@@ -42,11 +42,15 @@ function isFeatureEnabled(id: string): boolean {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
 // Fixed prompt sections — edit these to change the non-dynamic prompt.
-// The first three sections match pi defaults. The pi-development pointer is
-// an intentional divergence from pi's verbose always-on documentation block.
-// ─────────────────────────────────────────────────────────────────────────
+// The content mirrors pi's default prompt; the FORMAT stays flat (pre-0.87
+// "Available tools:"/"Guidelines:" headings) even though pi ≥0.87 wraps its
+// own sections in <tools>/<rules>/<docs> tags — the forced prompt we return
+// is sent verbatim as the leading system message, so the tags carry no
+// behavior, and the pi-development pointer below remains an intentional
+// divergence from pi's verbose always-on <docs> block.
+// ─────────────────────────────────────────────────────────────────────
 
 const generalInstructions =
   "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.";
@@ -157,6 +161,14 @@ export function buildGuidelinesSection(
   const hasLs = selectedTools.includes("ls");
   if (hasBash && !hasGrep && !hasFind && !hasLs) {
     add(bashOnlyFileopsGuideline);
+  }
+  // pi ≤0.86 inlined tool-contributed rules into promptGuidelines; pi 0.87
+  // splits them into toolGuidelines (keyed by tool name, iterated in
+  // selectedTools order) with promptGuidelines holding only extra bullets.
+  // Read both so the section survives across pi versions (the dedupe
+  // absorbs whichever side already carries a rule).
+  for (const name of selectedTools) {
+    for (const guideline of opts.toolGuidelines?.[name] ?? []) add(guideline);
   }
   for (const guideline of opts.promptGuidelines ?? []) {
     const normalized = guideline.trim();

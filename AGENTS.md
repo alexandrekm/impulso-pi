@@ -413,9 +413,11 @@ versioned).
   request representation, NOT the wire format — comparable across profiles
   and time, not to wire-format charts). CI `npm run check:context-record`
   fails when a PR changes profiles.jsonc / extensions/ / skills/ without
-  updating the record: the context-budget ratchet. Current numbers: stock
-  5.4k chars / 4 tools; profiles ~55-58k / 16-17 tools (~10.8x stock; the
-  `subagent` tool alone is 21k).
+  updating the record: the context-budget ratchet. Current numbers (pi
+  0.87.0): stock 5.7k chars / 4 tools; profiles ~29-31k / 13-14 tools
+  (~5.5x stock). Re-measured for pi 0.87 — the 0.84-era record was ~2x
+  larger (0.87 splits the prompt into sections and renamed the guideline
+  fields); compare within one record's piVersion.
 - `npm:@narumitw/pi-btw` — `/btw` side-thread command: ask context-aware
   questions in a separate thread without derailing the main conversation
   (`/btw <question>` starts one; `/btw` opens a manager; `Ctrl+R` brings
@@ -770,6 +772,50 @@ two levers that made this incident survivable:
   `<profile>/npm/node_modules/<pkg>/`; a patch there survives syncs (npm
   packages are only touched when missing or on update) and is overwritten
   by the next `pi update` — check upstream for the real fix first.
+
+### pi 0.85–0.87 breaking changes — compatibility pass (2026-09-22)
+
+Audited every 0.85/0.86/0.87 breaking change against this repo's
+extensions and tools, live-verified under pi 0.87.0 (tool loop + guards +
+forced prompt smoke-tested end-to-end).
+
+**Fixed here** (both found by regenerating the context record):
+
+- `system-prompt`: pi 0.87 renamed the flat `promptGuidelines` array to
+  `toolGuidelines` (keyed by tool, iterated in selectedTools order); our
+  prompt rebuild silently dropped ALL tool-contributed rules in sessions
+  started under 0.87. Now merges both shapes.
+- `context-measure`: pi 0.86 replaced `Context` with `TranscriptContext`
+  for custom providers (prompt + tool declarations folded into the
+  transcript's system messages, incl. named `sections`); the recorder
+  zeroed out. Now replays system messages on both shapes.
+- devDependencies bumped `@earendil-works/*` ^0.84 → ^0.87 so `tsc` checks
+  against the pi we actually run — the promptGuidelines drift sailed past
+  a green typecheck because the old types still had the field. Keep the
+  devDeps on the CURRENT pi line; stale-typed green checks are worse than
+  red ones.
+- `check:upstream-prompt` golden regenerated for 0.87's sectioned prompt
+  (`<tools>`/`<rules>`/`<docs>`/`<cwd>` tags). Our extension deliberately
+  keeps the flat pre-0.87 format: the forced prompt is sent verbatim as
+  the leading system message, so the tags carry no behavior.
+
+**Verified unaffected**: guards (`tool_call`), session-pin
+  (`before_provider_request` return-replace + `payload`), openrouter-cost
+  (`after_provider_response` headers), payload-exporter, gws/modes
+  (`systemPromptOptions.skills` mutation + the `pi.events` bus),
+  on-demand-skills (`input` transform), pi-omp-stats (unknown session
+  entries like `context_edit` / `pi.bug-report` are skipped — 0.87 session
+  files parse clean), borderontoolcalls (`ToolExecutionComponent` still
+  exported), pi-dynamic-footer (`turn_end.message.usage` retained),
+  herdr/orca `agent_settled` (0.87 defers runs requested there —
+  compatible).
+
+**Residual risk**: `npm:@rahularya01/pi-cursor` is a custom provider and
+  inherits the 0.86 TranscriptContext contract — if Cursor streaming
+  breaks under 0.87, the fix belongs upstream (cursor-env only sets env
+  vars). `impulso-settings`' CustomEditor keeps standalone spinner rows
+  (pre-0.86 default); pass `{ embedWorkingStatus: true }` as the 4th
+  CustomEditor ctor arg to adopt the editor-border spinners if wanted.
 
 ## Machine-global pi-root files (`piRootDest`)
 
