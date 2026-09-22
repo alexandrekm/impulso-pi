@@ -256,9 +256,11 @@ async function probeAws(m: MachineConfig): Promise<ProbeResult> {
 export async function probeMachine(m: MachineConfig): Promise<ProbeResult> {
   if (m.kind === "ssh") {
     try {
+      // ssh options are first-match-wins, so the shorter probe timeout must
+      // come BEFORE SSH_SYNC_OPTS (which pins ConnectTimeout=20 for syncs).
       await runCommand(
         "ssh",
-        [...SSH_SYNC_OPTS.split(" "), "-o", "ConnectTimeout=5", m.host, "true"],
+        ["-o", "ConnectTimeout=5", ...SSH_SYNC_OPTS.split(" "), m.host, "true"],
         PROBE_TIMEOUT_MS,
       );
       return { state: "running", ssmOnline: null };
@@ -407,8 +409,11 @@ async function syncMachineLocked(
     const remote = `${m.host}:${remotePath}`;
     await fsp.mkdir(machineMirror(m), { recursive: true });
     // Only `<profile>/sessions/**` is mirrored (anchored at depth 1 — a bare
-    // `sessions/***` would also match e.g. `git/<pkg>/node_modules/**/sessions/`
+    // `sessions/**` would also match e.g. `git/<pkg>/node_modules/**/sessions/`
     // on the remote profile). `-m` prunes profile skeletons without sessions.
+    // The dir + contents split (`sessions/` then `**`) keeps the filter
+    // compatible with rsync 2.6.9 — `***` is 3.x-only and would match nothing,
+    // silently mirroring zero files.
     await runCommand(
       "rsync",
       [
@@ -417,7 +422,9 @@ async function syncMachineLocked(
         "--include",
         "/*/",
         "--include",
-        "/*/sessions/***",
+        "/*/sessions/",
+        "--include",
+        "/*/sessions/**",
         "--exclude",
         "*",
         "-e",
