@@ -310,9 +310,15 @@ design: aws machines are probed read-only via the EC2/SSM APIs, never ssh (a
 devbox ssh ProxyCommand auto-STARTS a stopped instance — an ssh probe would
 spin up an idle box), and sync connections pass `-o ClearAllForwardings=yes
 -o PermitLocalCommand=no` so they never collide with an open devbox
-session's LocalForward ports or LocalCommand hooks. Machine sessions stay
-out of "All profiles" unless a machine sets `"includeInAll": true` in
-machines.json. CLI: `pi-omp-stats machines list|sync [host]`.
+session's LocalForward ports or LocalCommand hooks. Machine sessions are
+part of "All profiles" by default, like local profiles (plus their own
+`<host>/<profile>` selector views); `"includeInAll": false` per machine in
+machines.json opts out of the aggregate, and retired mirrors (opt-out,
+disabled, or removed from the ssh config) are purged from the aggregate DB
+on the next sync so "All profiles" never lingers stale data. The
+per-profile `openrouter-session-pin-state.json` is mirrored alongside
+sessions so the Session Pins panel joins machine sessions to their pinned
+backend. CLI: `pi-omp-stats machines list|sync [host]`.
 
 **External registry tools** (an entry with no `path`, e.g.
 `@zvec/zvec-grep` / `zg`) are detect-first instead: they appear in the

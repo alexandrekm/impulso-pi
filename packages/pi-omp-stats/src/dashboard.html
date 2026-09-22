@@ -2150,7 +2150,7 @@
   `;
         main.innerHTML = `<div class="cards">${cardsHtml}</div>
     <div class="section-title">Remote machines</div><div id="machines-table"></div>
-    <div class="kpi-note" style="padding:2px 0 0">Session JSONLs are rsynced from <code>~/.pi/profiles/&lt;p&gt;/sessions</code> on each machine into a local mirror and aggregated like local profiles — the remote box needs nothing but sshd. AWS machines are probed via the read-only EC2/SSM APIs (an ssh probe would auto-start a stopped devbox, so it is never used to test availability); sync connections disable LocalForward ports and LocalCommand hooks. Machine data lands in its own view (pick <code>&lt;host&gt;/&lt;profile&gt;</code> in the profile selector); <code>includeInAll</code> in <code>~/.pi/agent/machines.json</code> can fold it into "All profiles".</div>`;
+    <div class="kpi-note" style="padding:2px 0 0">Session JSONLs are rsynced from <code>~/.pi/profiles/&lt;p&gt;/sessions</code> on each machine into a local mirror and aggregated like local profiles — the remote box needs nothing but sshd. AWS machines are probed via the read-only EC2/SSM APIs (an ssh probe would auto-start a stopped devbox, so it is never used to test availability); sync connections disable LocalForward ports and LocalCommand hooks. Machine data lands in its own view (pick <code>&lt;host&gt;/&lt;profile&gt;</code> in the profile selector) and is part of <em>"All profiles"</em> by default, like local profiles; set <code>includeInAll: false</code> in <code>~/.pi/agent/machines.json</code> to keep a machine out of the aggregate.</div>`;
         const rows = machines
           .slice()
           .sort(

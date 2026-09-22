@@ -78,6 +78,7 @@ import {
   listMemoryEvents,
   listMemorySessions,
   markSessionBackfillsComplete,
+  purgeSessionsUnder,
   relabelSessionFolder,
   setStatsDatabase,
   setFileOffset,
@@ -95,7 +96,7 @@ import {
   resolveStatsDir,
   type SessionsSource,
 } from "./parser.js";
-import { listMachineSources } from "./machines.js";
+import { listMachineSources, machinesDir } from "./machines.js";
 import type {
   BehaviorDashboardStats,
   ContextBudgetStats,
@@ -262,9 +263,9 @@ export async function syncAllSessions(
   const profilesMode = Boolean(process.env.PI_STATS_PROFILES_DIR?.trim());
   for (const source of sources) {
     // Machine views always get their own DB; local sources do in profiles
-    // mode. The aggregate "all" DB stays local unless a machine opts in
-    // (`includeInAll` in machines.json) — devbox sessions default to their
-    // own view so local totals keep their current meaning.
+    // mode. Machine sessions also join the aggregate "all" DB by default,
+    // like local profiles — `includeInAll: false` per machine in
+    // machines.json opts out.
     if (profilesMode || source.machine !== undefined) {
       setStatsDatabase(source.id);
       const result = await syncSessionsSource(source, opts);
@@ -279,7 +280,38 @@ export async function syncAllSessions(
     }
   }
   setStatsDatabase();
+  await purgeRetiredMirrors(machine);
   return { processed, files };
+}
+
+/**
+ * Remove mirrors from the aggregate DB that no longer belong in it: any host
+ * directory under the machines root that isn't a currently-registered,
+ * include-in-all source (a machine that opted out, was disabled, or vanished
+ * from the ssh config) gets its rows purged — otherwise its old sessions
+ * would linger in "All profiles" forever. The machine's own view DB is kept.
+ */
+async function purgeRetiredMirrors(
+  machineSources: (SessionsSource & { machine?: string; includeInAll: boolean })[],
+): Promise<void> {
+  const active = new Set(
+    machineSources
+      .filter((source) => source.includeInAll)
+      .map((source) => path.join(machinesDir(), source.machine!, "profiles")),
+  );
+  let hosts;
+  try {
+    hosts = await fs.readdir(machinesDir(), { withFileTypes: true });
+  } catch {
+    return; /* machines root absent — nothing to purge */
+  }
+  for (const entry of hosts) {
+    if (!entry.isDirectory()) continue;
+    const prefix = path.join(machinesDir(), entry.name, "profiles");
+    if (active.has(prefix)) continue;
+    await initDb(); // aggregate DB is selected by the caller
+    purgeSessionsUnder(prefix);
+  }
 }
 
 /** Profile names available to the dashboard, including the aggregate view. */
@@ -1034,7 +1066,9 @@ function readJsonFile<T>(filePath: string): T | null {
 /** Profile roots to read pin files from: the selected profile, or every
  *  discovered profile dir for the aggregate view. */
 async function pinProfileRoots(profile?: string | null): Promise<string[]> {
-  const sources = await resolveSessionsSources();
+  // Machine sources ride along so the pins join covers mirrored sessions
+  // (their openrouter-session-pin-state.json is mirrored per profile root).
+  const sources = [...(await resolveSessionsSources()), ...(await listMachineSources())];
   if (profile && profile !== "all") {
     const match = sources.find((source) => source.id === profile);
     return match ? [path.dirname(match.dir)] : [];
