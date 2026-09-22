@@ -31,8 +31,7 @@
 //
 // Record file: `$PI_CONTEXT_MEASURE_OUT`, or `<configDir>/context-measure.jsonl`
 // by default (live sessions can switch to `measure/measure-model` at any
-// moment and the records land there; subagent children inherit the config
-// dir, so child requests are captured too). One JSON object per line.
+// moment and the records land there). One JSON object per line.
 //
 // Measurement driver: `npm run measure:context` (scripts/measure-context.mjs)
 // measures stock pi vs. the work/personal/base agent dirs and writes the

@@ -153,8 +153,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# pi-subagents Orca observer runtime artifacts (per-worktree, best-effort)
-/.pi
 
 # Local zvec-grep search index (machine-specific, regenerable)
 .zvec-grep/

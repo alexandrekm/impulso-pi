@@ -369,13 +369,12 @@ describe("extension factory", () => {
     const mk = (id: string) => ({ id, picker: true }) as unknown as Feature;
 
     await pick(mk("pi-btw-model"), "");
-    await pick(mk("subagents-scout-model"), "");
     await pick(mk("observational-memory-model"), "");
     assert.equal(await pick(mk("some-other-picker"), ""), undefined); // unknown id → no picker
 
     assert.deepEqual(
       captured.map((c) => c.title),
-      ["Side-thread model", "Scout model", "Memory worker model"],
+      ["Side-thread model", "Memory worker model"],
     );
     // items include the leading blank row (value "" with the blankLabel).
     assert.equal(captured[0]!.items.length, 3);
@@ -383,7 +382,6 @@ describe("extension factory", () => {
     assert.equal(captured[0]!.items[1]!.value, "litellm/m-1");
     assert.equal(captured[0]!.items[2]!.value, "anthropic/m-2");
     assert.equal(captured[0]!.blankLabel, "Same as main thread");
-    assert.equal(captured[1]!.blankLabel, "Same as main session");
   });
 
   test("launching a command routes through sendUserMessage; a throw is non-fatal", async () => {
