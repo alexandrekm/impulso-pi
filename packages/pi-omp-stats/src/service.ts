@@ -41,6 +41,14 @@ const ENV_VARS_TO_FORWARD = [
   "PI_STATS_PROFILES_DIR",
   "PI_CODING_AGENT_SESSION_DIR",
   "PI_CODING_AGENT_DIR",
+  // AWS profile selection for the machine probe (credentials themselves stay
+  // in ~/.aws/credentials, which the CLI re-reads — only the profile NAME is
+  // forwarded; without it launchd agents resolve the "default" profile and
+  // every aws machine probes as "unknown" with NoCredentials).
+  "AWS_PROFILE",
+  "AWS_DEFAULT_PROFILE",
+  "AWS_REGION",
+  "AWS_DEFAULT_REGION",
 ] as const;
 
 export type ServiceAction =
