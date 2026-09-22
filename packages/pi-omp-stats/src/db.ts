@@ -73,9 +73,15 @@ export function setStatsDatabase(profile?: string | null): void {
   databaseName = name;
 }
 
-/** Filesystem-safe view id (machine views are `<host>/<profile>`). */
+/** Filesystem-safe, collision-free view id (machine views are `<host>/<profile>`).
+ * Unsupported characters percent-encode (with `%` itself escaped), so the
+ * mapping is injective — two distinct view ids can never share a DB file
+ * the way a plain `-` substitution would (`host/p?a` vs `host/p-a`). */
 export function sanitizeProfileId(profile: string): string {
-  return profile.replace(/[^A-Za-z0-9_.-]/g, "-");
+  return profile.replace(
+    /[^A-Za-z0-9._-]/g,
+    (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"),
+  );
 }
 
 /** Path to the stats SQLite database for the selected dashboard view. */

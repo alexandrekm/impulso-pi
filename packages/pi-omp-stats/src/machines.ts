@@ -37,6 +37,7 @@ import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { resolveStatsDir } from "./parser.js";
+import { sanitizeProfileId } from "./db.js";
 import type { SessionsSource } from "./parser.js";
 
 export interface MachineConfig {
@@ -100,6 +101,10 @@ const DEFAULT_SYNC_TTL_MIN = 30;
 const DEFAULT_PROBE_TTL_MIN = 5;
 const RSYNC_TIMEOUT_MS = 15 * 60 * 1000;
 const PROBE_TIMEOUT_MS = 15 * 1000;
+/** Machine hosts must be plain identifiers (ssh-alias style). Enforced once
+ * in {@link listMachines}: hosts flow into path.join for the mirror and
+ * sync-state paths and into ssh/rsync command lines. */
+const SAFE_HOST_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** ssh options that make sync connections safe next to open devbox sessions. */
 const SSH_SYNC_OPTS =
@@ -189,10 +194,17 @@ export async function listMachines(): Promise<MachineConfig[]> {
   }
   for (const extra of file.machines ?? []) {
     if (!extra?.host) continue;
+    if (!SAFE_HOST_RE.test(extra.host)) continue;
     const base = discovered.get(extra.host) ?? { host: extra.host, kind: extra.kind ?? "ssh" };
     discovered.set(extra.host, { ...base, ...extra, host: extra.host });
   }
-  return [...discovered.values()].filter((m) => m.enabled !== false);
+  return [...discovered.values()].filter(
+    // A host that fails the identifier check is dropped entirely: it flows
+    // into path.join (mirror + sync-state) and ssh invocations, so anything
+    // containing a path separator or traversal component is rejected here
+    // rather than validated at each use site.
+    (m) => m.enabled !== false && SAFE_HOST_RE.test(m.host),
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -519,10 +531,7 @@ export async function listMachineSources(): Promise<MachineSource[]> {
 
 /** Cheap totals from one machine view's DB, read via its own connection. */
 function readMachineSummary(viewId: string): MachineSummary | null {
-  const dbPath = path.join(
-    resolveStatsDir(),
-    `pi-omp-stats-${viewId.replace(/[^A-Za-z0-9_.-]/g, "-")}.db`,
-  );
+  const dbPath = path.join(resolveStatsDir(), `pi-omp-stats-${sanitizeProfileId(viewId)}.db`);
   if (!fs.existsSync(dbPath)) return null;
   let db: DatabaseSync;
   try {
