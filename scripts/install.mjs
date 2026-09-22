@@ -1024,6 +1024,60 @@ function migrateLegacyCreatePrPersonal(t) {
   );
 }
 
+// Subagents/scout were removed from the repo (2026-09-22). Non-clobber sync
+// never deletes previously-synced files, so retire the whole feature
+// explicitly: the pi-subagents npm package (packages[] + node_modules), the
+// synced scout/telemetry files, their manifest rows, and the seeded
+// `subagents` settings namespace (fill-only seeds are otherwise left as-is
+// in settings.json; they're inert once the package is gone, but dropping
+// them keeps "remove everything" true and re-adding re-seeds cleanly).
+const LEGACY_SUBAGENTS_PKG = "npm:pi-subagents@0.64.0";
+const LEGACY_SUBAGENTS_DIR = join("npm", "node_modules", "pi-subagents");
+const LEGACY_SUBAGENTS_MANIFEST_KEYS = [
+  LEGACY_SUBAGENTS_PKG,
+  "extensions/subagent-telemetry/subagent-telemetry.ts",
+  "extensions/subagent-telemetry/config.json",
+  "agents/scout.md",
+  "skills/scout/",
+];
+const LEGACY_SUBAGENTS_PATHS = [
+  "agents/scout.md",
+  "skills/scout",
+  "extensions/subagent-telemetry",
+  "extensions/subagent",
+];
+
+function migrateLegacySubagents(t) {
+  const map = manifestRead(t.dir);
+  const hasPkg =
+    Boolean(manifestGet(map, LEGACY_SUBAGENTS_PKG)) ||
+    existsSync(join(t.dir, LEGACY_SUBAGENTS_DIR)) ||
+    settingsHasPackage(t.dir, LEGACY_SUBAGENTS_PKG);
+  const existingFiles = LEGACY_SUBAGENTS_PATHS.filter((path) => existsSync(join(t.dir, path)));
+  const hasManifest = LEGACY_SUBAGENTS_MANIFEST_KEYS.some((k) => map.has(k));
+  const settingsPath = join(t.dir, "settings.json");
+  let hasSettingsKey = false;
+  try {
+    hasSettingsKey = "subagents" in JSON.parse(readFileSync(settingsPath, "utf8"));
+  } catch {
+    // missing or unparsable settings.json — nothing seeded to remove
+  }
+  if (!hasPkg && existingFiles.length === 0 && !hasManifest && !hasSettingsKey) return;
+
+  if (settingsHasPackage(t.dir, LEGACY_SUBAGENTS_PKG)) piUninstall(LEGACY_SUBAGENTS_PKG, t.dir);
+  if (existsSync(join(t.dir, LEGACY_SUBAGENTS_DIR)))
+    rmSync(join(t.dir, LEGACY_SUBAGENTS_DIR), { recursive: true, force: true });
+  for (const path of existingFiles) rmSync(join(t.dir, path), { recursive: true, force: true });
+  for (const key of LEGACY_SUBAGENTS_MANIFEST_KEYS) map.delete(key);
+  manifestWrite(t.dir, map);
+  if (hasSettingsKey) {
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    delete settings.subagents;
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  }
+  console.log(`  [migrated]    removed pi-subagents / scout / subagent-telemetry`);
+}
+
 // Merge settings from profiles.jsonc into a target's settings.json. Two
 // sources, with deliberately different semantics:
 //
@@ -1684,6 +1738,7 @@ async function main() {
       migrateLegacyPermissionSystem(t);
       migrateLegacyDroidStyling(t);
       migrateLegacyCreatePrPersonal(t);
+      migrateLegacySubagents(t);
       migrateLegacyZvecNpm(t);
       doInstallFiles(t, profiles);
       doInstallSettings(t, profiles);

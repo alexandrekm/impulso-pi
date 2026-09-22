@@ -140,10 +140,10 @@ An `npm:` resource may also set an optional `"prune": [<paths relative to
 the installed package root>]` — install.sh deletes those paths from
 `<target>/npm/node_modules/<pkg>/` on **every** sync (idempotent), so pi
 package updates can't resurrect them. Use it to hide package-shipped
-resources pi force-loads with no per-item blacklist. Currently:
-`npm:pi-subagents@0.64.0` prunes `skills/council-mode` and
-`skills/pi-subagents` (we delegate to the scout subagent only; pi
-auto-registers every skill a package's `pi.skills` manifest declares).
+resources pi force-loads with no per-item blacklist. (Last used by the
+since-removed `npm:pi-subagents` resource to hide its bundled council-mode /
+pi-subagents skills — pi auto-registers every skill a package's `pi.skills`
+manifest declares.)
 
 File resources may set an optional `"dest"` (path relative to the profile
 dir) to land at a nested path — e.g. an extension's config file. If several
@@ -281,8 +281,7 @@ the repo copy AND drops a machine-local copy next to the stats DB where
 this route finds it), shows per-target first-call cost (tool schema vs
 system prompt chars, ×stock multiplier), and joins per-tool schema chars
 with actual `tool_calls` usage: paid = schema × requests in range,
-per-call = paid ÷ calls — the hide-it-or-keep-it ranking (current winner:
-`subagent`, 21k schema chars, single-digit monthly calls). Join target:
+per-call = paid ÷ calls — the hide-it-or-keep-it ranking. Join target:
 the profile's own record row, else `base` ("all" view);
 `PI_STATS_CONTEXT_RECORD` overrides the record path.
 A schema-version sentinel in `meta`
@@ -406,18 +405,19 @@ versioned).
   imports in extensions to its bundled copy, so the provider IS the
   endpoint). Zero request footprint: registers no tools, no prompt text, so
   it ships `core` everywhere — live sessions can switch to
-  `measure/measure-model` any moment (records land in the jsonl), and
-  subagent children are captured too. `npm run measure:context` measures
+  `measure/measure-model` any moment (records land in the jsonl). `npm run
+  measure:context` measures
   stock vs. work/personal/base and writes the committed record
   `investigation/context-measurement.json` (counts pi's intermediate
   request representation, NOT the wire format — comparable across profiles
   and time, not to wire-format charts). CI `npm run check:context-record`
   fails when a PR changes profiles.jsonc / extensions/ / skills/ without
   updating the record: the context-budget ratchet. Current numbers (pi
-  0.87.0): stock 5.7k chars / 4 tools; profiles ~29-31k / 13-14 tools
-  (~5.5x stock). Re-measured for pi 0.87 — the 0.84-era record was ~2x
-  larger (0.87 splits the prompt into sections and renamed the guideline
-  fields); compare within one record's piVersion.
+  0.87.0, post-subagent-removal): stock 5.7k chars / 4 tools; profiles
+  ~29-31k / 13-14 tools (~5.5x stock). Numbers moved a lot vs the pi
+  0.84-era record (59k work): the removal deleted the subagent/
+  subagent_supervisor/bg_wait schemas (~22k) and pi 0.87 splits the
+  prompt into sections — compare within one record's piVersion.
 - `npm:@narumitw/pi-btw` — `/btw` side-thread command: ask context-aware
   questions in a separate thread without derailing the main conversation
   (`/btw <question>` starts one; `/btw` opens a manager; `Ctrl+R` brings
@@ -643,7 +643,7 @@ Two more CI gates tie complexity to tests:
 
 - **Coverage** is scoped to the modules held to the bar — the `--include`
   list in the `check:coverage` npm script (currently the guard engines,
-  the impulso-settings trio, subagent-telemetry, gws, system-prompt,
+  the impulso-settings trio, gws, system-prompt,
   openrouter-session-pin, and the two border extensions; all ≥90%
   statements+branches). Thresholds
   apply to the *aggregate* of the included files. The remaining first-party
