@@ -297,6 +297,23 @@ alive forever and the dashboard serves stale assets after an upgrade. In
 profiles mode it re-runs `service install` first to re-bake
 `PI_STATS_PROFILES_DIR` into the plist/unit, then restarts.
 
+It also mirrors **remote machines**: hosts in `~/.ssh/config` whose
+`HostName` is an EC2 instance id (ssh-only cloud devboxes) are discovered
+automatically, and `<statsDir>/machines.json` can add ssh-only hosts or
+override settings. Their `~/.pi/profiles/*/sessions/` JSONLs are rsynced
+into `<statsDir>/stats-machines/<host>/profiles/` and indexed as their own
+dashboard views (`<host>/<profile>` — every panel works on them); the
+Machines tab shows availability/last-sync/totals with a Sync-now button, and
+`/api/sync` (dashboard load/refresh) opportunistically pulls every machine
+that is up and older than `syncTtlMinutes` (default 30). Wake-safe by
+design: aws machines are probed read-only via the EC2/SSM APIs, never ssh (a
+devbox ssh ProxyCommand auto-STARTS a stopped instance — an ssh probe would
+spin up an idle box), and sync connections pass `-o ClearAllForwardings=yes
+-o PermitLocalCommand=no` so they never collide with an open devbox
+session's LocalForward ports or LocalCommand hooks. Machine sessions stay
+out of "All profiles" unless a machine sets `"includeInAll": true` in
+machines.json. CLI: `pi-omp-stats machines list|sync [host]`.
+
 **External registry tools** (an entry with no `path`, e.g.
 `@zvec/zvec-grep` / `zg`) are detect-first instead: they appear in the
 dependency review — missing → asks (the `-y` mode installs all missing),

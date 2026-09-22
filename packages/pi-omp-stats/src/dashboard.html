@@ -1163,6 +1163,22 @@
               <line x1="9" y1="21" x2="15" y2="21" /></svg
             >Memories
           </button>
+          <div class="nav-label">Machines</div>
+          <button data-tab="machines">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="2" y="3" width="20" height="6" rx="1" />
+              <rect x="2" y="15" width="20" height="6" rx="1" />
+              <line x1="6" y1="6" x2="6.01" y2="6" />
+              <line x1="6" y1="18" x2="6.01" y2="18" /></svg
+            >Machines
+          </button>
         </nav>
         <div class="sidebar-footer">
           local-only · no telemetry<br />source: <code>~/.pi/agent/sessions</code>
@@ -1283,6 +1299,7 @@
         compaction: "Compaction",
         memories: "Observational Memory",
         subagents: "Subagents",
+        machines: "Machines",
       };
 
       function fmtNum(n) {
@@ -1306,6 +1323,13 @@
       function fmtDate(ms) {
         if (!ms) return "—";
         return new Date(ms).toLocaleString();
+      }
+      function relativeTime(ms) {
+        const s = Math.max(0, (Date.now() - ms) / 1000);
+        if (s < 60) return Math.round(s) + "s";
+        if (s < 3600) return Math.round(s / 60) + "m";
+        if (s < 86400) return Math.round(s / 3600) + "h";
+        return Math.round(s / 86400) + "d";
       }
       function fmtDateShort(ms) {
         if (!ms) return "—";
@@ -2089,10 +2113,148 @@
           } else if (tab === "pins") {
             pins = await api("/api/stats/pins?range=" + range());
             renderPins();
+          } else if (tab === "machines") {
+            await loadMachines();
           }
         } catch (e) {
           main.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
         }
+      }
+
+      /* Machines: remote session JSONL mirrors pulled over SSH (wake-safe —
+         aws machines are probed read-only via EC2/SSM, ssh is only opened
+         after the probe says the box is up). Clicking sync bypasses the TTL,
+         never the probe; the route kicks rsync in the background. */
+      let machinesTimer = null;
+
+      async function loadMachines() {
+        const data = await api("/api/machines");
+        renderMachines(data.machines || []);
+        if (machinesTimer) clearInterval(machinesTimer);
+        machinesTimer = setInterval(() => {
+          if (currentTab === "machines") loadMachines().catch(() => {});
+          else {
+            clearInterval(machinesTimer);
+            machinesTimer = null;
+          }
+        }, 30000);
+      }
+
+      function renderMachines(machines) {
+        const up = machines.filter((m) => m.state === "running").length;
+        const synced = machines.filter((m) => m.lastStatus === "ok").length;
+        const cardsHtml = `
+    ${card("Machines", machines.length, "ssh-config + machines.json", "var(--blue)")}
+    ${card("Up now", up, "wake-safe probe", up ? "var(--green)" : "var(--dim)")}
+    ${card("Mirrored", synced, "pulled ≥ 1 session sync", "var(--mauve)")}
+  `;
+        main.innerHTML = `<div class="cards">${cardsHtml}</div>
+    <div class="section-title">Remote machines</div><div id="machines-table"></div>
+    <div class="kpi-note" style="padding:2px 0 0">Session JSONLs are rsynced from <code>~/.pi/profiles/&lt;p&gt;/sessions</code> on each machine into a local mirror and aggregated like local profiles — the remote box needs nothing but sshd. AWS machines are probed via the read-only EC2/SSM APIs (an ssh probe would auto-start a stopped devbox, so it is never used to test availability); sync connections disable LocalForward ports and LocalCommand hooks. Machine data lands in its own view (pick <code>&lt;host&gt;/&lt;profile&gt;</code> in the profile selector); <code>includeInAll</code> in <code>~/.pi/agent/machines.json</code> can fold it into "All profiles".</div>`;
+        const rows = machines
+          .slice()
+          .sort(
+            (a, b) =>
+              (b.summary ? b.summary.lastActivityMs || 0 : 0) -
+              (a.summary ? a.summary.lastActivityMs || 0 : 0),
+          )
+          .map((m) => {
+            const stateColor =
+              m.state === "running"
+                ? "var(--green)"
+                : m.state === "unknown"
+                  ? "var(--yellow)"
+                  : "var(--dim)";
+            const s = m.summary;
+            const state =
+              escapeHtml(m.state) +
+              (m.kind === "aws" ? (m.ssmOnline ? " · ssm ✓" : " · ssm —") : "");
+            const lastSync = m.syncing
+              ? "syncing…"
+              : m.lastSyncAt
+                ? escapeHtml(relativeTime(m.lastSyncAt)) + " ago"
+                : "—";
+            const status =
+              m.lastStatus === "error"
+                ? '<span class="err" title="' + escapeHtml(m.lastError || "") + '">error</span>'
+                : escapeHtml(m.lastStatus);
+            const actions =
+              '<button class="btn" data-sync="' +
+              escapeHtml(m.host) +
+              '"' +
+              (m.state === "running" ? "" : " disabled") +
+              ">Sync now</button>" +
+              (m.views.length
+                ? '<button class="btn" data-view="' + escapeHtml(m.views[0]) + '">View</button>'
+                : "");
+            return [
+              escapeHtml(m.host),
+              m.kind,
+              `<span style="color:${stateColor}">${state}</span>`,
+              lastSync,
+              s ? fmtNum(s.sessions) : "—",
+              s ? fmtNum(s.tokens) : "—",
+              s ? fmtCost(s.cost) : "—",
+              s && s.lastActivityMs ? fmtDateShort(s.lastActivityMs) : "—",
+              status,
+              fmtNum(m.files || 0),
+              ((m.bytes || 0) / 1048576).toFixed(1) + " MB",
+              actions,
+            ];
+          });
+        main.querySelector("#machines-table").innerHTML = table(
+          [
+            "Host",
+            "Kind",
+            "State",
+            "Last sync",
+            "Sessions",
+            "Tokens",
+            "Cost",
+            "Last activity",
+            "Status",
+            "Files",
+            "Mirror",
+            "",
+          ],
+          rows,
+          ["", "", "", "", "num", "num", "num", "", "", "num", "num", ""],
+        );
+        main.querySelectorAll("[data-sync]").forEach((b) =>
+          b.addEventListener("click", async () => {
+            b.disabled = true;
+            b.textContent = "syncing…";
+            try {
+              const r = await fetch(
+                "/api/machines/sync?host=" + encodeURIComponent(b.dataset.sync),
+              );
+              if (!r.ok) {
+                const body = await r.json().catch(() => ({}));
+                toast(body.error || r.status);
+                b.disabled = false;
+                b.textContent = "Sync now";
+              } else {
+                setTimeout(() => loadMachines().catch(() => {}), 4000);
+              }
+            } catch (e) {
+              toast("sync failed: " + e.message);
+              b.disabled = false;
+              b.textContent = "Sync now";
+            }
+          }),
+        );
+        main.querySelectorAll("[data-view]").forEach((b) =>
+          b.addEventListener("click", () => {
+            const select = $("#profile-select");
+            if (!select) return;
+            loadProfiles()
+              .then(() => {
+                select.value = b.dataset.view;
+                select.dispatchEvent(new Event("change"));
+              })
+              .catch(() => toast("profile not loaded yet"));
+          }),
+        );
       }
 
       function renderToolsTable(rows) {
