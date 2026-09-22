@@ -42,11 +42,15 @@ function isFeatureEnabled(id: string): boolean {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────
 // Fixed prompt sections — edit these to change the non-dynamic prompt.
-// The first three sections match pi defaults. The pi-development pointer is
-// an intentional divergence from pi's verbose always-on documentation block.
-// ─────────────────────────────────────────────────────────────────────────
+// The content mirrors pi's default prompt; the FORMAT stays flat (pre-0.87
+// "Available tools:"/"Guidelines:" headings) even though pi ≥0.87 wraps its
+// own sections in <tools>/<rules>/<docs> tags — the forced prompt we return
+// is sent verbatim as the leading system message, so the tags carry no
+// behavior, and the pi-development pointer below remains an intentional
+// divergence from pi's verbose always-on <docs> block.
+// ─────────────────────────────────────────────────────────────────────
 
 const generalInstructions =
   "You are an expert coding assistant operating inside pi, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.";
