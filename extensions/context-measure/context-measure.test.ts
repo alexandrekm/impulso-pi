@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { appendRecord, measureStream, recordPath, summarizeContext } from "./context-measure.ts";
+import {
+  appendRecord,
+  measureStream,
+  maybeDumpPrompt,
+  recordPath,
+  summarizeContext,
+} from "./context-measure.ts";
 
 const fakeModel = {
   id: "measure-model",
@@ -40,6 +47,18 @@ test("summarizeContext counts the composed request", () => {
     "tool schema chars match the serialized array",
   );
   assert.equal(record.contextChars, record.systemPromptChars + record.toolSchemaChars);
+
+  // v2 stability hashes: same input → same hash, matching a plain sha256
+  // of the serialized strings.
+  const expectedPrompt = createHash("sha256").update("system instructions").digest("hex");
+  assert.equal(record.systemPromptSha256, expectedPrompt);
+  assert.equal(
+    record.toolsSha256,
+    createHash("sha256").update(JSON.stringify(fakeContext().tools)).digest("hex"),
+  );
+  const again = summarizeContext(1, fakeModel, fakeContext());
+  assert.equal(again.systemPromptSha256, record.systemPromptSha256);
+  assert.equal(again.toolsSha256, record.toolsSha256);
 });
 
 test("summarizeContext attributes per-tool chars and sorts the map keys", () => {
@@ -141,4 +160,85 @@ test("appendRecord is best-effort: a bad path warns instead of throwing", () => 
   process.stderr.write = before;
   delete process.env.PI_CONTEXT_MEASURE_OUT;
   assert.match(warned, /\[context-measure\] failed to write record/);
+});
+
+test("hashes change when the prompt or tool list changes", () => {
+  const base = summarizeContext(1, fakeModel, fakeContext());
+  const otherPrompt = summarizeContext(
+    2,
+    fakeModel,
+    fakeContext({ systemPrompt: "other instructions" }),
+  );
+  const otherTools = summarizeContext(
+    3,
+    fakeModel,
+    fakeContext({
+      tools: [{ name: "read", description: "Read a file", parameters: { type: "object" } }],
+    }),
+  );
+
+  assert.notEqual(
+    otherPrompt.systemPromptSha256,
+    base.systemPromptSha256,
+    "prompt hash tracks the prompt text",
+  );
+  assert.equal(otherPrompt.toolsSha256, base.toolsSha256, "tool hash independent of the prompt");
+  assert.equal(
+    otherTools.systemPromptSha256,
+    base.systemPromptSha256,
+    "prompt hash independent of the tools",
+  );
+  assert.notEqual(otherTools.toolsSha256, base.toolsSha256, "tool hash tracks the tool array");
+});
+
+test("maybeDumpPrompt is a no-op without PI_CONTEXT_MEASURE_DEBUG", () => {
+  const dir = mkdtempSync(join(tmpdir(), "context-measure-test-"));
+  const dump = join(dir, "context-measure-prompt.txt");
+  process.env.PI_CONTEXT_MEASURE_OUT = join(dir, "records.jsonl");
+  delete process.env.PI_CONTEXT_MEASURE_DEBUG;
+
+  maybeDumpPrompt(summarizeContext(1, fakeModel, fakeContext()), "system instructions");
+  assert.equal(existsSync(dump), false, "no dump without the debug env");
+  delete process.env.PI_CONTEXT_MEASURE_OUT;
+});
+
+test("maybeDumpPrompt appends a headered prompt block when debugging", () => {
+  const dir = mkdtempSync(join(tmpdir(), "context-measure-test-"));
+  const dump = join(dir, "context-measure-prompt.txt");
+  process.env.PI_CONTEXT_MEASURE_OUT = join(dir, "records.jsonl");
+  process.env.PI_CONTEXT_MEASURE_DEBUG = "1";
+
+  const record = summarizeContext(1, fakeModel, fakeContext());
+  maybeDumpPrompt(record, "system instructions");
+  maybeDumpPrompt({ ...record, requestId: 2 }, "system instructions");
+
+  const text = readFileSync(dump, "utf8");
+  assert.match(
+    text,
+    /# ==== request 1 \u00b7 \S+ \u00b7 measure-model \u00b7 prompt sha256:\w+ ====/,
+  );
+  assert.match(text, /# ==== request 2 /);
+  assert.ok(text.includes("system instructions"), "the full prompt text lands in the dump");
+  assert.equal(text.split("# ====").length - 1, 2, "two blocks appended, not overwritten");
+
+  delete process.env.PI_CONTEXT_MEASURE_DEBUG;
+  delete process.env.PI_CONTEXT_MEASURE_OUT;
+});
+
+test("measureStream dumps the prompt only when debugging is on", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "context-measure-test-"));
+  process.env.PI_CONTEXT_MEASURE_OUT = join(dir, "records.jsonl");
+  process.env.PI_CONTEXT_MEASURE_DEBUG = "1";
+  try {
+    const events: Array<{ type: string }> = [];
+    for await (const event of measureStream(fakeModel, fakeContext())) {
+      events.push(event as { type: string });
+    }
+    assert.ok(events.length > 0, "the event stream was drained");
+    const dumped = readFileSync(join(dir, "context-measure-prompt.txt"), "utf8");
+    assert.ok(dumped.includes("system instructions"), "streamSimple dumps the composed prompt");
+  } finally {
+    delete process.env.PI_CONTEXT_MEASURE_DEBUG;
+    delete process.env.PI_CONTEXT_MEASURE_OUT;
+  }
 });

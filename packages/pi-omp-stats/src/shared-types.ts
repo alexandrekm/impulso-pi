@@ -283,7 +283,8 @@ export interface ToolDashboardStats {
 
 /* Context budget: the first-call measurement record written by
  * `npm run measure:context -- --record` (extensions/context-measure),
- * read live from the stats dir, joined with tool_calls usage. */
+ * read live from the stats dir, joined with tool_calls usage; plus the
+ * record-history trend (DB) and the live-session cache-bust stats (jsonl). */
 
 export interface ContextBudgetTarget {
   target: string;
@@ -323,6 +324,51 @@ export interface ContextBudgetStats {
   targets: ContextBudgetTarget[];
   perTool: ContextBudgetToolRow[];
   method: string;
+  /** context_records rows ingested from the committed record file — the
+   * per-target contextChars trend over time (one point per measure run). */
+  history: ContextHistoryPoint[];
+  /** Live-session prompt-cache stability, from the per-profile
+   * context-measure.jsonl. Null when no record carries v2 hashes yet. */
+  cacheBust: ContextCacheBustStats | null;
+}
+
+/** One committed record measurement (one `measure:context -- --record` run). */
+export interface ContextHistoryPoint {
+  measuredAt: string;
+  target: string;
+  piVersion: string | null;
+  systemPromptChars: number;
+  toolSchemaChars: number;
+  contextChars: number;
+  toolCount: number;
+}
+
+/** One recorded-session group of live context-measure jsonl records. */
+export interface ContextCacheBustSession {
+  /** Profile the jsonl came from ("default" in legacy mode). */
+  profile: string;
+  at: string;
+  lastAt: string;
+  records: number;
+  /** Distinct systemPromptSha256 values seen in the session. */
+  promptHashes: number;
+  /** Distinct toolsSha256 values seen in the session. */
+  toolHashes: number;
+  /** Requests where the hash pair changed vs the previous request —
+   * each one invalidates the provider prompt cache from there on. */
+  busts: number;
+  models: string[];
+}
+
+export interface ContextCacheBustStats {
+  /** Sessions grouped from the live jsonl (bounded to the most recent 200). */
+  sessions: ContextCacheBustSession[];
+  /** Records carrying v2 hashes (counted above). */
+  hashedRecords: number;
+  /** Pre-v2 records without hashes — not counted in sessions. */
+  legacyRecords: number;
+  /** Total busts across sessions. */
+  busts: number;
 }
 
 /* Providers. Only the portable subset is implemented; the omp auth-broker

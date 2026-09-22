@@ -2503,19 +2503,24 @@
         const topTool = (s.perTool || [])[0];
         const join = joinRow || s.targets[0];
         const stock = s.targets.find((t) => t.target === "stock");
+        const bust = s.cacheBust;
+        const bustSessions = (bust && bust.sessions) || [];
         const cards = `
   ${card("First call (" + join.target + ")", fmtNum(join.contextChars) + " chars", `${join.toolCount} tools · measured ${s.measuredAt ? s.measuredAt.slice(0, 10) : "?"}`, "var(--blue)")}
   ${card("vs stock pi", join.multipleOfStock != null ? join.multipleOfStock.toFixed(1) + "x" : "—", stock ? `stock ${fmtNum(stock.contextChars)} chars` : "no stock row", "var(--red)")}
   ${card("Biggest tool", topTool ? topTool.tool : "—", topTool && topTool.schemaChars != null ? `${fmtNum(topTool.schemaChars)} chars/request · ${fmtNum(topTool.calls)} calls` : "", "var(--mauve, #cba6f7)")}
   ${card("Requests in range", fmtNum(s.requestsInPeriod), "paidChars = schema chars × requests", "var(--teal)")}
+  ${card("Cache busts (live)", bust ? fmtNum(bust.busts) : "—", bust ? `${fmtNum(bust.hashedRecords)} hashed records · ${bustSessions.length} sessions · ${bust.legacyRecords} pre-v2` : "no v2 records yet — switch a session to measure/measure-model", "var(--peach)")}
 `;
         main.innerHTML = `<div class="cards">${cards}</div>
     <div class="chart-wrap"><h3>First model call per target — tool schema vs system prompt (chars)</h3><canvas id="context-chart"></canvas></div>
+    ${(s.history || []).length > 1 ? `<div class="chart-wrap"><h3>Record history — context chars per target over time (one point per <code>measure:context --record</code> run)</h3><canvas id="context-history-chart"></canvas></div>` : ""}
     <div class="section-title">Per target</div>
     <div id="context-targets"></div>
     <div class="section-title">Cost vs use — ${escapeHtml(s.joinTarget || "")} tools × ${fmtNum(s.requestsInPeriod)} requests</div>
     <div id="context-perTool"></div>
-    <div class="kpi-note" style="padding:2px 0 0">Recorded by extensions/context-measure (recording provider, no network): counts are characters of pi's intermediate request representation, comparable across profiles and over time but not to wire-format measurements. Schema chars are paid in <em>every</em> request whether the tool is called or not; paid = schema × requests in range; per-call = paid ÷ calls. A tool with high schema chars and few calls is the hide-it candidate; a called-often tool earns its slot. Join uses the ${escapeHtml(s.joinTarget || "")} record row for this profile.</div>
+    ${bustSessions.length > 0 ? `<div class="section-title">Prompt-cache stability — live sessions (context-measure.jsonl)</div><div id="context-busts"></div>` : ""}
+    <div class="kpi-note" style="padding:2px 0 0">Recorded by extensions/context-measure (recording provider, no network): counts are characters of pi's intermediate request representation, comparable across profiles and over time but not to wire-format measurements. Schema chars are paid in <em>every</em> request whether the tool is called or not; paid = schema × requests in range; per-call = paid ÷ calls. A tool with high schema chars and few calls is the hide-it candidate; a called-often tool earns its slot. Join uses the ${escapeHtml(s.joinTarget || "")} record row for this profile. Cache busts: each hash change means every later request in that session re-reads the full prefix (prompt-cache miss) — a steady session shows one hash pair.</div>
   `;
         main.querySelector("#context-targets").innerHTML = table(
           ["Target", "Tools", "System", "Tool schema", "Context", "× stock"],
@@ -2529,28 +2534,32 @@
           ]),
           ["", "num", "num", "num", "num", "num"],
         );
-        main.querySelector("#context-perTool").innerHTML = table(
-          [
-            "Tool",
-            "Schema chars / request",
-            "Calls",
-            "Sessions",
-            "Errors",
-            "Paid chars",
-            "Chars / call",
-          ],
-          (s.perTool || []).map((r) => [
-            `<span class="model" style="color:var(--accent)">${escapeHtml(r.tool)}</span>`,
-            r.schemaChars != null ? fmtNum(r.schemaChars) : "—",
-            fmtNum(r.calls),
-            fmtNum(r.sessions),
-            r.errors > 0 ? `<span style="color:var(--red)">${fmtNum(r.errors)}</span>` : "0",
-            r.paidChars != null ? fmtNum(r.paidChars) : "—",
-            r.charsPerCall != null ? fmtNum(r.charsPerCall) : r.calls > 0 ? "∞" : "never called",
-          ]),
-          ["", "num", "num", "num", "num", "num", "num"],
-        );
+        if (bustSessions.length > 0) {
+          main.querySelector("#context-busts").innerHTML = table(
+            [
+              "Profile",
+              "Session start",
+              "Records",
+              "Prompt hashes",
+              "Tool hashes",
+              "Busts",
+              "Models",
+            ],
+            bustSessions.map((s2) => [
+              `<span class="model" style="color:var(--accent)">${escapeHtml(s2.profile)}</span>`,
+              s2.at.slice(0, 16).replace("T", " "),
+              fmtNum(s2.records),
+              fmtNum(s2.promptHashes),
+              fmtNum(s2.toolHashes),
+              s2.busts > 0 ? `<span style="color:var(--red)">${fmtNum(s2.busts)}</span>` : "0",
+              escapeHtml(s2.models.join(", ")),
+            ]),
+            ["", "", "num", "num", "num", "num", ""],
+          );
+        }
         drawContextChart("context-chart", s.targets);
+        if ((s.history || []).length > 1)
+          drawContextHistoryChart("context-history-chart", s.history);
       }
 
       function drawContextChart(canvasId, targets) {
@@ -2590,6 +2599,39 @@
         });
       }
 
+      /** Record history: per-target contextChars line over measure runs. */
+      function drawContextHistoryChart(canvasId, history) {
+        if (!chartReady || typeof Chart === "undefined" || !history || history.length === 0) return;
+        const ctx = ensureChart(canvasId);
+        if (!ctx) return;
+        const palette = PALETTE();
+        const runs = [...new Set(history.map((p) => p.measuredAt))].sort();
+        const targets = [...new Set(history.map((p) => p.target))];
+        const colorOf = (name, i) =>
+          name === "stock" ? cssVar("--muted") : palette[i % palette.length];
+        charts[canvasId] = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels: runs.map((r) => r.slice(0, 10)),
+            datasets: targets.map((name, i) => ({
+              label: name,
+              borderColor: colorOf(name, i),
+              backgroundColor: colorOf(name, i) + "33",
+              tension: 0.25,
+              borderWidth: name === "stock" ? 1 : 2,
+              borderDash: name === "stock" ? [4, 4] : undefined,
+              pointRadius: 2,
+              spanGaps: true,
+              data: runs.map(
+                (r) =>
+                  (history.find((p) => p.target === name && p.measuredAt === r) || {})
+                    .contextChars ?? null,
+              ),
+            })),
+          },
+          options: yTitle(baseChartOpts(), "context chars"),
+        });
+      }
       function renderBehavior() {
         const o = behavior.overall;
         const cards = `
