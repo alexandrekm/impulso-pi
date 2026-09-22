@@ -47,6 +47,7 @@ import {
   selectProfile,
   syncAllSessions,
 } from "./aggregator.js";
+import { getMachinesOverview, listMachines, syncMachine, syncStaleMachines } from "./machines.js";
 import {
   listPayloadDates,
   listPayloadFiles,
@@ -85,6 +86,20 @@ function queueApi<T>(work: () => Promise<T>): Promise<T> {
     () => undefined,
   );
   return result;
+}
+
+/**
+ * Fire-and-forget machine pull + re-aggregation. The rsync runs OUTSIDE the
+ * API queue (it can take minutes); only the re-aggregation is queued, so API
+ * requests are never blocked by a slow machine. The mirror is written
+ * directly by the rsync, so nothing else touches the DBs meanwhile.
+ */
+function kickMachineSyncs(host?: string): void {
+  syncStaleMachines(host)
+    .then((result) => {
+      if (result.synced > 0) return queueApi(() => syncAllSessions());
+    })
+    .catch(() => undefined);
 }
 
 function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
@@ -311,9 +326,38 @@ async function handleApi(url: URL, res: http.ServerResponse): Promise<void> {
     return sendJson(res, 200, detail);
   }
 
+  if (pathname === "/api/machines") {
+    // Machine statuses with wake-safe probes; opportunistically pull any
+    // machine that is up and stale (probes are cached, so polling is cheap).
+    const machines = await getMachinesOverview();
+    kickMachineSyncs();
+    return sendJson(res, 200, { machines });
+  }
+  if (pathname === "/api/machines/sync") {
+    const host = url.searchParams.get("host");
+    if (!host) return sendJson(res, 400, { error: "host is required" });
+    const machine = (await listMachines()).find((m) => m.host === host);
+    if (!machine) return sendJson(res, 404, { error: `Unknown machine: ${host}` });
+    const overview = (await getMachinesOverview()).find((m) => m.host === host);
+    if (!overview || overview.state !== "running") {
+      return sendJson(res, 409, {
+        error: `Machine is ${overview?.state ?? "unknown"}; not syncing`,
+      });
+    }
+    // Triggered explicitly: bypass the TTL but never the wake-safe probe.
+    void syncMachine(machine, { force: true })
+      .then(() => queueApi(() => syncAllSessions()))
+      .catch(() => undefined);
+    return sendJson(res, 200, { triggered: true, host });
+  }
+
   if (pathname === "/api/sync") {
     const result = await syncAllSessions();
     const count = await getTotalMessageCount();
+    // The dashboard calls this on every load/refresh — piggyback the
+    // opportunistic machine pull here so remote sessions appear without the
+    // Machines tab ever being opened.
+    kickMachineSyncs();
     return sendJson(res, 200, { ...result, totalMessages: count });
   }
 

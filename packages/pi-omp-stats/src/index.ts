@@ -22,6 +22,7 @@ import {
   type SyncProgress,
 } from "./aggregator.js";
 import { resolveSessionsDir } from "./parser.js";
+import { getMachinesOverview, listMachines, syncMachine, syncStaleMachines } from "./machines.js";
 import { startServer } from "./server.js";
 import {
   describeInstalledService,
@@ -160,6 +161,11 @@ Examples:
   pi-omp-stats --sync         # Sync and print a summary
   pi-omp-stats service install          # auto-start on boot (macOS/Linux)
   pi-omp-stats service status           # is the daemon up?
+
+Machine sources (remote session JSONL mirrors, see README):
+  pi-omp-stats machines list             # discovered machines + states + last sync
+  pi-omp-stats machines sync [host]     # pull now (wake-safe: probes first); no
+                                        # host = every machine that is up+stale
 `);
 }
 
@@ -207,6 +213,54 @@ async function main(): Promise<void> {
 
   if (values.help) {
     printHelp();
+    return;
+  }
+
+  // `machines <list|sync>` subcommand: inspect and manually pull remote
+  // machine session mirrors (the dashboard's Machines tab wraps the same
+  // functions opportunistically; the CLI exists for manual + scripted use).
+  if (positionals[0] === "machines") {
+    const action = positionals[1] ?? "list";
+    try {
+      if (action === "list") {
+        for (const m of await getMachinesOverview()) {
+          const summary = m.summary
+            ? `${m.summary.sessions} sessions, ${m.summary.requests} reqs, ${formatCost(m.summary.cost)}`
+            : "no data yet";
+          const sync = m.lastSyncAt
+            ? `synced ${new Date(m.lastSyncAt).toISOString()} (${m.lastStatus})`
+            : `never synced (${m.lastStatus})`;
+          console.log(
+            `${m.host}  [${m.kind}]  state=${m.state} ssm=${m.ssmOnline ?? "-"}  ${sync}  ${summary}`,
+          );
+        }
+      } else if (action === "sync") {
+        const host = positionals[2];
+        if (host) {
+          const machine = (await listMachines()).find((m) => m.host === host);
+          if (!machine) {
+            console.error(`Unknown machine "${host}".`);
+            process.exit(2);
+          }
+          const state = await syncMachine(machine, { force: true });
+          console.log(
+            `${host}: ${state.lastStatus}${state.lastError ? ` (${state.lastError})` : ""}`,
+          );
+        } else {
+          const result = await syncStaleMachines();
+          console.log(`Machines synced: ${result.synced}, skipped: ${result.skipped}`);
+        }
+        await syncAllSessions();
+      } else {
+        console.error(`Unknown machines action "${action}".`);
+        console.error("Usage: pi-omp-stats machines <list|sync> [host]");
+        process.exit(2);
+      }
+    } catch (error) {
+      console.error("Error:", error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+    closeDb();
     return;
   }
 

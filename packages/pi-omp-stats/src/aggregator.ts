@@ -95,6 +95,7 @@ import {
   resolveStatsDir,
   type SessionsSource,
 } from "./parser.js";
+import { listMachineSources } from "./machines.js";
 import type {
   BehaviorDashboardStats,
   ContextBudgetStats,
@@ -243,7 +244,12 @@ async function syncSessionsSource(
 export async function syncAllSessions(
   opts?: SyncOptions,
 ): Promise<{ processed: number; files: number }> {
-  const sources = await resolveSessionsSources();
+  const local = await resolveSessionsSources();
+  const machine = await listMachineSources();
+  const sources: (SessionsSource & { machine?: string; includeInAll: boolean })[] = [
+    ...local.map((s) => ({ ...s, includeInAll: true })),
+    ...machine,
+  ];
   if (sources.length === 0) {
     setStatsDatabase();
     await initDb();
@@ -255,16 +261,22 @@ export async function syncAllSessions(
   let files = 0;
   const profilesMode = Boolean(process.env.PI_STATS_PROFILES_DIR?.trim());
   for (const source of sources) {
-    if (profilesMode) {
+    // Machine views always get their own DB; local sources do in profiles
+    // mode. The aggregate "all" DB stays local unless a machine opts in
+    // (`includeInAll` in machines.json) — devbox sessions default to their
+    // own view so local totals keep their current meaning.
+    if (profilesMode || source.machine !== undefined) {
       setStatsDatabase(source.id);
       const result = await syncSessionsSource(source, opts);
       processed += result.processed;
       files += result.files;
     }
-    setStatsDatabase();
-    const result = await syncSessionsSource(source, opts);
-    processed += result.processed;
-    files += result.files;
+    if (source.includeInAll) {
+      setStatsDatabase();
+      const result = await syncSessionsSource(source, opts);
+      processed += result.processed;
+      files += result.files;
+    }
   }
   setStatsDatabase();
   return { processed, files };
@@ -273,7 +285,10 @@ export async function syncAllSessions(
 /** Profile names available to the dashboard, including the aggregate view. */
 export async function getAvailableProfiles(): Promise<string[]> {
   const sources = await resolveSessionsSources();
-  return process.env.PI_STATS_PROFILES_DIR?.trim() ? ["all", ...sources.map((s) => s.id)] : ["all"];
+  const machineViews = (await listMachineSources()).map((s) => s.id);
+  return process.env.PI_STATS_PROFILES_DIR?.trim()
+    ? ["all", ...sources.map((s) => s.id), ...machineViews]
+    : ["all", ...machineViews];
 }
 
 /** Select the aggregate database or an individual profile database. */

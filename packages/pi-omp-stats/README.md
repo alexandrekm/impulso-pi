@@ -59,6 +59,7 @@ npx pi-omp-stats
 ```
 pi-omp-stats [options]
 pi-omp-stats service <action> [options]
+pi-omp-stats machines <list|sync> [host]
 
 Options:
   -p, --port <port>           Port for the dashboard server (default: 3847)
@@ -74,6 +75,11 @@ Service actions:
   uninstall                   Stop + remove the service.
   status                      Show whether the service is running (exit 0 = up).
   start | stop | restart      Control an already-installed service.
+
+Machine actions:
+  list                        Discovered machines, wake-safe probe state, last sync.
+  sync [host]                Pull now (one host, or every machine that is up and
+                              stale). Probes first — never wakes a stopped box.
 ```
 
 Default action (no flags): sync then start the server and print
@@ -123,6 +129,45 @@ locally.
 > is fine; the service references the absolute `dist/index.js` path, so a
 > `pi-omp-stats service restart` picks up the new code. Re-run `service
 > install` only if you change `--port` / `--host` or the forwarded env vars.
+
+## Machine sources (remote session mirrors)
+
+The dashboard can pull session JSONLs from other machines over SSH and index
+them exactly like local profiles — the remote box needs nothing but sshd.
+Sessions are appended to the remote machine's `~/.pi/profiles/<p>/sessions/`
+by pi there; this package rsyncs them into a local mirror
+(`<PI_STATS_DIR>/stats-machines/<host>/profiles/<p>/sessions/`) and the local
+aggregator builds a per-machine view (`<host>/<profile>` in the profile
+selector, all existing panels work on it). The **Machines** tab shows
+availability, last sync, and per-machine totals, and has a **Sync now** button.
+
+Wake-safe by design: hosts whose `~/.ssh/config` `HostName` is an EC2
+instance id are probed read-only via the EC2/SSM APIs — **never via ssh** —
+because a devbox ssh ProxyCommand auto-starts a stopped instance. Sync
+connections also pass `-o ClearAllForwardings=yes -o PermitLocalCommand=no`
+so they never collide with an open devbox session's `LocalForward` ports or
+run per-host `Match` LocalCommand hooks. Pulls are opportunistic: `/api/sync` and the Machines
+tab trigger a background rsync for every machine that is up and older than
+`syncTtlMinutes` (default 30); down machines are skipped, never an error.
+
+Machines are discovered from `~/.ssh/config` (EC2 instance-id `HostName`,
+region parsed from the `ProxyCommand`), and `<PI_STATS_DIR>/machines.json`
+adds or overrides entries:
+
+```json
+{
+  "syncTtlMinutes": 30,
+  "machines": [
+    { "host": "my-server", "kind": "ssh" },
+    { "host": "gpu-devbox-1", "includeInAll": true }
+  ]
+}
+```
+
+`kind: "ssh"` machines are probed with a batch-mode `ssh true` (safe: no
+auto-start ProxyCommand). `includeInAll` also folds the machine's sessions
+into the "All profiles" aggregate (default: machine data stays in its own
+view). `enabled: false` removes a discovered machine from the rotation.
 
 ## Environment variables
 

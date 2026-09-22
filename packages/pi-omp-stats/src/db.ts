@@ -64,10 +64,18 @@ let databaseName = "pi-omp-stats.db";
 
 /** Select the database backing one dashboard profile view. */
 export function setStatsDatabase(profile?: string | null): void {
-  const name = profile && profile !== "all" ? `pi-omp-stats-${profile}.db` : "pi-omp-stats.db";
+  const name =
+    profile && profile !== "all"
+      ? `pi-omp-stats-${sanitizeProfileId(profile)}.db`
+      : "pi-omp-stats.db";
   if (name === databaseName) return;
   closeDb();
   databaseName = name;
+}
+
+/** Filesystem-safe view id (machine views are `<host>/<profile>`). */
+export function sanitizeProfileId(profile: string): string {
+  return profile.replace(/[^A-Za-z0-9_.-]/g, "-");
 }
 
 /** Path to the stats SQLite database for the selected dashboard view. */
