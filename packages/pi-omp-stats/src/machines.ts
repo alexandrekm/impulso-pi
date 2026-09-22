@@ -53,6 +53,9 @@ export interface MachineConfig {
 export interface ProbeResult {
   state: string;
   ssmOnline: boolean | null;
+  /** Why the probe failed, when it did (aws CLI missing/expired creds…) —
+   *  surfaced in the Machines tab so "unknown" is diagnosable. */
+  error?: string;
 }
 
 export interface SyncState {
@@ -85,6 +88,8 @@ export interface MachineOverview extends SyncState {
   kind: "aws" | "ssh";
   state: string;
   ssmOnline: boolean | null;
+  /** Probe failure reason when state is "unknown". */
+  probeError?: string;
   views: string[];
   syncing: boolean;
   includeInAll: boolean;
@@ -221,11 +226,30 @@ function runCommand(cmd: string, args: string[], timeoutMs: number): Promise<str
 }
 
 /** Probe an aws machine via the read-only EC2/SSM APIs (never wakes it). */
+/** Common install locations for the aws CLI: launchd user agents run with
+ * launchd's minimal PATH (/usr/bin:/bin:…), which misses Homebrew — a bare
+ * execFile("aws") there fails ENOENT and every machine would read "unknown". */
+function awsBin(): string {
+  if (cachedAwsBin !== undefined) return cachedAwsBin;
+  const candidates = [
+    "aws",
+    "/opt/homebrew/bin/aws",
+    "/usr/local/bin/aws",
+    "/usr/local/aws-cli/bin/aws",
+    path.join(os.homedir(), ".local/bin/aws"),
+    "/usr/bin/aws",
+  ];
+  cachedAwsBin =
+    candidates.find((candidate) => candidate !== "aws" && fs.existsSync(candidate)) ?? "aws";
+  return cachedAwsBin;
+}
+let cachedAwsBin: string | undefined;
+
 async function probeAws(m: MachineConfig): Promise<ProbeResult> {
   const region = m.region ?? "us-east-1";
-  if (!m.instanceId) return { state: "unknown", ssmOnline: null };
+  if (!m.instanceId) return { state: "unknown", ssmOnline: null, error: "no instance id" };
   const state = await runCommand(
-    "aws",
+    awsBin(),
     [
       "ec2",
       "describe-instances",
@@ -242,7 +266,7 @@ async function probeAws(m: MachineConfig): Promise<ProbeResult> {
   );
   if (state !== "running") return { state, ssmOnline: false };
   const ping = await runCommand(
-    "aws",
+    awsBin(),
     [
       "ssm",
       "describe-instance-information",
@@ -282,8 +306,16 @@ export async function probeMachine(m: MachineConfig): Promise<ProbeResult> {
   }
   try {
     return await probeAws(m);
-  } catch {
-    return { state: "unknown", ssmOnline: null };
+  } catch (error) {
+    // ENOENT → aws missing entirely; anything else is usually expired/absent
+    // credentials. Either way the reason must reach the Machines tab.
+    const message =
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+        ? "aws CLI not found"
+        : error instanceof Error
+          ? error.message.split("\n")[0].slice(0, 200)
+          : String(error);
+    return { state: "unknown", ssmOnline: null, error: message };
   }
 }
 
@@ -613,6 +645,7 @@ export async function getMachinesOverview(): Promise<MachineOverview[]> {
         kind: m.kind,
         state: probe.state,
         ssmOnline: probe.ssmOnline,
+        probeError: probe.error,
         views: viewsByHost.get(m.host) ?? [],
         syncing: syncingHosts.has(m.host),
         includeInAll: m.includeInAll === true,

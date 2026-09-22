@@ -120,6 +120,12 @@ function forwardedEnv(): Record<string, string> {
   // Always anchor the stats dir so logs + db land deterministically.
   if (!env.PI_STATS_DIR) env.PI_STATS_DIR = statsDir();
 
+  // launchd user agents get launchd's minimal PATH (/usr/bin:/bin:…), which
+  // misses Homebrew/pipx-installed CLIs the machine probe shells out to
+  // (aws) — bake the installing shell's PATH. systemd --user units inherit
+  // the session PATH but no harm in pinning it there too.
+  if (process.env.PATH) env.PATH = process.env.PATH;
+
   // The dashboard is a machine-global service that aggregates every
   // profile. When `PI_STATS_PROFILES_DIR` is not explicitly set but profile
   // dirs exist on disk, default to profiles mode so a bare

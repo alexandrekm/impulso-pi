@@ -2225,9 +2225,13 @@
                   ? "var(--yellow)"
                   : "var(--dim)";
             const s = m.summary;
-            const state =
+            const stateCell =
               escapeHtml(m.state) +
-              (m.kind === "aws" ? (m.ssmOnline ? " · ssm ✓" : " · ssm —") : "");
+              (m.kind === "aws" ? (m.ssmOnline ? " · ssm ✓" : " · ssm —") : "") +
+              (m.probeError ? " (?)" : "");
+            const state = m.probeError
+              ? `<span title="${escapeHtml(m.probeError)}">${stateCell}</span>`
+              : stateCell;
             const lastSync = m.syncing
               ? "syncing…"
               : m.lastSyncAt
