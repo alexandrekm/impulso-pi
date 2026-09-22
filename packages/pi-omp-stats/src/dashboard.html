@@ -2534,6 +2534,27 @@
           ]),
           ["", "num", "num", "num", "num", "num"],
         );
+        main.querySelector("#context-perTool").innerHTML = table(
+          [
+            "Tool",
+            "Schema chars / request",
+            "Calls",
+            "Sessions",
+            "Errors",
+            "Paid chars",
+            "Chars / call",
+          ],
+          (s.perTool || []).map((r) => [
+            `<span class="model" style="color:var(--accent)">${escapeHtml(r.tool)}</span>`,
+            r.schemaChars != null ? fmtNum(r.schemaChars) : "—",
+            fmtNum(r.calls),
+            fmtNum(r.sessions),
+            r.errors > 0 ? `<span style="color:var(--red)">${fmtNum(r.errors)}</span>` : "0",
+            r.paidChars != null ? fmtNum(r.paidChars) : "—",
+            r.charsPerCall != null ? fmtNum(r.charsPerCall) : r.calls > 0 ? "∞" : "never called",
+          ]),
+          ["", "num", "num", "num", "num", "num", "num"],
+        );
         if (bustSessions.length > 0) {
           main.querySelector("#context-busts").innerHTML = table(
             [

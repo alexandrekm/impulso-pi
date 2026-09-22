@@ -901,21 +901,6 @@ export async function getContextBudgetStats(
       cacheBust,
     };
   }
-  // Ingest this run of the committed record file into the current view DB
-  // (INSERT OR IGNORE keyed measured_at+target, so re-measures never
-  // duplicate and re-running --record twice yields two history points).
-  insertContextRecordRows(
-    record.targets.map((row) => ({
-      measuredAt: record.measuredAt,
-      target: row.target,
-      piVersion: record.piVersion,
-      toolCount: row.record.toolCount,
-      systemPromptChars: row.record.systemPromptChars,
-      toolSchemaChars: row.record.toolSchemaChars,
-      contextChars: row.record.contextChars,
-      toolCharsJson: JSON.stringify(row.record.toolChars),
-    })),
-  );
   const stockRow = record.targets.find((row) => row.target === "stock") ?? null;
   const join = pickJoinTarget(profile, record.targets);
   const counts = new Map(getToolCallCounts(cutoff ?? undefined).map((row) => [row.tool, row]));
