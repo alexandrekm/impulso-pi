@@ -53,7 +53,15 @@ const args = process.argv.slice(2);
 const asJson = args.includes("--json");
 const doRecord = args.includes("--record");
 const targetsArg = args.find((a) => a.startsWith("--targets="));
-const piBin = (args.find((a) => a.startsWith("--pi=")) ?? "").slice("--pi=".length) || "pi";
+// The record must measure the pi you actually run. Plain "pi" would resolve
+// to the repo's devDependency copy inside `npm run` (npm puts node_modules/.bin
+// first on PATH, and @earendil-works/pi-coding-agent ships a `pi` bin) — a
+// different pi than the live one. Prefer the user's real launcher when it
+// exists; --pi= still overrides everything.
+const userPi = path.join(homedir(), ".local/bin/pi");
+const piBin =
+  (args.find((a) => a.startsWith("--pi=")) ?? "").slice("--pi=".length) ||
+  (fs.existsSync(userPi) ? userPi : "pi");
 
 const targets = targetsArg
   ? targetsArg
