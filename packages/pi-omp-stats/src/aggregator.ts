@@ -242,6 +242,41 @@ async function syncSessionsSource(
  * database. Without `PI_STATS_PROFILES_DIR`, retain legacy single-directory
  * behavior and store it in the aggregate database only.
  */
+/** Profile-name half of a view: local sources ARE the profile, machine
+ *  sources are `<host>/<profile>`. */
+function profileOfSource(source: { id: string; machine?: string }): string {
+  return source.machine !== undefined ? source.id.split("/")[1] : source.id;
+}
+
+/**
+ * The view DBs one source contributes to — the machine × profile cross
+ * product the two dashboard selectors filter over:
+ *
+ *  - `<host>/<profile>` / local `<profile>` — the source's own view
+ *  - `<host>/all` / `local/all` — a whole machine across its profiles
+ *  - `all/<profile>` — one profile across every machine
+ *  - `all` — everything everywhere (machines may opt out via includeInAll)
+ *
+ * Legacy single-directory mode keeps its old behavior (aggregate only):
+ * the cross views exist only where profiles exist.
+ */
+function sourceViews(
+  source: SessionsSource & { machine?: string; includeInAll: boolean },
+  profilesMode: boolean,
+): string[] {
+  const views: string[] = [];
+  if (source.machine !== undefined) {
+    views.push(source.id, `${source.machine}/all`);
+  } else if (profilesMode) {
+    views.push(source.id, "local/all");
+  }
+  if (profilesMode || source.machine !== undefined) {
+    views.push(`all/${profileOfSource(source)}`);
+  }
+  if (source.includeInAll) views.push("all");
+  return views;
+}
+
 export async function syncAllSessions(
   opts?: SyncOptions,
 ): Promise<{ processed: number; files: number }> {
@@ -262,25 +297,15 @@ export async function syncAllSessions(
   let files = 0;
   const profilesMode = Boolean(process.env.PI_STATS_PROFILES_DIR?.trim());
   for (const source of sources) {
-    // Machine views always get their own DB; local sources do in profiles
-    // mode. Machine sessions also join the aggregate "all" DB by default,
-    // like local profiles — `includeInAll: false` per machine in
-    // machines.json opts out.
-    if (profilesMode || source.machine !== undefined) {
-      setStatsDatabase(source.id);
-      const result = await syncSessionsSource(source, opts);
-      processed += result.processed;
-      files += result.files;
-    }
-    if (source.includeInAll) {
-      setStatsDatabase();
+    for (const view of sourceViews(source, profilesMode)) {
+      setStatsDatabase(view);
       const result = await syncSessionsSource(source, opts);
       processed += result.processed;
       files += result.files;
     }
   }
   setStatsDatabase();
-  await purgeRetiredMirrors(machine);
+  await purgeRetiredMirrors(sources);
   return { processed, files };
 }
 
@@ -291,12 +316,21 @@ export async function syncAllSessions(
  * from the ssh config) gets its rows purged — otherwise its old sessions
  * would linger in "All profiles" forever. The machine's own view DB is kept.
  */
+/**
+ * Remove mirrors from the machine-dimension views that no longer belong
+ * there: any host directory under the machines root that isn't a
+ * currently-registered, include-in-all source (a machine that opted out,
+ * was disabled, or vanished from the ssh config) gets its rows purged from
+ * the global `all` DB and every `all/<profile>` DB — otherwise its old
+ * sessions would linger in the machine="All machines" views forever.
+ * The machine's own view DBs (`<host>/all`, `<host>/<profile>`) are kept.
+ */
 async function purgeRetiredMirrors(
-  machineSources: (SessionsSource & { machine?: string; includeInAll: boolean })[],
+  sources: (SessionsSource & { machine?: string; includeInAll: boolean })[],
 ): Promise<void> {
   const active = new Set(
-    machineSources
-      .filter((source) => source.includeInAll)
+    sources
+      .filter((source) => source.machine !== undefined && source.includeInAll)
       .map((source) => path.join(machinesDir(), source.machine!, "profiles")),
   );
   let hosts;
@@ -305,22 +339,49 @@ async function purgeRetiredMirrors(
   } catch {
     return; /* machines root absent — nothing to purge */
   }
-  for (const entry of hosts) {
-    if (!entry.isDirectory()) continue;
-    const prefix = path.join(machinesDir(), entry.name, "profiles");
-    if (active.has(prefix)) continue;
-    await initDb(); // aggregate DB is selected by the caller
-    purgeSessionsUnder(prefix);
+  const retired = hosts
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(machinesDir(), entry.name, "profiles"))
+    .filter((prefix) => !active.has(prefix));
+  if (retired.length === 0) return;
+  // Machine-dimension views that can hold mirrored rows: the global
+  // aggregate and each cross-machine profile aggregate.
+  const targetViews = [
+    "all",
+    ...[
+      ...new Set(
+        sources.filter((source) => source.includeInAll).map((source) => profileOfSource(source)),
+      ),
+    ].map((profile) => `all/${profile}`),
+  ];
+  for (const view of targetViews) {
+    setStatsDatabase(view);
+    await initDb();
+    for (const prefix of retired) purgeSessionsUnder(prefix);
   }
 }
 
-/** Profile names available to the dashboard, including the aggregate view. */
+/** Every selectable view id — the machine × profile cross product:
+ *  `all`, `local/all`, local profile ids, `all/<profile>`, `<host>/all`,
+ *  `<host>/<profile>`. Legacy mode lists only what exists there. */
 export async function getAvailableProfiles(): Promise<string[]> {
-  const sources = await resolveSessionsSources();
-  const machineViews = (await listMachineSources()).map((s) => s.id);
-  return process.env.PI_STATS_PROFILES_DIR?.trim()
-    ? ["all", ...sources.map((s) => s.id), ...machineViews]
-    : ["all", ...machineViews];
+  const local = await resolveSessionsSources();
+  const machine = await listMachineSources();
+  const profilesMode = Boolean(process.env.PI_STATS_PROFILES_DIR?.trim());
+  const localIds = local.map((s) => s.id);
+  const machineIds = machine.map((s) => s.id);
+  const hosts = [...new Set(machine.map((s) => s.machine))];
+  const profileNames = [...new Set([...localIds, ...machine.map(profileOfSource)])].filter(
+    (profile) => profile !== "all",
+  );
+  const views = [
+    "all",
+    ...(profilesMode ? ["local/all", ...localIds] : []),
+    ...profileNames.map((profile) => `all/${profile}`),
+    ...hosts.map((host) => `${host}/all`),
+    ...machineIds,
+  ];
+  return [...new Set(views)];
 }
 
 /** Select the aggregate database or an individual profile database. */
@@ -1065,15 +1126,33 @@ function readJsonFile<T>(filePath: string): T | null {
 
 /** Profile roots to read pin files from: the selected profile, or every
  *  discovered profile dir for the aggregate view. */
+/** Sources belonging to one cross-product view (see getAvailableProfiles). */
+function sourcesForView(
+  view: string,
+  sources: (SessionsSource & { machine?: string })[],
+): (SessionsSource & { machine?: string })[] {
+  if (view === "all") return sources;
+  if (!view.includes("/")) {
+    return sources.filter((source) => source.id === view);
+  }
+  const [machine, profile] = view.split("/");
+  if (machine === "local") {
+    return sources.filter((source) => source.machine === undefined);
+  }
+  if (machine === "all") {
+    return sources.filter((source) => profileOfSource(source) === profile);
+  }
+  if (profile === "all") {
+    return sources.filter((source) => source.machine === machine);
+  }
+  return sources.filter((source) => source.id === view);
+}
+
 async function pinProfileRoots(profile?: string | null): Promise<string[]> {
   // Machine sources ride along so the pins join covers mirrored sessions
   // (their openrouter-session-pin-state.json is mirrored per profile root).
   const sources = [...(await resolveSessionsSources()), ...(await listMachineSources())];
-  if (profile && profile !== "all") {
-    const match = sources.find((source) => source.id === profile);
-    return match ? [path.dirname(match.dir)] : [];
-  }
-  return sources.map((source) => path.dirname(source.dir));
+  return sourcesForView(profile ?? "all", sources).map((source) => path.dirname(source.dir));
 }
 
 function mergePinState(roots: string[]): PinState {
