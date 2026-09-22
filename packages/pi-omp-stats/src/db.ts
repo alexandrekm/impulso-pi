@@ -55,7 +55,7 @@ import type {
   UserMessageStats,
   SubagentRunStats,
 } from "./types.js";
-import type { AgentTypeStats } from "./shared-types.js";
+import type { AgentTypeStats, ContextHistoryPoint } from "./shared-types.js";
 
 const ZERO_USAGE_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 };
 
@@ -333,6 +333,27 @@ export async function initDb(): Promise<DatabaseSync> {
 		);
 		CREATE INDEX IF NOT EXISTS idx_subagent_runs_started_at ON subagent_runs(started_at);
 		CREATE INDEX IF NOT EXISTS idx_subagent_runs_role ON subagent_runs(role);
+
+		-- Context-record history (impulso-pi): one row per target per
+		-- 'measure:context --record' run, ingested from the committed record
+		-- file. NOT a session-extraction table: it backfills from the record
+		-- file itself on every ingest (INSERT OR IGNORE keyed on
+		-- measured_at+target), so it needs no schema-version offset reset —
+		-- unlike compaction/memory/guard rows, which only exist in already-
+		-- synced session bytes.
+		CREATE TABLE IF NOT EXISTS context_records (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			measured_at TEXT NOT NULL,
+			target TEXT NOT NULL,
+			pi_version TEXT,
+			tool_count INTEGER NOT NULL,
+			system_prompt_chars INTEGER NOT NULL,
+			tool_schema_chars INTEGER NOT NULL,
+			context_chars INTEGER NOT NULL,
+			tool_chars_json TEXT,
+			UNIQUE(measured_at, target)
+		);
+		CREATE INDEX IF NOT EXISTS idx_context_records_target ON context_records(target);
 	`);
 
   // Schema-version sentinel: when new extraction tables are added (or any
@@ -3225,5 +3246,77 @@ export function getSessionModelUsageDaily(
     bucket: r.bucket,
     requests: r.requests,
     tokens: r.tokens ?? 0,
+  }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Context-record history (impulso-pi): per-run rows from the committed        */
+/* record file. Ingested on every `/api/stats/context` read (INSERT OR IGNORE */
+/* keyed measured_at+target), so no offset-reset backfill is needed.           */
+/* -------------------------------------------------------------------------- */
+
+export interface ContextRecordRow {
+  measuredAt: string;
+  target: string;
+  piVersion: string | null;
+  toolCount: number;
+  systemPromptChars: number;
+  toolSchemaChars: number;
+  contextChars: number;
+  toolCharsJson: string;
+}
+
+/** Insert record-run rows; duplicates (same measured_at+target) are ignored. */
+export function insertContextRecordRows(rows: ContextRecordRow[]): void {
+  if (!db || rows.length === 0) return;
+  const stmt = db.prepare(`
+		INSERT OR IGNORE INTO context_records
+			(measured_at, target, pi_version, tool_count, system_prompt_chars,
+			 tool_schema_chars, context_chars, tool_chars_json)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`);
+  tx(() => {
+    for (const row of rows) {
+      stmt.run(
+        row.measuredAt,
+        row.target,
+        row.piVersion,
+        row.toolCount,
+        row.systemPromptChars,
+        row.toolSchemaChars,
+        row.contextChars,
+        row.toolCharsJson,
+      );
+    }
+  });
+}
+
+/** The per-target contextChars trend, oldest first (chart input). */
+export function getContextRecordHistory(): ContextHistoryPoint[] {
+  if (!db) return [];
+  const rows = db
+    .prepare(
+      `SELECT measured_at, target, pi_version, tool_count, system_prompt_chars,
+				tool_schema_chars, context_chars
+		 FROM context_records
+		 ORDER BY measured_at, target`,
+    )
+    .all() as unknown as Array<{
+    measured_at: string;
+    target: string;
+    pi_version: string | null;
+    tool_count: number;
+    system_prompt_chars: number;
+    tool_schema_chars: number;
+    context_chars: number;
+  }>;
+  return rows.map((r) => ({
+    measuredAt: r.measured_at,
+    target: r.target,
+    piVersion: r.pi_version,
+    toolCount: r.tool_count,
+    systemPromptChars: r.system_prompt_chars,
+    toolSchemaChars: r.tool_schema_chars,
+    contextChars: r.context_chars,
   }));
 }

@@ -1,12 +1,28 @@
 # Handoff: context-recorder v2 — hashes, history, prompt composition
 
-Status: not started · Written: 2026-09-17 · Prerequisite reading: the
+Status: implemented 2026-09-22 · Written: 2026-09-17 · Prerequisite reading: the
 context-measure bullet in AGENTS.md "Current core resources", and
 `extensions/context-measure/context-measure.ts`.
 
 Three small, independent recorder/dashboard upgrades. They can be done
 together or separately; each closes a metric gap that v1 (committed in
 `61291f9`) left open.
+
+**Status: implemented (2026-09-22), all three items.** Deviations from the
+original plan, both simplifications:
+
+- **Item 2 ingests on read, not on sync:** the original plan (new DB table +
+  ingest inside `syncAllSessions` + a schema-version sentinel to force a
+  backfilling re-parse) turned out to be unnecessary — `context_records`
+  backfills from the record FILE on every `/api/stats/context` read
+  (`insertContextRecordRows`, `INSERT OR IGNORE` keyed `measured_at+target`),
+  so a pre-existing DB fills its history on first read with no offset reset
+  and no schema-version bump at all.
+- **Item 3's analysis is a standalone script** (`scripts/analyze-context-prompt.mjs`)
+  rather than a dashboard section: the dump is opt-in/local-only and the
+  attribution is a research workflow (measure → toggle → re-measure), not a
+  live panel. The script reconciles its segments to the prompt's total
+  character count and fails loudly if they don't.
 
 ## 1. Stability hashes → cache-bust events
 

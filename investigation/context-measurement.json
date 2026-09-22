@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "measuredAt": "2026-09-22T19:54:19.110Z",
-  "piVersion": "0.87.0",
+  "measuredAt": "2026-09-22T22:35:15.767Z",
+  "piVersion": "0.87.1",
   "nodeVersion": "v26.7.0",
   "platform": "darwin",
   "method": "First composed request captured by the context-measure recording provider (extensions/context-measure): pi booted headless (RPC, --no-session) against the real agent dir, one prompt to measure/measure-model. Counts are characters of pi's intermediate request representation (JSON.stringify of the composed system prompt, tool-definition array, and messages) — not a wire format, so not comparable to wire-format measurements, but comparable across profiles and time. contextChars = systemPromptChars + toolSchemaChars. Paths/dates inside prompts make counts vary slightly per machine. Not tokens, cost, or quality.",
@@ -9,7 +9,7 @@
     {
       "target": "stock",
       "record": {
-        "at": "2026-09-22T19:54:11.257Z",
+        "at": "2026-09-22T22:35:11.121Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 2749,
@@ -29,13 +29,15 @@
           "write": 462
         },
         "toolSchemaChars": 2969,
-        "contextChars": 5718
+        "contextChars": 5718,
+        "systemPromptSha256": "1d228c59d92a83d265df24ca054600e015e8ceb3be62212d54eee1002fdbde1c",
+        "toolsSha256": "5f12bf77928d145f74b9480800d5905307b84298cd2c3de5aad45b4f5d4ffe4e"
       }
     },
     {
       "target": "work",
       "record": {
-        "at": "2026-09-22T19:54:13.520Z",
+        "at": "2026-09-22T22:35:12.609Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 9192,
@@ -75,13 +77,15 @@
           "zvec_status": 439
         },
         "toolSchemaChars": 22231,
-        "contextChars": 31423
+        "contextChars": 31423,
+        "systemPromptSha256": "ab3a8847109c6edd8ced062bcc116510384460e9417f9f4104a8ccfb184fdcbf",
+        "toolsSha256": "586fd0420582b3d41ee09dd6bea86a06f03ff92e0920b1d9f5b5368336999e60"
       }
     },
     {
       "target": "personal",
       "record": {
-        "at": "2026-09-22T19:54:15.748Z",
+        "at": "2026-09-22T22:35:14.021Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 7531,
@@ -119,13 +123,15 @@
           "zvec_status": 439
         },
         "toolSchemaChars": 21198,
-        "contextChars": 28729
+        "contextChars": 28729,
+        "systemPromptSha256": "b24e6979e65e945e7c5ccf05eaa84298acae7d0740d94cfb51e69a0121b8239a",
+        "toolsSha256": "23248bf83716fe40b950b933a1749fa6af0592f0a12083e57a1638be96e86a80"
       }
     },
     {
       "target": "base",
       "record": {
-        "at": "2026-09-22T19:54:19.064Z",
+        "at": "2026-09-22T22:35:15.735Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 8833,
@@ -165,7 +171,9 @@
           "zvec_status": 439
         },
         "toolSchemaChars": 22231,
-        "contextChars": 31064
+        "contextChars": 31064,
+        "systemPromptSha256": "68009f788bcea694c1706e235ae7500725d16a3e0c542d84f86971c0c245cabc",
+        "toolsSha256": "586fd0420582b3d41ee09dd6bea86a06f03ff92e0920b1d9f5b5368336999e60"
       }
     }
   ]

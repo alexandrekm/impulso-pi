@@ -31,7 +31,17 @@
 //
 // Record file: `$PI_CONTEXT_MEASURE_OUT`, or `<configDir>/context-measure.jsonl`
 // by default (live sessions can switch to `measure/measure-model` at any
-// moment and the records land there). One JSON object per line.
+// moment and the records land there). One JSON object per line. Each record
+// carries `systemPromptSha256`/`toolsSha256` — the prompt-cache stability
+// hashes the dashboard's cache-bust panel counts (a hash change mid-session
+// means every later request re-reads the full prefix).
+//
+// Debug dump: with `PI_CONTEXT_MEASURE_DEBUG` set (any non-empty value),
+// the full composed system prompt is ALSO appended per request to a sibling
+// file `context-measure-prompt.txt` (or `$PI_CONTEXT_MEASURE_PROMPT`),
+// headered by request id/timestamp/hash — the input for
+// scripts/analyze-context-prompt.mjs's per-resource attribution. Local-only
+// and opt-in: the dump never lands in the committed record.
 //
 // Measurement driver: `npm run measure:context` (scripts/measure-context.mjs)
 // measures stock pi vs. the work/personal/base agent dirs and writes the
@@ -43,6 +53,7 @@
 // `context-measure`).
 
 import { appendFileSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -68,6 +79,10 @@ const DEFAULT_RECORD_PATH = join(CONFIG_DIR, "context-measure.jsonl");
 /** Record output override, read per call so tests and scripts can point it. */
 const OUT_ENV = "PI_CONTEXT_MEASURE_OUT";
 
+/** Opt-in full-prompt dump flag + its path override (read per call). */
+const DEBUG_ENV = "PI_CONTEXT_MEASURE_DEBUG";
+const PROMPT_DUMP_ENV = "PI_CONTEXT_MEASURE_PROMPT";
+
 export interface RequestRecord {
   /** ISO timestamp of the request. */
   at: string;
@@ -91,6 +106,10 @@ export interface RequestRecord {
   toolSchemaChars: number;
   /** systemPromptChars + toolSchemaChars: what the request costs before any work. */
   contextChars: number;
+  /** sha256 of the composed system prompt — the prompt-cache stability hash. */
+  systemPromptSha256: string;
+  /** sha256 of the serialized tool-definition array — tool-list stability hash. */
+  toolsSha256: string;
 }
 
 /** Sort an object's keys in place, so records diff stably. */
@@ -148,6 +167,20 @@ function replayTranscript(
   };
 }
 
+/** sha256 of a string, hex. Pure — used by summarizeContext. */
+function sha256(text: string): string {
+  return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+/** Resolve the composed prompt + tools from either Context shape. */
+export function resolveComposed(context: Context): { systemPrompt: string; tools: Tool[] } {
+  const replayed = replayTranscript(context.messages);
+  return {
+    systemPrompt: context.systemPrompt ?? replayed.systemPrompt,
+    tools: context.tools ?? replayed.tools,
+  };
+}
+
 /** Summarize one composed request. Pure — the whole measurement in one function. */
 export function summarizeContext(
   requestId: number,
@@ -155,16 +188,14 @@ export function summarizeContext(
   context: Context,
 ): RequestRecord {
   // pi ≤0.86 passed the prompt/tools as top-level Context fields; pi ≥0.87
-  // folds them into the transcript's system messages. Prefer the explicit
-  // fields when present, fall back to the transcript replay.
-  const replayed = replayTranscript(context.messages);
-  const tools = context.tools ?? replayed.tools;
+  // folds them into the transcript's system messages. Resolve both shapes.
+  const { systemPrompt, tools } = resolveComposed(context);
+
   const toolChars: Record<string, number> = {};
   for (const tool of tools) {
     const size = JSON.stringify(tool).length;
     toolChars[tool.name] = (toolChars[tool.name] ?? 0) + size;
   }
-  const systemPrompt = context.systemPrompt ?? replayed.systemPrompt;
   const toolSchemaChars = JSON.stringify(tools).length;
   return {
     at: new Date().toISOString(),
@@ -178,6 +209,8 @@ export function summarizeContext(
     toolChars: sortedEntries(toolChars),
     toolSchemaChars,
     contextChars: systemPrompt.length + toolSchemaChars,
+    systemPromptSha256: sha256(systemPrompt),
+    toolsSha256: sha256(JSON.stringify(tools)),
   };
 }
 
@@ -194,6 +227,26 @@ export function appendRecord(record: RequestRecord): void {
     appendFileSync(target, JSON.stringify(record) + "\n", "utf8");
   } catch (error) {
     process.stderr.write(`[context-measure] failed to write record: ${String(error)}\n`);
+  }
+}
+
+/**
+ * Opt-in debug dump: append the full composed prompt for one request.
+ * Best-effort like appendRecord: a failure warns and never kills the reply.
+ * No-op unless PI_CONTEXT_MEASURE_DEBUG is set.
+ */
+export function maybeDumpPrompt(record: RequestRecord, systemPrompt: string): void {
+  if (!process.env[DEBUG_ENV]) return;
+  try {
+    const target =
+      process.env[PROMPT_DUMP_ENV] || join(dirname(recordPath()), "context-measure-prompt.txt");
+    mkdirSync(dirname(target), { recursive: true });
+    const header =
+      `# ==== request ${record.requestId} · ${record.at} · ${record.model} · ` +
+      `prompt sha256:${record.systemPromptSha256} ====`;
+    appendFileSync(target, `${header}\n${systemPrompt}\n\n`, "utf8");
+  } catch (error) {
+    process.stderr.write(`[context-measure] failed to write prompt dump: ${String(error)}\n`);
   }
 }
 
@@ -231,7 +284,9 @@ export function measureStream(
   _options?: SimpleStreamOptions,
 ): AssistantMessageEventStream {
   requestsSeen += 1;
-  appendRecord(summarizeContext(requestsSeen, model, context));
+  const record = summarizeContext(requestsSeen, model, context);
+  appendRecord(record);
+  maybeDumpPrompt(record, resolveComposed(context).systemPrompt);
 
   const stream = createAssistantMessageEventStream();
   const output = cannedAssistantMessage(model);

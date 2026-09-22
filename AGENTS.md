@@ -253,13 +253,15 @@ Besides usage/cost/tool stats, it now also tracks **compaction** events,
 `om.folded` snapshot carried through compactions), and **guard blocks**
 (commit-guard / command-guard `tool_call` blocks, recovered from the error
 tool results pi persists for them — guard, kind, model, blocked command,
-reason), all parsed from session JSONL with no upstream pi change. New
-`compaction_stats` + `memory_events` + `guard_events` tables and
+`compaction_stats` + `memory_events` + `guard_events` + `context_records`
+tables and
 `/api/stats/compaction*` + `/api/stats/memory*` + `/api/stats/guards*`
 routes feed a Compaction panel, an Observational Memory panel (with a
 searchable memory browser), and a Guards panel (with a searchable list of
-blocked commands) in the dashboard. The `/api/stats/pins` route feeds
-the **Session Pins** panel (openrouter-session-pin observability): it
+blocked commands) in the dashboard (the Context panel's `context_records`
+trend and cache-bust rows are described with the `/api/stats/context` route
+below).
+The `/api/stats/pins` route feeds the **Session Pins** panel (openrouter-session-pin observability): it
 live-joins each profile's `openrouter-session-pin-state.json` (session id
 → model → backend tag, written by the extension) with per-session usage
 from the messages table — session ids are embedded in pi's session-file
@@ -283,10 +285,18 @@ system prompt chars, ×stock multiplier), and joins per-tool schema chars
 with actual `tool_calls` usage: paid = schema × requests in range,
 per-call = paid ÷ calls — the hide-it-or-keep-it ranking. Join target:
 the profile's own record row, else `base` ("all" view);
-`PI_STATS_CONTEXT_RECORD` overrides the record path.
+`PI_STATS_CONTEXT_RECORD` overrides the record path. It also returns the
+record-history trend (the DB's `context_records` table — one row per target
+per `measure:context --record` run, ingested from the record file on every
+read, drawn as a per-target line chart) and the live-session cache-bust stats
+(per-profile `context-measure.jsonl` v2 hashes, read live by
+`src/context-records.ts` — a "Cache busts" card plus a per-session table:
+each hash change means every later request in that session re-reads the full
+prefix; sessions are grouped by 30-min gaps / requestId resets).
 A schema-version sentinel in `meta`
 resets file offsets once on upgrade so the new tables backfill from existing
-sessions.
+sessions (the `context_records` history table needs no sentinel — it
+backfills from the record file itself on every read).
 `install.sh` always rebuilds + reinstalls the `pi-omp-stats` global bin
 (a version check isn't safe for git-checked-out packages), and when the
 background service is already registered it also **restarts** it
@@ -395,29 +405,40 @@ versioned).
   1h). Default `short` leaves the env untouched and preserves/restores any
   shell-provided value. Toggled in `/settings` → Providers → Prompt
   caching (a `config` feature); `/reload` applies.
-- `extensions/context-measure/` — **first-call context recorder**: a `measure`
-  provider (`measure/measure-model`) whose `streamSimple` receives pi's
-  fully composed request (`{ systemPrompt, messages, tools }`), appends a
-  per-request summary (system-prompt chars, per-tool schema chars, tool
-  count) to `<configDir>/context-measure.jsonl`, and answers locally with
-  `ok` — no network, no local server (the pi-native replacement for
-  SpecPi's synthetic-HTTP-provider method; pi aliases `@earendil-works/pi-ai`
-  imports in extensions to its bundled copy, so the provider IS the
-  endpoint). Zero request footprint: registers no tools, no prompt text, so
-  it ships `core` everywhere — live sessions can switch to
-  `measure/measure-model` any moment (records land in the jsonl). `npm run
-  measure:context` measures
-  stock vs. work/personal/base and writes the committed record
-  `investigation/context-measurement.json` (counts pi's intermediate
-  request representation, NOT the wire format — comparable across profiles
-  and time, not to wire-format charts). CI `npm run check:context-record`
+- `extensions/context-measure/` — **first-call context recorder + prompt-cache
+  stability monitor**: a `measure` provider (`measure/measure-model`) whose
+  `streamSimple` receives pi's fully composed request (both Context shapes:
+  top-level fields ≤0.86, folded-in-transcript `TranscriptContext` ≥0.87 —
+  `replayTranscript` reads both), appends a per-request summary (chars,
+  per-tool schema chars, tool count, and the v2 stability hashes
+  `systemPromptSha256`/`toolsSha256`) to `<configDir>/context-measure.jsonl`,
+  and answers locally with `ok` — no network, no local server (the pi-native
+  replacement for SpecPi's synthetic-HTTP-provider method; pi aliases
+  `@earendil-works/pi-ai` imports in extensions to its bundled copy, so the
+  provider IS the endpoint). Zero request footprint: registers no tools, no
+  prompt text, so it ships `core` everywhere — live sessions can switch to
+  `measure/measure-model` any moment (records land in the jsonl). The
+  dashboard's Context tab counts hash changes per recorded session
+  ("cache busts" — every change means every later request re-reads the full
+  prefix; read live from the jsonl by `packages/pi-omp-stats/src/context-records.ts`,
+  no DB). With `PI_CONTEXT_MEASURE_DEBUG=1` the recorder also appends the
+  full composed prompt per request to `<configDir>/context-measure-prompt.txt`
+  (local-only, opt-in); `node scripts/analyze-context-prompt.mjs` attributes a
+  dump to its resources — pi core prompt, per-tool tools-list lines, guidelines,
+  per-AGENTS-file project_context, per-skill entries, append text, cwd — with a
+  reconciliation check (segments must sum to the prompt's total chars).
+  `npm run measure:context` measures stock vs. work/personal/base and writes
+  the committed record `investigation/context-measurement.json` (counts pi's
+  intermediate request representation, NOT the wire format — comparable across
+  profiles and time, not to wire-format charts). CI `npm run check:context-record`
   fails when a PR changes profiles.jsonc / extensions/ / skills/ without
-  updating the record: the context-budget ratchet. Current numbers (pi
-  0.87.0, post-subagent-removal): stock 5.7k chars / 4 tools; profiles
-  ~29-31k / 13-14 tools (~5.5x stock). Numbers moved a lot vs the pi
-  0.84-era record (59k work): the removal deleted the subagent/
-  subagent_supervisor/bg_wait schemas (~22k) and pi 0.87 splits the
-  prompt into sections — compare within one record's piVersion.
+  updating the record: the context-budget ratchet. The stats DB also keeps a
+  `context_records` history table (one row per target per measure run,
+  `INSERT OR IGNORE` on `measured_at+target`, ingested from the record file on
+  every `/api/stats/context` read — no sync hook, no schema sentinel needed)
+  feeding a per-target trend chart on the Context tab. Current numbers (pi
+  0.87.1): stock 5.7k chars / 4 tools; profiles ~29-31k / 13-14 tools
+  (~5.5x stock).
 - `npm:@narumitw/pi-btw` — `/btw` side-thread command: ask context-aware
   questions in a separate thread without derailing the main conversation
   (`/btw <question>` starts one; `/btw` opens a manager; `Ctrl+R` brings

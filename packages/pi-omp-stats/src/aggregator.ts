@@ -73,6 +73,8 @@ import {
   insertMessageStats,
   insertToolCalls,
   insertUserMessageStats,
+  getContextRecordHistory,
+  insertContextRecordRows,
   listGuardEvents,
   listGuardSessions,
   listMemoryEvents,
@@ -86,6 +88,7 @@ import {
   updateToolResults,
   updateUserMessageLinks,
 } from "./db.js";
+import { getCacheBustStats } from "./context-records.js";
 import {
   getSessionEntry,
   listAllSessionFiles,
@@ -866,6 +869,25 @@ export async function getContextBudgetStats(
   const { cutoff } = getTimeRangeConfig(range);
   const requests = getRequestCount(cutoff ?? undefined);
   const record = readContextRecord();
+  if (record) {
+    // Ingest this run of the committed record file into the current view DB
+    // (INSERT OR IGNORE keyed measured_at+target, so re-measures never
+    // duplicate and re-running --record twice yields two history points).
+    insertContextRecordRows(
+      record.targets.map((row) => ({
+        measuredAt: record.measuredAt,
+        target: row.target,
+        piVersion: record.piVersion,
+        toolCount: row.record.toolCount,
+        systemPromptChars: row.record.systemPromptChars,
+        toolSchemaChars: row.record.toolSchemaChars,
+        contextChars: row.record.contextChars,
+        toolCharsJson: JSON.stringify(row.record.toolChars),
+      })),
+    );
+  }
+  const history = getContextRecordHistory();
+  const cacheBust = await getCacheBustStats(profile);
   if (!record) {
     return {
       measuredAt: null,
@@ -875,6 +897,8 @@ export async function getContextBudgetStats(
       targets: [],
       perTool: [],
       method: "",
+      history,
+      cacheBust,
     };
   }
   const stockRow = record.targets.find((row) => row.target === "stock") ?? null;
@@ -911,6 +935,8 @@ export async function getContextBudgetStats(
     targets: record.targets.map((row) => toBudgetTarget(row, stockRow)),
     perTool,
     method: record.method,
+    history,
+    cacheBust,
   };
 }
 
