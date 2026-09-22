@@ -18,8 +18,8 @@ JSONL shape.
 - **Single-file dashboard** — vanilla JS + Chart.js (CDN, with a local-inline
   option for a zero-CDN build).
 - **Loopback by default in the foreground CLI** — `pi-omp-stats` binds
-  `127.0.0.1`; pass `--host` to expose. The background **service** (see
-  below) defaults to `0.0.0.0` since it's meant to run unattended.
+  `127.0.0.1`; pass `--host` to expose. The background **service** (see below)
+  defaults to `0.0.0.0` since it's meant to run unattended.
 
 ## Install
 
@@ -100,11 +100,11 @@ dashboard stays up across reboots without needing a terminal. It auto-detects
 the platform's service manager:
 
 - **macOS** → launchd `~/Library/LaunchAgents/dev.pi.omp-stats.plist`
-  (`RunAtLoad` + `KeepAlive`, logs at `~/.pi/agent/pi-omp-stats.log`).
-  Manage with `launchctl list dev.pi.omp-stats` / `pi-omp-stats service ...`.
+  (`RunAtLoad` + `KeepAlive`, logs at `~/.pi/agent/pi-omp-stats.log`). Manage
+  with `launchctl list dev.pi.omp-stats` / `pi-omp-stats service ...`.
 - **Linux** → systemd user unit `~/.config/systemd/user/pi-omp-stats.service`
-  (`Restart=always`, `WantedBy=default.target`).
-  Logs: `journalctl --user -u pi-omp-stats.service -f`.
+  (`Restart=always`, `WantedBy=default.target`). Logs:
+  `journalctl --user -u pi-omp-stats.service -f`.
 
 ```bash
 pi-omp-stats service install                    # register + start (port 3847, host 0.0.0.0)
@@ -118,41 +118,43 @@ pi-omp-stats service uninstall                  # stop + remove the service
 
 The service runs `node <dist/index.js> --port <P> --host <H>` and forwards the
 `PI_STATS_*` / `PI_CODING_AGENT_*` env vars that are set at install time, so the
-daemon reads the same sessions dir the installer does. No root required — it's
-a user service. Unlike the ad-hoc foreground run (loopback-only by default),
+daemon reads the same sessions dir the installer does. No root required — it's a
+user service. Unlike the ad-hoc foreground run (loopback-only by default),
 `service install` defaults to **`--host 0.0.0.0`** since it's meant to run
 unattended and be reachable from other machines — anyone on that interface can
 read your usage stats, so pass `--host 127.0.0.1` if you only ever access it
 locally.
 
-> Rebuilding `dist/` (e.g. `npm run build` or `npm i -g .`) after an install
-> is fine; the service references the absolute `dist/index.js` path, so a
-> `pi-omp-stats service restart` picks up the new code. Re-run `service
-> install` only if you change `--port` / `--host` or the forwarded env vars.
+> Rebuilding `dist/` (e.g. `npm run build` or `npm i -g .`) after an install is
+> fine; the service references the absolute `dist/index.js` path, so a
+> `pi-omp-stats service restart` picks up the new code. Re-run `service install`
+> only if you change `--port` / `--host` or the forwarded env vars.
 
 ## Machine sources (remote session mirrors)
 
 The dashboard can pull session JSONLs from other machines over SSH and index
 them exactly like local profiles — the remote box needs nothing but sshd.
-Sessions are appended to the remote machine's `~/.pi/profiles/<p>/sessions/`
-by pi there; this package rsyncs them into a local mirror
+Sessions are appended to the remote machine's `~/.pi/profiles/<p>/sessions/` by
+pi there; this package rsyncs them into a local mirror
 (`<PI_STATS_DIR>/stats-machines/<host>/profiles/<p>/sessions/`) and the local
-aggregator builds a per-machine view (`<host>/<profile>` in the profile
-selector, all existing panels work on it). The **Machines** tab shows
-availability, last sync, and per-machine totals, and has a **Sync now** button.
+aggregator builds a **machine × profile** cross product of views, filtered with
+two selectors in the topbar — machine (`All machines` / `This machine` / each
+remote host) × profile (`All profiles` / `work` / …). Every panel works on any
+combination. The **Machines** tab shows availability, last sync, and per-machine
+totals, and has a **Sync now** button.
 
-Wake-safe by design: hosts whose `~/.ssh/config` `HostName` is an EC2
-instance id are probed read-only via the EC2/SSM APIs — **never via ssh** —
-because a devbox ssh ProxyCommand auto-starts a stopped instance. Sync
-connections also pass `-o ClearAllForwardings=yes -o PermitLocalCommand=no`
-so they never collide with an open devbox session's `LocalForward` ports or
-run per-host `Match` LocalCommand hooks. Pulls are opportunistic: `/api/sync` and the Machines
-tab trigger a background rsync for every machine that is up and older than
+Wake-safe by design: hosts whose `~/.ssh/config` `HostName` is an EC2 instance
+id are probed read-only via the EC2/SSM APIs — **never via ssh** — because a
+devbox ssh ProxyCommand auto-starts a stopped instance. Sync connections also
+pass `-o ClearAllForwardings=yes -o PermitLocalCommand=no` so they never collide
+with an open devbox session's `LocalForward` ports or run per-host `Match`
+LocalCommand hooks. Pulls are opportunistic: `/api/sync` and the Machines tab
+trigger a background rsync for every machine that is up and older than
 `syncTtlMinutes` (default 30); down machines are skipped, never an error.
 
-Machines are discovered from `~/.ssh/config` (EC2 instance-id `HostName`,
-region parsed from the `ProxyCommand`), and `<PI_STATS_DIR>/machines.json`
-adds or overrides entries:
+Machines are discovered from `~/.ssh/config` (EC2 instance-id `HostName`, region
+parsed from the `ProxyCommand`), and `<PI_STATS_DIR>/machines.json` adds or
+overrides entries:
 
 ```json
 {
@@ -167,12 +169,11 @@ adds or overrides entries:
 `kind: "ssh"` machines are probed with a batch-mode `ssh true` (safe: no
 auto-start ProxyCommand). Machine sessions are part of the **All profiles**
 aggregate by default, like local profiles (each machine also gets its own
-`<host>/<profile>` selector view) — set `"includeInAll": false` per machine
-to keep it out of the aggregate. Switching a machine out (opt-out, disable,
-or removing its ssh entry) purges its rows from the aggregate DB on the
-next sync, so "All profiles" never lingers stale data; the machine's own
-view DB is kept. `enabled: false` removes a discovered machine from the
-rotation.
+`<host>/<profile>` selector view) — set `"includeInAll": false` per machine to
+keep it out of the aggregate. Switching a machine out (opt-out, disable, or
+removing its ssh entry) purges its rows from the aggregate DB on the next sync,
+so "All profiles" never lingers stale data; the machine's own view DB is kept.
+`enabled: false` removes a discovered machine from the rotation.
 
 ## Environment variables
 
@@ -182,8 +183,8 @@ selector for every profile directory it discovers. Each profile and the
 aggregate have separate SQLite databases under `PI_STATS_DIR` (or
 `~/.pi/agent`), so switching views does not require reparsing sessions.
 
-Without `PI_STATS_PROFILES_DIR`, the sessions directory is resolved, first
-match wins:
+Without `PI_STATS_PROFILES_DIR`, the sessions directory is resolved, first match
+wins:
 
 1. `PI_STATS_SESSIONS_DIR` — this package's own override
 2. `PI_CODING_AGENT_SESSION_DIR` — pi's own session-dir override
@@ -202,37 +203,37 @@ All read endpoints accept a `?range=` query (`1h` / `24h` / `7d` / `30d` / `90d`
 / `all`; default `24h`). Shapes are byte-compatible with omp-stats where
 portable.
 
-| Method | Path                       | Returns |
-|--------|---------------------------|---------|
-| GET    | `/api/profiles`           | `all` plus discovered profile names |
-| GET    | `/api/stats`              | full `DashboardStats` |
-| GET    | `/api/stats/overview`      | `{ overall, byAgentType, timeSeries }` |
-| GET    | `/api/stats/models`       | `byModel[]` |
-| GET    | `/api/stats/folders`       | `byFolder[]` |
-| GET    | `/api/stats/timeseries`    | `timeSeries[]` |
-| GET    | `/api/stats/model-dashboard` | `{ byModel, modelSeries, modelPerformanceSeries }` |
-| GET    | `/api/stats/costs`         | `{ costSeries }` |
-| GET    | `/api/stats/tools`         | `ToolDashboardStats` |
-| GET    | `/api/stats/behavior`      | `BehaviorDashboardStats` |
-| GET    | `/api/stats/providers`     | `ProviderDashboardStats` (portable subset) |
-| GET    | `/api/stats/compaction`    | `{ summary, byModel, timeseries, tokensBeforeDistribution }` |
-| GET    | `/api/stats/compaction/timeseries` | `{ series }` (compactions per day) |
-| GET    | `/api/stats/compaction/tokens-before` | `{ buckets }` (`?model=` filter) |
-| GET    | `/api/stats/memory`        | `{ summary, timeseries, relevance, poolGrowth }` |
-| GET    | `/api/stats/memory/timeseries` | `{ series }` (memory production per day) |
-| GET    | `/api/stats/memory/relevance` | `{ buckets }` (relevance distribution) |
-| GET    | `/api/stats/memory/pool`   | `{ series }` (live pool token growth) |
-| GET    | `/api/stats/memory/sessions` | `{ sessions }` (sessions with memory events) |
-| GET    | `/api/stats/memory/list`   | `{ items, total }` (`?kind=&relevance=&session=&q=&limit=&offset=`) |
-| GET    | `/api/stats/memory/:id`    | single memory detail |
-| GET    | `/api/stats/guards`        | `{ summary, byKind, byModel, timeseries }` (guard blocks) |
-| GET    | `/api/stats/guards/timeseries` | `{ series }` (guard blocks per day) |
-| GET    | `/api/stats/guards/sessions` | `{ sessions }` (sessions with guard blocks) |
-| GET    | `/api/stats/guards/list`   | `{ items, total }` (`?guard=&kind=&session=&q=&limit=&offset=`) |
-| GET    | `/api/stats/recent`        | recent `MessageStats[]` (`?limit=`) |
-| GET    | `/api/stats/errors`        | error `MessageStats[]` (`?limit=`) |
-| GET    | `/api/request/:id`         | `RequestDetails` |
-| POST   | `/api/sync`               | incremental resync → `{ processed, files, totalMessages }` |
+| Method | Path                                  | Returns                                                             |
+| ------ | ------------------------------------- | ------------------------------------------------------------------- |
+| GET    | `/api/profiles`                       | `all` plus discovered profile names                                 |
+| GET    | `/api/stats`                          | full `DashboardStats`                                               |
+| GET    | `/api/stats/overview`                 | `{ overall, byAgentType, timeSeries }`                              |
+| GET    | `/api/stats/models`                   | `byModel[]`                                                         |
+| GET    | `/api/stats/folders`                  | `byFolder[]`                                                        |
+| GET    | `/api/stats/timeseries`               | `timeSeries[]`                                                      |
+| GET    | `/api/stats/model-dashboard`          | `{ byModel, modelSeries, modelPerformanceSeries }`                  |
+| GET    | `/api/stats/costs`                    | `{ costSeries }`                                                    |
+| GET    | `/api/stats/tools`                    | `ToolDashboardStats`                                                |
+| GET    | `/api/stats/behavior`                 | `BehaviorDashboardStats`                                            |
+| GET    | `/api/stats/providers`                | `ProviderDashboardStats` (portable subset)                          |
+| GET    | `/api/stats/compaction`               | `{ summary, byModel, timeseries, tokensBeforeDistribution }`        |
+| GET    | `/api/stats/compaction/timeseries`    | `{ series }` (compactions per day)                                  |
+| GET    | `/api/stats/compaction/tokens-before` | `{ buckets }` (`?model=` filter)                                    |
+| GET    | `/api/stats/memory`                   | `{ summary, timeseries, relevance, poolGrowth }`                    |
+| GET    | `/api/stats/memory/timeseries`        | `{ series }` (memory production per day)                            |
+| GET    | `/api/stats/memory/relevance`         | `{ buckets }` (relevance distribution)                              |
+| GET    | `/api/stats/memory/pool`              | `{ series }` (live pool token growth)                               |
+| GET    | `/api/stats/memory/sessions`          | `{ sessions }` (sessions with memory events)                        |
+| GET    | `/api/stats/memory/list`              | `{ items, total }` (`?kind=&relevance=&session=&q=&limit=&offset=`) |
+| GET    | `/api/stats/memory/:id`               | single memory detail                                                |
+| GET    | `/api/stats/guards`                   | `{ summary, byKind, byModel, timeseries }` (guard blocks)           |
+| GET    | `/api/stats/guards/timeseries`        | `{ series }` (guard blocks per day)                                 |
+| GET    | `/api/stats/guards/sessions`          | `{ sessions }` (sessions with guard blocks)                         |
+| GET    | `/api/stats/guards/list`              | `{ items, total }` (`?guard=&kind=&session=&q=&limit=&offset=`)     |
+| GET    | `/api/stats/recent`                   | recent `MessageStats[]` (`?limit=`)                                 |
+| GET    | `/api/stats/errors`                   | error `MessageStats[]` (`?limit=`)                                  |
+| GET    | `/api/request/:id`                    | `RequestDetails`                                                    |
+| POST   | `/api/sync`                           | incremental resync → `{ processed, files, totalMessages }`          |
 
 The **compaction** and **observational-memory** endpoints surface what pi
 usually drops on the floor: `compaction` session entries (frequency, context
@@ -240,30 +241,29 @@ size at trigger via `tokensBefore`, the summary-generation `usage`/cost, the
 `fromHook` split between obs-memory-driven and pi-native compactions, and the
 Phase 2 trigger `reason` / `willRetry` / `tokensAfter` when present) and the
 `om.observations.recorded` / `om.reflections.recorded` /
-`om.observations.dropped` custom entries plus the `om.folded` snapshot
-carried through each compaction. No upstream change is needed for the core
-stats — it all reads the session JSONL already on disk.
+`om.observations.dropped` custom entries plus the `om.folded` snapshot carried
+through each compaction. No upstream change is needed for the core stats — it
+all reads the session JSONL already on disk.
 
 The **guard** endpoints surface the impulso guard extensions
-(`extensions/commit-guard`, `extensions/command-guard`): every `tool_call`
-hook block is persisted by pi as an error tool result whose first text block
-is the guard's `[<guard name>] reason`, so the parser extracts one
-`guard_events` row per block — guard, coarse `kind` (e.g. `no-verify`,
-`commitlint`, `builtin-rules`, `env-denied`, `denied`), model, the blocked
-command (recovered by linking the result back to the assistant toolCall
-block), and the full reason. Again, no upstream pi change is needed.
+(`extensions/commit-guard`, `extensions/command-guard`): every `tool_call` hook
+block is persisted by pi as an error tool result whose first text block is the
+guard's `[<guard name>] reason`, so the parser extracts one `guard_events` row
+per block — guard, coarse `kind` (e.g. `no-verify`, `commitlint`,
+`builtin-rules`, `env-denied`, `denied`), model, the blocked command (recovered
+by linking the result back to the assistant toolCall block), and the full
+reason. Again, no upstream pi change is needed.
 
 The Phase 2 fields (`reason` = `manual` / `threshold` / `overflow`, `willRetry`,
 `tokensAfter`) are persisted only once the upstream pi patch lands (a small
 additive change to `CompactionEntry` + `appendCompaction` in
-`session-manager.ts`/`agent-session.ts`; see `COMPACTION-STATS-PLAN.md` Phase 2).
-Until then they read as `null` and the by-reason table groups them as
-`unknown`. A schema-version sentinel resets file offsets once after each
-upgrade so the new tables/columns backfill from existing sessions on the next
-sync.
+`session-manager.ts`/`agent-session.ts`; see `COMPACTION-STATS-PLAN.md` Phase
+2). Until then they read as `null` and the by-reason table groups them as
+`unknown`. A schema-version sentinel resets file offsets once after each upgrade
+so the new tables/columns backfill from existing sessions on the next sync.
 
-Not implemented (omp-specific): `/api/stats/gain` (snapcompact) and the
-provider usage-window/subscription analytics (auth-broker).
+Not implemented (omp-specific): `/api/stats/gain` (snapcompact) and the provider
+usage-window/subscription analytics (auth-broker).
 
 ## Dashboard
 
@@ -275,29 +275,26 @@ CDN by default. For a **zero-CDN** build, drop a local copy of Chart.js at
 render even when Chart.js is unavailable.
 
 Sections: **Overview** (metric cards + time-series), **Models** (fastest/
-slowest/snappiest-TTFT cards, a speed chart ranking models by output
-tokens/s, a latency chart of avg duration & TTFT, and a per-model table
-with Latency / TTFT / Tok/s columns), **Folders**, **Tools**, **Behavior**
-(port of omp's "rage" analytics), **Costs**, **Providers**, **Requests**,
-**Errors**, **Compaction** (compaction frequency, context-size-at-trigger
-histogram, fromHook split, by-trigger-reason table, summary-generation
-cost), **Observational Memory** (memory production, relevance
-distribution, live pool-token growth vs the 20k default, and a
-searchable/filterable memory browser listing individual
-observations/reflections with their 12-hex `memoryId` — the same id
-`recall()` takes — and a detail pane), and **Guards** (commit-guard /
-command-guard blocks: totals, blocks-per-day chart, by-kind and by-model
-tables, and a searchable, paginated list of the blocked commands with
-their reasons).
+slowest/snappiest-TTFT cards, a speed chart ranking models by output tokens/s, a
+latency chart of avg duration & TTFT, and a per-model table with Latency / TTFT
+/ Tok/s columns), **Folders**, **Tools**, **Behavior** (port of omp's "rage"
+analytics), **Costs**, **Providers**, **Requests**, **Errors**, **Compaction**
+(compaction frequency, context-size-at-trigger histogram, fromHook split,
+by-trigger-reason table, summary-generation cost), **Observational Memory**
+(memory production, relevance distribution, live pool-token growth vs the 20k
+default, and a searchable/filterable memory browser listing individual
+observations/reflections with their 12-hex `memoryId` — the same id `recall()`
+takes — and a detail pane), and **Guards** (commit-guard / command-guard blocks:
+totals, blocks-per-day chart, by-kind and by-model tables, and a searchable,
+paginated list of the blocked commands with their reasons).
 
 > **Note on latency/TTFT:** earendil-works pi does not record `duration` /
 > `ttft` on assistant messages, so both are **derived** where possible:
-> `duration` = entry persist timestamp − message start timestamp (the
-> message timestamp is set when the provider stream starts). Deltas that
-> imply an impossible output rate (providers that stamp the message at
-> completion, e.g. cursor-native) are discarded, and `ttft` cannot be
-> derived at all — it stays `-` for pi-written sessions and populates only
-> for forks that emit it (omp).
+> `duration` = entry persist timestamp − message start timestamp (the message
+> timestamp is set when the provider stream starts). Deltas that imply an
+> impossible output rate (providers that stamp the message at completion, e.g.
+> cursor-native) are discarded, and `ttft` cannot be derived at all — it stays
+> `-` for pi-written sessions and populates only for forks that emit it (omp).
 
 ## Security
 
@@ -306,14 +303,13 @@ The foreground CLI (`pi-omp-stats`) binds to **`127.0.0.1`** by default; pass
 (`pi-omp-stats service install`) instead defaults to **`0.0.0.0`**, since it's
 meant to run unattended and be reached from other machines — pass
 `--host 127.0.0.1` at install time to keep it loopback-only. Either way,
-**anyone reachable on the bound interface can read your usage stats and
-trigger syncs**, so only bind `0.0.0.0` on a trusted network. There is no
-telemetry; all parsing and aggregation is local. The only outbound network
-call is the optional CDN Chart.js fetch (which the local-inline option
-removes).
+**anyone reachable on the bound interface can read your usage stats and trigger
+syncs**, so only bind `0.0.0.0` on a trusted network. There is no telemetry; all
+parsing and aggregation is local. The only outbound network call is the optional
+CDN Chart.js fetch (which the local-inline option removes).
 
 ## Origin & license
 
-MIT — see [LICENSE](./LICENSE) and [NOTICES.md](./NOTICES.md). This is a port
-of `@oh-my-pi/omp-stats` (© Can Boluk); the original copyright is preserved on
+MIT — see [LICENSE](./LICENSE) and [NOTICES.md](./NOTICES.md). This is a port of
+`@oh-my-pi/omp-stats` (© Can Boluk); the original copyright is preserved on
 ported source files.

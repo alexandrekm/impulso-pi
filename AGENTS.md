@@ -301,9 +301,13 @@ It also mirrors **remote machines**: hosts in `~/.ssh/config` whose
 `HostName` is an EC2 instance id (ssh-only cloud devboxes) are discovered
 automatically, and `<statsDir>/machines.json` can add ssh-only hosts or
 override settings. Their `~/.pi/profiles/*/sessions/` JSONLs are rsynced
-into `<statsDir>/stats-machines/<host>/profiles/` and indexed as their own
-dashboard views (`<host>/<profile>` — every panel works on them); the
-Machines tab shows availability/last-sync/totals with a Sync-now button, and
+into `<statsDir>/stats-machines/<host>/profiles/` and indexed as a
+**machine × profile** cross product of views (own `<host>/<profile>`, whole
+machine `<host>/all`, cross-machine `all/<profile>`, plus the local
+equivalents) — the dashboard filters with two topbar selectors, machine
+(All machines / This machine / each host) × profile (All profiles / work /
+…), and every panel works on any combination; the Machines tab shows
+availability/last-sync/totals with a Sync-now button, and
 `/api/sync` (dashboard load/refresh) opportunistically pulls every machine
 that is up and older than `syncTtlMinutes` (default 30). Wake-safe by
 design: aws machines are probed read-only via the EC2/SSM APIs, never ssh (a
@@ -311,11 +315,11 @@ devbox ssh ProxyCommand auto-STARTS a stopped instance — an ssh probe would
 spin up an idle box), and sync connections pass `-o ClearAllForwardings=yes
 -o PermitLocalCommand=no` so they never collide with an open devbox
 session's LocalForward ports or LocalCommand hooks. Machine sessions are
-part of "All profiles" by default, like local profiles (plus their own
-`<host>/<profile>` selector views); `"includeInAll": false` per machine in
-machines.json opts out of the aggregate, and retired mirrors (opt-out,
-disabled, or removed from the ssh config) are purged from the aggregate DB
-on the next sync so "All profiles" never lingers stale data. The
+part of the "All machines × All profiles" view by default, like local
+profiles; `"includeInAll": false` per machine in machines.json opts out of
+the all-machines views, and retired mirrors (opt-out, disabled, or removed
+from the ssh config) are purged from those aggregate DBs on the next sync so
+they never linger stale data. The
 per-profile `openrouter-session-pin-state.json` is mirrored alongside
 sessions so the Session Pins panel joins machine sessions to their pinned
 backend. CLI: `pi-omp-stats machines list|sync [host]`.

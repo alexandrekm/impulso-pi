@@ -1191,6 +1191,7 @@
           <span class="updated" id="updated-at"></span>
           <div class="spacer"></div>
           <span id="status"></span>
+          <select class="btn" id="machine-select" aria-label="Machine" hidden></select>
           <select class="btn" id="profile-select" aria-label="Profile" hidden></select>
           <div class="seg" id="range-seg">
             <button data-range="1h">1h</button>
@@ -1354,14 +1355,72 @@
         return r.json();
       }
 
+      // Two-selector cross product: machine × profile. `profile` stays the
+      // composed view id sent to the API; the dropdowns are its factors.
+      let machineSel = "all";
+      let availableViews = [];
+
+      function viewId(machine, profileName) {
+        if (machine === "all") return profileName === "all" ? "all" : "all/" + profileName;
+        if (machine === "local") return profileName === "all" ? "local/all" : profileName;
+        return machine + "/" + profileName;
+      }
+
       async function loadProfiles() {
-        const profiles = await api("/api/profiles");
-        if (profiles.length <= 1) return;
-        const select = $("#profile-select");
-        select.innerHTML = profiles
-          .map((p) => `<option value="${p}">${p === "all" ? "All profiles" : p}</option>`)
+        availableViews = await api("/api/profiles");
+        const views = availableViews;
+        const hosts = [
+          ...new Set(views.filter((v) => v.includes("/")).map((v) => v.split("/")[0])),
+        ].filter((h) => h !== "all" && h !== "local");
+        if (hosts.length === 0 && views.length <= 1) return;
+        const options = [
+          { v: "all", label: "All machines" },
+          ...(views.includes("local/all") ? [{ v: "local", label: "This machine" }] : []),
+          ...hosts.map((h) => ({ v: h, label: h })),
+        ];
+        const machineSelect = $("#machine-select");
+        machineSelect.innerHTML = options
+          .map((o) => `<option value="${escapeHtml(o.v)}">${escapeHtml(o.label)}</option>`)
           .join("");
-        select.value = profile;
+        if (!options.some((o) => o.v === machineSel)) machineSel = "all";
+        machineSelect.value = machineSel;
+        machineSelect.hidden = false;
+        renderProfileOptions();
+      }
+
+      function profileNamesForMachine() {
+        const views = availableViews;
+        if (machineSel === "local") return views.filter((v) => !v.includes("/") && v !== "all");
+        if (machineSel !== "all") {
+          return views
+            .filter((v) => v.startsWith(machineSel + "/") && !v.endsWith("/all"))
+            .map((v) => v.split("/")[1]);
+        }
+        const names = new Set();
+        for (const v of views) {
+          if (!v.includes("/") && v !== "all") names.add(v);
+          else if (v.startsWith("all/")) names.add(v.split("/")[1]);
+        }
+        return [...names];
+      }
+
+      function renderProfileOptions() {
+        const select = $("#profile-select");
+        const names = profileNamesForMachine();
+        const current = profile.includes("/")
+          ? profile.split("/")[1]
+          : profile === "all"
+            ? "all"
+            : profile;
+        select.innerHTML = [
+          { v: "all", label: "All profiles" },
+          ...names.map((n) => ({ v: n, label: n })),
+        ]
+          .map(
+            (o) =>
+              `<option value="${escapeHtml(o.v)}"${o.v === (names.includes(current) ? current : "all") ? " selected" : ""}>${escapeHtml(o.label)}</option>`,
+          )
+          .join("");
         select.hidden = false;
       }
 
@@ -2150,7 +2209,7 @@
   `;
         main.innerHTML = `<div class="cards">${cardsHtml}</div>
     <div class="section-title">Remote machines</div><div id="machines-table"></div>
-    <div class="kpi-note" style="padding:2px 0 0">Session JSONLs are rsynced from <code>~/.pi/profiles/&lt;p&gt;/sessions</code> on each machine into a local mirror and aggregated like local profiles — the remote box needs nothing but sshd. AWS machines are probed via the read-only EC2/SSM APIs (an ssh probe would auto-start a stopped devbox, so it is never used to test availability); sync connections disable LocalForward ports and LocalCommand hooks. Machine data lands in its own view (pick <code>&lt;host&gt;/&lt;profile&gt;</code> in the profile selector) and is part of <em>"All profiles"</em> by default, like local profiles; set <code>includeInAll: false</code> in <code>~/.pi/agent/machines.json</code> to keep a machine out of the aggregate.</div>`;
+    <div class="kpi-note" style="padding:2px 0 0">Session JSONLs are rsynced from <code>~/.pi/profiles/&lt;p&gt;/sessions</code> on each machine into a local mirror and aggregated like local profiles — the remote box needs nothing but sshd. AWS machines are probed via the read-only EC2/SSM APIs (an ssh probe would auto-start a stopped devbox, so it is never used to test availability); sync connections disable LocalForward ports and LocalCommand hooks. Machine data lands in its own views — filter with the two selectors (machine × profile); it is part of <em>"All machines"</em> by default, like local profiles; set <code>includeInAll: false</code> in <code>~/.pi/agent/machines.json</code> to keep a machine out of the all-machines views.</div>`;
         const rows = machines
           .slice()
           .sort(
@@ -2185,7 +2244,7 @@
               (m.state === "running" ? "" : " disabled") +
               ">Sync now</button>" +
               (m.views.length
-                ? '<button class="btn" data-view="' + escapeHtml(m.views[0]) + '">View</button>'
+                ? '<button class="btn" data-view="' + escapeHtml(m.host) + '">View</button>'
                 : "");
             return [
               escapeHtml(m.host),
@@ -2244,15 +2303,16 @@
           }),
         );
         main.querySelectorAll("[data-view]").forEach((b) =>
-          b.addEventListener("click", () => {
-            const select = $("#profile-select");
-            if (!select) return;
-            loadProfiles()
-              .then(() => {
-                select.value = b.dataset.view;
-                select.dispatchEvent(new Event("change"));
-              })
-              .catch(() => toast("profile not loaded yet"));
+          b.addEventListener("click", async () => {
+            try {
+              await loadProfiles();
+              machineSel = b.dataset.view;
+              $("#machine-select").value = machineSel;
+              renderProfileOptions();
+              onSelectorChange();
+            } catch (e) {
+              toast("views not loaded yet");
+            }
           }),
         );
       }
@@ -3965,14 +4025,21 @@
           refreshAll();
         }),
       );
-      $("#sync-btn").addEventListener("click", doSync);
-      $("#profile-select").addEventListener("change", (event) => {
-        profile = event.target.value;
+      function onSelectorChange() {
+        profile = viewId($("#machine-select").value, $("#profile-select").value);
         stats = behavior = tools = providers = recent = errorsList = null;
         compaction = memories = subagents = guards = null;
         memSelectedId = null;
         refreshAll();
+      }
+      $("#sync-btn").addEventListener("click", doSync);
+      $("#machine-select").addEventListener("change", (event) => {
+        machineSel = event.target.value;
+        loadProfiles() // rebuild the profile options under this machine
+          .then(onSelectorChange)
+          .catch(() => toast("views not loaded"));
       });
+      $("#profile-select").addEventListener("change", onSelectorChange);
 
       $("#theme-toggle").addEventListener("click", () => {
         const cur =
