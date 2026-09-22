@@ -56,6 +56,9 @@ export interface ProbeResult {
 
 export interface SyncState {
   lastSyncAt: number | null;
+  /** Persisted on disk: only real sync outcomes (ok/error). "skipped" is a
+   * transient, return-only status (down machine / TTL guard / busy) — the
+   * record on disk keeps the last real sync intact. */
   lastStatus: "ok" | "error" | "skipped";
   lastError?: string;
   files?: number;
@@ -377,21 +380,24 @@ async function syncMachineLocked(
 ): Promise<SyncState> {
   const probe = opts?.probe ?? (await probeCached(m));
   if (!isSyncable(m, probe)) {
-    // Keep the previous record's fields (lastSyncAt/files/bytes/durationMs):
-    // a down machine must not erase its last successful sync's history.
-    const state: SyncState = {
+    // Transient skip — NOT persisted. The disk record keeps only real sync
+    // outcomes (ok/error) with their lastSyncAt/files/bytes, so a down
+    // machine never erases its last successful sync's history (the probe
+    // state already tells the dashboard why nothing ran).
+    return {
       ...(await readSyncState(m.host)),
       lastStatus: "skipped",
       lastError: `machine ${probe.state}`,
     };
-    await writeSyncState(m.host, state);
-    return state;
   }
   const file = await getMachinesFile();
   const ttl = (file.syncTtlMinutes ?? DEFAULT_SYNC_TTL_MIN) * 60_000;
   const previous = await readSyncState(m.host);
   if (!opts?.force && previous.lastSyncAt && Date.now() - previous.lastSyncAt < ttl) {
-    return previous;
+    // Fresh enough: report a transient skip so callers count "not
+    // transferred" instead of "synced" — returning `previous` here would
+    // make every dashboard poll queue a redundant re-aggregation.
+    return { ...previous, lastStatus: "skipped" };
   }
   const startedAt = Date.now();
   try {
