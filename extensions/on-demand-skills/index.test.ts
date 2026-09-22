@@ -1,17 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 // The handler resolves <configDir>/skills at import time; the trigger table
-// comes from the repo's ./config.json (datadog / obscura / glean / scout).
-// comes from the repo's ./config.json (datadog / glean / scout).
+// comes from the repo's ./config.json (datadog / obscura / glean).
 const CONFIG_DIR = mkdtempSync(join(tmpdir(), "impulso-cfg-"));
 process.env.PI_CODING_AGENT_DIR = CONFIG_DIR;
 
-// Install fake "datadog", "obscura", and "glean" skills; leave "scout" uninstalled.
+// Install fake "datadog", "obscura", and "glean" skills.
 const installSkill = (name: string) => {
   mkdirSync(join(CONFIG_DIR, "skills", name), { recursive: true });
   writeFileSync(join(CONFIG_DIR, "skills", name, "SKILL.md"), `---\nname: ${name}\n---\nbody\n`);
@@ -70,11 +69,17 @@ describe("input handler", () => {
 
   test("uninstalled skills are skipped silently; multiple hints stack", async () => {
     const h = makePi();
-    // "scout" trigger matches but the skill isn't installed on this profile.
-    const onlyScout = (await h({ text: "run scout recon on the repo" })) as undefined;
-    assert.equal(onlyScout, undefined);
+    // The "glean" trigger matches but its skill is missing on this profile —
+    // the datadog hint still lands, glean is skipped silently.
+    rmSync(join(CONFIG_DIR, "skills", "glean"), { recursive: true, force: true });
+    const onlyDatadog = (await h({ text: "run glean search for the datadog slo" })) as {
+      text: string;
+    };
+    assert.ok(onlyDatadog.text.includes("Datadog skill"));
+    assert.ok(!onlyDatadog.text.includes("Glean skill"));
 
-    // datadog + glean both match and are installed → two hints in one block.
+    // Reinstalled: datadog + glean both match → two hints in one block.
+    installSkill("glean");
     const result = (await h({ text: "look in glean for the datadog slo" })) as { text: string };
     const block = result.text.split("<skill_hint>\n")[1]!;
     assert.ok(block.includes("Datadog skill"));

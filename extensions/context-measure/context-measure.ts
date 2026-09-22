@@ -3,9 +3,10 @@
 //
 // Registers a `measure` provider with one static no-op model
 // (`measure/measure-model`). Its `streamSimple` receives the fully
-// assembled request (`Context = { systemPrompt, messages, tools }`) that
-// pi would have serialized and sent over the wire, appends a one-line JSON
-// summary to the record file, and answers locally with a canned "ok"
+// assembled request (pi ≤0.86: `Context = { systemPrompt, messages, tools }`;
+// pi ≥0.87 folds the prompt and tool declarations into the transcript's
+// system messages — summarizeContext reads both) that pi would have
+// serialized and sent over the wire, appends a one-line JSON
 // assistant message. Nothing is ever fetched: this provider *is* the
 // endpoint.
 //
@@ -30,8 +31,7 @@
 //
 // Record file: `$PI_CONTEXT_MEASURE_OUT`, or `<configDir>/context-measure.jsonl`
 // by default (live sessions can switch to `measure/measure-model` at any
-// moment and the records land there; subagent children inherit the config
-// dir, so child requests are captured too). One JSON object per line.
+// moment and the records land there). One JSON object per line.
 //
 // Measurement driver: `npm run measure:context` (scripts/measure-context.mjs)
 // measures stock pi vs. the work/personal/base agent dirs and writes the
@@ -51,6 +51,7 @@ import {
   type AssistantMessage,
   type AssistantMessageEventStream,
   type Context,
+  type Tool,
   type Api,
   type Model,
   type SimpleStreamOptions,
@@ -101,19 +102,69 @@ function sortedEntries(values: Record<string, number>): Record<string, number> {
   return sorted;
 }
 
+/**
+ * pi 0.87 folds the system prompt and tool declarations into the
+ * transcript's system messages (`TranscriptContext`) instead of the
+ * top-level Context fields pi ≤0.86 passed. Replay the system messages
+ * (mirroring pi's getCurrentSystemMessage/getCurrentTools: content parts,
+ * named sections patched by name, tools added/removed) so the record
+ * stays comparable across pi versions.
+ */
+function replayTranscript(
+  messages: readonly {
+    role: string;
+    content?: unknown;
+    sections?: Record<string, string | null>;
+    toolsAdded?: readonly Tool[];
+    toolsRemoved?: readonly { name: string }[];
+  }[],
+): { systemPrompt: string; tools: Tool[] } {
+  const texts: string[] = [];
+  const sections = new Map<string, string>();
+  const tools = new Map<string, Tool>();
+  const contentText = (content: unknown): string =>
+    typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? content
+            .filter((block) => (block as { type?: string }).type === "text")
+            .map((block) => (block as { text: string }).text)
+            .join("\n")
+        : "";
+  for (const message of messages) {
+    if (message?.role !== "system") continue;
+    const text = contentText(message.content);
+    if (text.length > 0) texts.push(text);
+    for (const [name, value] of Object.entries(message.sections ?? {})) {
+      if (value === null) sections.delete(name);
+      else sections.set(name, value);
+    }
+    for (const tool of message.toolsAdded ?? []) tools.set(tool.name, tool);
+    for (const removed of message.toolsRemoved ?? []) tools.delete(removed.name);
+  }
+  return {
+    systemPrompt: [...texts, ...sections.values()].join("\n\n"),
+    tools: [...tools.values()],
+  };
+}
+
 /** Summarize one composed request. Pure — the whole measurement in one function. */
 export function summarizeContext(
   requestId: number,
   model: Model<Api>,
   context: Context,
 ): RequestRecord {
-  const tools = context.tools ?? [];
+  // pi ≤0.86 passed the prompt/tools as top-level Context fields; pi ≥0.87
+  // folds them into the transcript's system messages. Prefer the explicit
+  // fields when present, fall back to the transcript replay.
+  const replayed = replayTranscript(context.messages);
+  const tools = context.tools ?? replayed.tools;
   const toolChars: Record<string, number> = {};
   for (const tool of tools) {
     const size = JSON.stringify(tool).length;
     toolChars[tool.name] = (toolChars[tool.name] ?? 0) + size;
   }
-  const systemPrompt = context.systemPrompt ?? "";
+  const systemPrompt = context.systemPrompt ?? replayed.systemPrompt;
   const toolSchemaChars = JSON.stringify(tools).length;
   return {
     at: new Date().toISOString(),

@@ -56,25 +56,6 @@
       "model": { "provider": "openrouter", "id": "deepseek/deepseek-v4.1-flash" },
     },
 
-    // pi-subagents: seeded here (fill-only) instead of managed `settings` so
-    // each profile can pick its own scout model locally in settings.json
-    // without the next install reverting it (managed keys overwrite
-    // whole-key; defaults never reset existing values). Fresh machines get
-    // the same starting point: builtin agent roles disabled (custom
-    // read-only scout only) and a fast recon tier on scout. agentOverrides
-    // beats agent frontmatter, so agents/scout.md stays vendor-neutral.
-    // Trade-off: disableBuiltins is seed-only — it is no longer re-applied
-    // if you flip it off yourself.
-    "subagents": {
-      "disableBuiltins": true,
-      "agentOverrides": {
-        "scout": {
-          "model": "google/gemini-3.8-flash",
-          "thinking": "low",
-        },
-      },
-    },
-
     // pi-provider-litellm: unless litellm.skills.enabled is false, the
     // package registers three LiteLLM Skills Gateway tools
     // (litellm_skill_list/create/delete) and injects a skills block into the
@@ -248,28 +229,6 @@
     // scripts/utils/check-script-drift.sh flags drift between them and
     // config/{setup_worktree,pull_all}.sh.
     "config/pull_all.sh": { "tags": ["base"], "piRootDest": "pull_all.sh" },
-
-    // pi-subagents owns all child-process lifecycle. The exact release was
-    // preflighted against Pi 0.84.4: scout uses a strict read/search tool
-    // allowlist, starts fresh, and Orca is only a best-effort observer.
-    // prune: hide the package's bundled council-mode / pi-subagents skills
-    // from <available_skills> — we delegate to scout only, and pi auto-loads
-    // every skill a package ships with no per-skill blacklist, so install.sh
-    // deletes these dirs from the installed package on every sync (updates
-    // can't resurrect them).
-    "npm:pi-subagents@0.64.0": {
-      "tags": ["core"],
-      "prune": ["skills/council-mode", "skills/pi-subagents"],
-    },
-    "extensions/subagent-telemetry/subagent-telemetry.ts": {
-      "tags": ["core"],
-      "dest": "extensions/subagent-telemetry/index.ts",
-    },
-    "extensions/subagent-telemetry/config.json": {
-      "tags": ["core"],
-      "dest": "extensions/subagent/config.json",
-    },
-    "agents/scout.md": { "tags": ["core"], "dest": "agents/scout.md" },
 
     // Notify the active pi config dir at startup (which profile loaded).
     "extensions/startup/print-config-dir.ts": { "tags": ["core"] },
@@ -665,15 +624,6 @@
     // entry to uninstall.
     "prompts/show-me.md": { "tags": ["core"] },
 
-    // scout: on-demand pointer skill. Unlike the datadog/glean skills, the
-    // scout *subagent* already exists as agents/scout.md (synced above) — this
-    // skill exists only so the on-demand-skills keyword trigger ("scout") can
-    // inject a hint telling the model to delegate to that subagent. The skill
-    // file holds a short pointer; the authoritative contract stays in
-    // agents/scout.md. disable-model-invocation: true keeps it out of the
-    // always-on <available_skills> block (zero context cost until triggered).
-    // Core so every profile gets the hint.
-    "skills/scout/": { "tags": ["core"] },
     // obscura: render pages and browse the web via the `obscura` CLI (a
     // Rust headless browser with native rendering — screenshots, PDFs,
     // screencasts, JS-rendered extraction, CDP/Puppeteer/Playwright
@@ -711,7 +661,7 @@
     // per-tool schema chars, tool count — and answers locally with "ok".
     // No network, no tools, no prompt text: zero request footprint, so it
     // can stay installed everywhere (live sessions can switch to it at
-    // any moment; subagent children are captured too). Records go to
+    // any moment). Records go to
     // <configDir>/context-measure.jsonl, or $PI_CONTEXT_MEASURE_OUT when
     // set (that's what scripts/measure-context.mjs uses). The measurement
     // driver writes the committed record investigation/context-measurement.json;

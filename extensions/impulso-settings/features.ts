@@ -314,47 +314,6 @@ export const FEATURES: Feature[] = [
     spec: "npm:@juicesharp/rpiv-ask-user-question",
   },
   {
-    id: "pi-subagents",
-    tab: "tools",
-    group: "Subagents",
-    label: "Scout-first subagents",
-    description:
-      "Background delegation runtime with one fresh, read-only scout role and optional best-effort Orca progress tabs. npm:pi-subagents@0.64.0. Reload or start a new session after changing this.",
-    kind: "package",
-    spec: "npm:pi-subagents@0.64.0",
-  },
-  {
-    id: "subagent-telemetry",
-    tab: "tools",
-    group: "Subagents",
-    label: "Subagent telemetry recorder",
-    description:
-      "Passive local recorder for bounded run metadata in the parent session; powers the local pi-omp-stats Subagents API. Reload after changing this.",
-    kind: "local",
-  },
-  {
-    id: "subagents-scout-model",
-    tab: "tools",
-    group: "Subagents",
-    label: "Scout model…",
-    description:
-      "Model for the read-only scout subagent. 'Same as main session' (key absent) inherits the parent session model; pick a fast tier to keep recon cheap. Per-profile and survives install syncs (seeded fill-only from profiles.jsonc settingsDefaults). settings.json subagents.agentOverrides.scout.model. Reload or start a new session after changing this.",
-    kind: "pi-setting",
-    key: "subagents.agentOverrides.scout.model",
-    picker: true,
-  },
-  {
-    id: "subagents-scout-thinking",
-    tab: "tools",
-    group: "Subagents",
-    label: "Scout thinking",
-    description:
-      "Reasoning level for the scout model. 'Same as main session' (key absent) uses the model's default. settings.json subagents.agentOverrides.scout.thinking. Reload or start a new session after changing this.",
-    kind: "pi-setting",
-    key: "subagents.agentOverrides.scout.thinking",
-    values: ["", "off", "minimal", "low", "medium", "high", "xhigh", "max"],
-  },
-  {
     id: "vision-handoff",
     tab: "tools",
     group: "Tools",

@@ -65,6 +65,36 @@ test("summarizeContext handles a request without tools or system prompt", () => 
   assert.equal(record.contextChars, record.toolSchemaChars);
 });
 
+test("summarizeContext replays pi ≥0.87 TranscriptContext system messages", () => {
+  const context = fakeContext({
+    systemPrompt: undefined,
+    tools: undefined,
+    messages: [
+      {
+        role: "system",
+        content: "folded system instructions",
+        toolsAdded: [{ name: "read", description: "Read a file", parameters: { type: "object" } }],
+        timestamp: 0,
+      },
+      {
+        role: "system",
+        content: "",
+        toolsAdded: [
+          { name: "bash", description: "Run a command", parameters: { type: "object" } },
+        ],
+        toolsRemoved: [{ name: "read" }],
+        timestamp: 1,
+      },
+      { role: "user", content: [{ type: "text", text: "Reply with ok." }] },
+    ],
+  });
+
+  const record = summarizeContext(4, fakeModel, context);
+  assert.equal(record.systemPromptChars, "folded system instructions".length);
+  assert.equal(record.toolCount, 1);
+  assert.deepEqual(record.toolNames, ["bash"], "toolsRemoved is replayed");
+});
+
 test("measureStream replies with the event protocol and records the request", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "context-measure-test-"));
   const out = join(dir, "records.jsonl");
