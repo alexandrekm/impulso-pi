@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "measuredAt": "2026-09-22T22:35:15.767Z",
+  "measuredAt": "2026-09-24T18:44:11.362Z",
   "piVersion": "0.87.1",
   "nodeVersion": "v26.7.0",
   "platform": "darwin",
@@ -9,7 +9,7 @@
     {
       "target": "stock",
       "record": {
-        "at": "2026-09-22T22:35:11.121Z",
+        "at": "2026-09-24T18:44:06.573Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 2749,
@@ -30,14 +30,14 @@
         },
         "toolSchemaChars": 2969,
         "contextChars": 5718,
-        "systemPromptSha256": "1d228c59d92a83d265df24ca054600e015e8ceb3be62212d54eee1002fdbde1c",
+        "systemPromptSha256": "9609e7c82ca11ba21ec651ab434a4a787839b13cc51bf6c6e724a3e08c4b8eee",
         "toolsSha256": "5f12bf77928d145f74b9480800d5905307b84298cd2c3de5aad45b4f5d4ffe4e"
       }
     },
     {
       "target": "work",
       "record": {
-        "at": "2026-09-22T22:35:12.609Z",
+        "at": "2026-09-24T18:44:07.872Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 9192,
@@ -78,14 +78,14 @@
         },
         "toolSchemaChars": 22231,
         "contextChars": 31423,
-        "systemPromptSha256": "ab3a8847109c6edd8ced062bcc116510384460e9417f9f4104a8ccfb184fdcbf",
+        "systemPromptSha256": "65ad9ab881b0286e1e75093dfcab54b6c375bcf85db0cd981afedde647d19cf1",
         "toolsSha256": "586fd0420582b3d41ee09dd6bea86a06f03ff92e0920b1d9f5b5368336999e60"
       }
     },
     {
       "target": "personal",
       "record": {
-        "at": "2026-09-22T22:35:14.021Z",
+        "at": "2026-09-24T18:44:09.165Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 7531,
@@ -124,14 +124,14 @@
         },
         "toolSchemaChars": 21198,
         "contextChars": 28729,
-        "systemPromptSha256": "b24e6979e65e945e7c5ccf05eaa84298acae7d0740d94cfb51e69a0121b8239a",
+        "systemPromptSha256": "2ca646595c417575f9bf85d4286ed850ec8262577405b4032fabc6b57d614890",
         "toolsSha256": "23248bf83716fe40b950b933a1749fa6af0592f0a12083e57a1638be96e86a80"
       }
     },
     {
       "target": "base",
       "record": {
-        "at": "2026-09-22T22:35:15.735Z",
+        "at": "2026-09-24T18:44:11.311Z",
         "requestId": 1,
         "model": "measure-model",
         "systemPromptChars": 8833,
@@ -172,7 +172,7 @@
         },
         "toolSchemaChars": 22231,
         "contextChars": 31064,
-        "systemPromptSha256": "68009f788bcea694c1706e235ae7500725d16a3e0c542d84f86971c0c245cabc",
+        "systemPromptSha256": "734f221902b5a1cd243e77989dc49cea3efc4549a01229feac8ac94ae37fbdf6",
         "toolsSha256": "586fd0420582b3d41ee09dd6bea86a06f03ff92e0920b1d9f5b5368336999e60"
       }
     }
